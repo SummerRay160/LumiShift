@@ -23,7 +23,7 @@ jobs:
         run: nuget restore LumiShift.sln
 
       - name: Build Release
-        run: msbuild LumiShift.sln /p:Configuration=Release /p:Platform=AnyCPU /verbosity:minimal
+        run: msbuild LumiShift.sln /p:Configuration=Release /p:Platform="Any CPU" /verbosity:minimal
 
       - name: Extract version from tag
         id: version
