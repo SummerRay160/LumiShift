@@ -25,6 +25,10 @@ jobs:
       - name: Build Release
         run: msbuild LumiShift.sln /p:Configuration=Release /p:Platform="Any CPU" /verbosity:minimal
 
+      - name: List build artifacts
+        shell: pwsh
+        run: Get-ChildItem -Recurse LumiShift/bin/Release/*.exe, LumiShift/bin/Release/*.config
+
       - name: Extract version from tag
         id: version
         shell: bash
@@ -42,5 +46,5 @@ jobs:
           draft: true
           generate_release_notes: true
           files: |
-            LumiShift/bin/Release/LumiShift.exe
-            LumiShift/bin/Release/LumiShift.exe.config
+            **/bin/Release/LumiShift.exe
+            **/bin/Release/LumiShift.exe.config
