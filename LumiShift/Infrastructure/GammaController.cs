@@ -173,6 +173,59 @@ namespace LumiShift.Infrastructure
             }
         }
 
+        public bool ApplyGammaPerScreen(IDictionary<string, GammaParameters> perScreenParams)
+        {
+            try
+            {
+                bool allSucceeded = true;
+                var defaultRamp = GenerateRamp(1.0, 1.0, 1.0, 1.0, 1.0);
+
+                foreach (var screen in Screen.AllScreens)
+                {
+                    try
+                    {
+                        IntPtr hdc = CreateDC("DISPLAY", screen.DeviceName, null, IntPtr.Zero);
+                        if (hdc == IntPtr.Zero)
+                        {
+                            allSucceeded = false;
+                            continue;
+                        }
+
+                        if (perScreenParams.TryGetValue(screen.DeviceName, out var parameters))
+                        {
+                            double master = 0.15 + parameters.MasterBrightness / 100.0 * 0.85;
+                            var ramp = GenerateRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
+                            if (!SetDeviceGammaRamp(hdc, ref ramp))
+                                allSucceeded = false;
+                        }
+                        else
+                        {
+                            if (!SetDeviceGammaRamp(hdc, ref defaultRamp))
+                                allSucceeded = false;
+                        }
+
+                        DeleteDC(hdc);
+                    }
+                    catch
+                    {
+                        allSucceeded = false;
+                    }
+                }
+
+                if (allSucceeded)
+                    StatusChanged?.Invoke(this, "Gamma: 按显示器独立应用");
+                else
+                    StatusChanged?.Invoke(this, "Gamma: 部分显示器应用失败");
+
+                return allSucceeded;
+            }
+            catch (Exception ex)
+            {
+                StatusChanged?.Invoke(this, $"Gamma 出错: {ex.Message}");
+                return false;
+            }
+        }
+
         private static RAMP GenerateRamp(double gamma, double rScale, double gScale, double bScale, double master)
         {
             var ramp = new RAMP

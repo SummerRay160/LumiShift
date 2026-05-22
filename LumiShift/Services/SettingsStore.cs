@@ -21,13 +21,17 @@ namespace LumiShift.Services
                 if (File.Exists(SettingsFilePath))
                 {
                     string json = File.ReadAllText(SettingsFilePath);
-                    return Serializer.Deserialize<UserSettings>(json) ?? new UserSettings();
+                    var settings = Serializer.Deserialize<UserSettings>(json) ?? new UserSettings();
+                    MigrateSettings(settings);
+                    return settings;
                 }
             }
             catch
             {
             }
-            return new UserSettings();
+            var defaults = new UserSettings();
+            MigrateSettings(defaults);
+            return defaults;
         }
 
         public static void SaveSettings(UserSettings settings)
@@ -39,6 +43,33 @@ namespace LumiShift.Services
             }
             catch
             {
+            }
+        }
+
+        private static void MigrateSettings(UserSettings settings)
+        {
+            if (settings.ScheduleSegments == null)
+            {
+                string nightStart = settings.ScheduleNightStart ?? "18:00";
+                string nightEnd = settings.ScheduleNightEnd ?? "06:00";
+                string dayPreset = settings.ScheduleDayPreset ?? "标准";
+                string nightPreset = settings.ScheduleNightPreset ?? "护眼模式";
+
+                settings.ScheduleSegments = new System.Collections.Generic.List<ScheduleSegment>
+                {
+                    new ScheduleSegment
+                    {
+                        StartTime = nightEnd,
+                        EndTime = nightStart,
+                        PresetName = dayPreset
+                    },
+                    new ScheduleSegment
+                    {
+                        StartTime = nightStart,
+                        EndTime = nightEnd,
+                        PresetName = nightPreset
+                    }
+                };
             }
         }
     }

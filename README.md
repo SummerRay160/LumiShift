@@ -18,7 +18,7 @@
 
 ### 介绍
 
-   LumiShift 是一款 Windows 平台上的开源屏幕调节工具，集多显示器亮度控制、Gamma 校正、色温调节、护眼模式、定时调度于一体。无需安装，单文件运行，开机即用。   
+   LumiShift 是一款 Windows 平台上的开源屏幕调节工具，集多显示器亮度控制、Gamma 校正、色温调节、护眼模式、定时调度于一体。无需安装，单文件运行，开机即用。
 ### 功能特性
 
 #### 多显示器亮度控制
@@ -107,11 +107,11 @@ msbuild LumiShift.sln /p:Configuration=Release
 
 ```
 LumiShift/
-├── Controls/                  # 自定义控件
-│   ├── FlatTabControl.cs      # 扁平化选项卡
-│   ├── ModernSlider.cs        # 现代风格滑块
-│   └── ToggleSwitch.cs        # 开关切换控件
-├── Infrastructure/            # 核心基础设施
+├── Controls/                      # 自定义控件
+│   ├── FlatTabControl.cs          # 扁平化选项卡
+│   ├── ModernSlider.cs            # 现代风格滑块
+│   └── ToggleSwitch.cs            # 开关切换控件
+├── Infrastructure/                # 核心基础设施
 │   ├── BrightnessController.cs    # WMI / DDC/CI 亮度控制
 │   ├── GammaController.cs         # Gamma 校正 (SetDeviceGammaRamp)
 │   ├── EyeProtectionService.cs    # 护眼模式 (SetSysColors + 注册表)
@@ -120,16 +120,22 @@ LumiShift/
 │   ├── NativeMethods.cs           # Win32 API 声明
 │   └── IBrightnessController.cs   # 亮度控制接口
 ├── Models/
-│   └── UserSettings.cs        # 用户设置模型
+│   ├── PresetDefinitions.cs       # 预设定义
+│   └── UserSettings.cs            # 用户设置模型
+├── Properties/
+│   └── AssemblyInfo.cs            # 程序集信息
 ├── Resources/
-│   └── DesignConstants.cs     # 主题与设计常量
+│   └── DesignConstants.cs         # 主题与设计常量
 ├── Services/
-│   ├── AutoApplyService.cs    # 自动覆盖服务
-│   ├── SettingsStore.cs       # 设置持久化
-│   └── UpdateService.cs       # 自动更新服务
-├── Form1.cs                   # 主窗体逻辑
-├── Form1.Designer.cs          # 主窗体设计器
-└── Program.cs                 # 入口点（单实例 + 命令行参数）
+│   ├── AutoApplyService.cs        # 自动覆盖服务
+│   ├── SettingsStore.cs           # 设置持久化
+│   └── UpdateService.cs           # 自动更新服务
+├── Form1.cs                       # 主窗体逻辑
+├── Form1.Designer.cs              # 主窗体设计器
+├── ScheduleConfigForm.cs          # 定时调度配置窗体
+├── Program.cs                     # 入口点（单实例 + 命令行参数）
+├── App.config                     # 应用配置
+└── LumiShift.csproj               # 项目文件
 ```
 
 ### 技术栈
@@ -144,60 +150,9 @@ LumiShift/
 | 自动更新 | GitHub Releases API |
 | CI/CD | GitHub Actions (自动编译 + Draft Release) |
 
-### 贡献指南
+### 贡献
 
-欢迎为 LumiShift 贡献代码！请遵循以下流程：
-
-#### 报告问题
-
-- 在 [Issues](https://github.com/SummerRay160/LumiShift/issues) 页面搜索是否已有相同问题
-- 创建新 Issue，请包含以下信息：
-  - Windows 版本和显示器型号
-  - 问题复现步骤
-  - 期望行为与实际行为
-  - 如有错误信息，请附上完整内容
-
-#### 提交代码
-
-1. **Fork** 本仓库到你的 GitHub 账户
-2. 从 `main` 分支创建功能分支：
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-3. 编写代码并确保：
-   - 代码风格与现有代码保持一致
-   - 不引入不必要的依赖
-   - 编译通过（`msbuild LumiShift.sln /p:Configuration=Release`）
-4. 提交更改：
-   ```bash
-   git commit -m "feat: 简要描述你的更改"
-   ```
-   提交信息格式建议：
-   - `feat:` 新功能
-   - `fix:` 修复 Bug
-   - `refactor:` 重构
-   - `docs:` 文档更新
-   - `chore:` 构建/工具变更
-5. 推送到你的 Fork：
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-6. 创建 **Pull Request** 到本仓库的 `main` 分支
-7. 在 PR 描述中说明更改内容和关联的 Issue（如有）
-
-#### 代码规范
-
-- 遵循 C# 命名约定（PascalCase 用于公共成员，camelCase 用于私有字段）
-- 私有字段使用 `_` 前缀（如 `_gammaController`）
-- 保持与现有代码风格一致，包括缩进、花括号位置等
-- Win32 API 声明统一放在 `NativeMethods.cs` 中
-- 新增功能尽量保持与现有 UI 风格一致
-
-#### 开发环境
-
-- Visual Studio 2022 或更高版本
-- .NET Framework 4.8 SDK
-- Windows 10 / 11（部分功能依赖 Windows API，无法在其他平台运行）
+欢迎为 LumiShift 贡献代码！请阅读 [贡献指南](CONTRIBUTING.md) 了解详情。
 
 ### 许可证
 
@@ -299,11 +254,11 @@ msbuild LumiShift.sln /p:Configuration=Release
 
 ```
 LumiShift/
-├── Controls/                  # Custom controls
-│   ├── FlatTabControl.cs      # Flat tab control
-│   ├── ModernSlider.cs        # Modern-style slider
-│   └── ToggleSwitch.cs        # Toggle switch control
-├── Infrastructure/            # Core infrastructure
+├── Controls/                      # Custom controls
+│   ├── FlatTabControl.cs          # Flat tab control
+│   ├── ModernSlider.cs            # Modern-style slider
+│   └── ToggleSwitch.cs            # Toggle switch control
+├── Infrastructure/                # Core infrastructure
 │   ├── BrightnessController.cs    # WMI / DDC/CI brightness control
 │   ├── GammaController.cs         # Gamma correction (SetDeviceGammaRamp)
 │   ├── EyeProtectionService.cs    # Eye protection (SetSysColors + Registry)
@@ -312,16 +267,22 @@ LumiShift/
 │   ├── NativeMethods.cs           # Win32 API declarations
 │   └── IBrightnessController.cs   # Brightness control interface
 ├── Models/
-│   └── UserSettings.cs        # User settings model
+│   ├── PresetDefinitions.cs       # Preset definitions
+│   └── UserSettings.cs            # User settings model
+├── Properties/
+│   └── AssemblyInfo.cs            # Assembly information
 ├── Resources/
-│   └── DesignConstants.cs     # Theme & design constants
+│   └── DesignConstants.cs         # Theme & design constants
 ├── Services/
-│   ├── AutoApplyService.cs    # Auto-apply service
-│   ├── SettingsStore.cs       # Settings persistence
-│   └── UpdateService.cs       # Auto-update service
-├── Form1.cs                   # Main form logic
-├── Form1.Designer.cs          # Main form designer
-└── Program.cs                 # Entry point (single instance + CLI args)
+│   ├── AutoApplyService.cs        # Auto-apply service
+│   ├── SettingsStore.cs           # Settings persistence
+│   └── UpdateService.cs           # Auto-update service
+├── Form1.cs                       # Main form logic
+├── Form1.Designer.cs              # Main form designer
+├── ScheduleConfigForm.cs          # Schedule configuration form
+├── Program.cs                     # Entry point (single instance + CLI args)
+├── App.config                     # Application configuration
+└── LumiShift.csproj               # Project file
 ```
 
 ### Tech Stack
@@ -338,58 +299,7 @@ LumiShift/
 
 ### Contributing
 
-Contributions are welcome! Please follow these guidelines:
-
-#### Reporting Issues
-
-- Search [Issues](https://github.com/SummerRay160/LumiShift/issues) to check if the problem already exists
-- Create a new Issue with:
-  - Windows version and monitor model
-  - Steps to reproduce
-  - Expected vs. actual behavior
-  - Full error message if applicable
-
-#### Submitting Code
-
-1. **Fork** this repository
-2. Create a feature branch from `main`:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-3. Write code and ensure:
-   - Code style is consistent with the existing codebase
-   - No unnecessary dependencies are introduced
-   - Build passes (`msbuild LumiShift.sln /p:Configuration=Release`)
-4. Commit your changes:
-   ```bash
-   git commit -m "feat: brief description of your change"
-   ```
-   Suggested commit message format:
-   - `feat:` New feature
-   - `fix:` Bug fix
-   - `refactor:` Refactoring
-   - `docs:` Documentation update
-   - `chore:` Build/tooling changes
-5. Push to your fork:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-6. Create a **Pull Request** to the `main` branch of this repository
-7. Describe your changes and reference related Issues in the PR description
-
-#### Code Style
-
-- Follow C# naming conventions (PascalCase for public members, camelCase for private fields)
-- Use `_` prefix for private fields (e.g., `_gammaController`)
-- Maintain consistency with existing code style (indentation, brace placement, etc.)
-- Place Win32 API declarations in `NativeMethods.cs`
-- Keep new features consistent with the existing UI style
-
-#### Development Environment
-
-- Visual Studio 2022 or later
-- .NET Framework 4.8 SDK
-- Windows 10 / 11 (some features depend on Windows APIs and cannot run on other platforms)
+Contributions are welcome! Please read the [Contributing Guide](CONTRIBUTING.md) for details.
 
 ### License
 

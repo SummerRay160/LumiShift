@@ -167,7 +167,7 @@ namespace LumiShift.Resources
         public static readonly int XL = Get(4);
         public static readonly int XXL = Get(5);
 
-        public static readonly int ContentWidth = 350 - 2 * LG;
+        public static readonly int ContentWidth = 400 - 2 * LG;
     }
 
     public static class Typography

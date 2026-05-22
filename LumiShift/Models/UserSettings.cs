@@ -11,6 +11,26 @@ namespace LumiShift.Models
         public double GammaValue { get; set; } = 1.0;
         public int MasterBrightness { get; set; } = 100;
         public bool Enabled { get; set; } = true;
+        public Dictionary<string, PerDisplayGamma> PerDisplaySnapshot { get; set; }
+    }
+
+    public class ScheduleSegment
+    {
+        public string StartTime { get; set; } = "06:00";
+        public string EndTime { get; set; } = "18:00";
+        public string PresetName { get; set; } = "标准";
+        public Dictionary<string, string> MonitorPresets { get; set; }
+    }
+
+    public class PerDisplayGamma
+    {
+        public double RScale { get; set; } = 1.0;
+        public double GScale { get; set; } = 1.0;
+        public double BScale { get; set; } = 1.0;
+        public double GammaValue { get; set; } = 1.0;
+        public int MasterBrightness { get; set; } = 100;
+        public bool Enabled { get; set; } = true;
+        public string Source { get; set; }
     }
 
     public class UserSettings
@@ -24,6 +44,8 @@ namespace LumiShift.Models
         public int EyeProtectionBlue { get; set; } = 207;
 
         public bool ScheduleEnabled { get; set; }
+        public List<ScheduleSegment> ScheduleSegments { get; set; }
+
         public string ScheduleNightStart { get; set; } = "18:00";
         public string ScheduleNightEnd { get; set; } = "06:00";
         public string ScheduleDayPreset { get; set; } = "标准";
@@ -45,6 +67,7 @@ namespace LumiShift.Models
         public List<GammaPreset> CustomGammaPresets { get; set; } = new List<GammaPreset>();
 
         public Dictionary<string, int> BrightnessPerDisplay { get; set; } = new Dictionary<string, int>();
+        public Dictionary<string, PerDisplayGamma> GammaPerDisplay { get; set; } = new Dictionary<string, PerDisplayGamma>();
 
         public string SkipVersion { get; set; } = "";
     }

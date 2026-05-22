@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -14,7 +15,6 @@ namespace LumiShift
 {
     public partial class Form1 : Form
     {
-        private static readonly string[] BuiltInPresets = { "标准", "防蓝光", "护眼模式", "游戏模式" };
 
         internal static Image StaticBackgroundImage { get; set; }
         internal static float StaticBackgroundOpacity { get; set; } = 0.3f;
@@ -46,11 +46,12 @@ namespace LumiShift
         private ModernSlider _gammaBrightSlider;
         private Label _gammaBrightLabel;
         private Label _gammaStatusLabel;
+        private ComboBox _monitorSelectorComboBox;
+        private Button _resetDisplayGammaButton;
         private ToggleSwitch _scheduleEnabledCheckBox;
-        private DateTimePicker _scheduleNightStartPicker;
-        private DateTimePicker _scheduleNightEndPicker;
-        private ComboBox _scheduleNightPresetComboBox;
-        private ComboBox _scheduleDayPresetComboBox;
+        private Button _scheduleConfigButton;
+        private ToggleSwitch _gammaScheduleToggle;
+        private Button _gammaScheduleConfigButton;
         private ToggleSwitch _startWithWindowsCheckBox;
         private ToggleSwitch _startMinimizedCheckBox;
         private ComboBox _themeComboBox;
@@ -78,6 +79,7 @@ namespace LumiShift
         private Timer _scheduleTimer;
         private string _lastScheduleMode;
         private bool _scheduleManualOverride;
+        private string _currentPresetName;
 
         private static Icon LoadAppIcon()
         {
@@ -114,7 +116,6 @@ namespace LumiShift
             _scheduleTimer.Tick += ScheduleTimer_Tick;
 
             PopulatePresetComboBox();
-            PopulateScheduleComboBoxes();
             UpdateGammaUI();
             ApplyGammaToSystem();
             UpdateBrightnessUI();
@@ -143,23 +144,13 @@ namespace LumiShift
         private string GetCurrentPresetName()
         {
             if (!_settings.GammaEnabled)
-                return BuiltInPresets[0];
+                return PresetDefinitions.BuiltIns[0].Name;
 
-            for (int i = 0; i < BuiltInPresets.Length; i++)
+            foreach (var bip in PresetDefinitions.BuiltIns)
             {
-                double r = 0, g = 0, b = 0, gv = 0;
-                switch (i)
-                {
-                    case 0: r = 1.0; g = 1.0; b = 1.0; gv = 1.0; break;
-                    case 1: r = 1.05; g = 1.0; b = 0.78; gv = 1.0; break;
-                    case 2: r = 1.08; g = 1.0; b = 0.70; gv = 1.08; break;
-                    case 3: r = 0.98; g = 1.0; b = 1.06; gv = 0.92; break;
-                }
-                if (Math.Abs(_settings.GammaRScale - r) < 0.01 &&
-                    Math.Abs(_settings.GammaGScale - g) < 0.01 &&
-                    Math.Abs(_settings.GammaBScale - b) < 0.01 &&
-                    Math.Abs(_settings.GammaValue - gv) < 0.01)
-                    return BuiltInPresets[i];
+                if (bip.Matches(_settings.GammaRScale, _settings.GammaGScale,
+                    _settings.GammaBScale, _settings.GammaValue, _settings.MasterBrightness))
+                    return bip.Name;
             }
 
             foreach (var cp in _settings.CustomGammaPresets)
@@ -168,7 +159,7 @@ namespace LumiShift
                     Math.Abs(_settings.GammaGScale - cp.GScale) < 0.01 &&
                     Math.Abs(_settings.GammaBScale - cp.BScale) < 0.01 &&
                     Math.Abs(_settings.GammaValue - cp.GammaValue) < 0.01 &&
-                    _settings.MasterBrightness == cp.MasterBrightness)
+                    Math.Abs(_settings.MasterBrightness - cp.MasterBrightness) <= 1)
                     return cp.Name;
             }
 
@@ -179,52 +170,39 @@ namespace LumiShift
         {
             _isPopulatingComboBox = true;
             _gammaModeComboBox.Items.Clear();
-            foreach (var p in BuiltInPresets)
+            foreach (var p in PresetDefinitions.GetNames())
                 _gammaModeComboBox.Items.Add(p);
             foreach (var cp in _settings.CustomGammaPresets)
                 _gammaModeComboBox.Items.Add(cp.Name);
 
             string current = GetCurrentPresetName();
             if (current != null)
+            {
                 _gammaModeComboBox.SelectedItem = current;
+                _currentPresetName = current;
+            }
             _isPopulatingComboBox = false;
-        }
-
-        private void PopulateScheduleComboBoxes()
-        {
-            FillScheduleCombo(_scheduleNightPresetComboBox, _settings.ScheduleNightPreset);
-            FillScheduleCombo(_scheduleDayPresetComboBox, _settings.ScheduleDayPreset);
-        }
-
-        private void FillScheduleCombo(ComboBox cb, string selected)
-        {
-            cb.Items.Clear();
-            foreach (var p in BuiltInPresets)
-                cb.Items.Add(p);
-            foreach (var cp in _settings.CustomGammaPresets)
-                cb.Items.Add(cp.Name);
-            if (cb.Items.Contains(selected))
-                cb.SelectedItem = selected;
-            else
-                cb.SelectedIndex = 0;
         }
 
         private void RefreshCustomPresetButtons()
         {
             bool any = _settings.CustomGammaPresets.Count > 0;
             _gammaSaveCustomButton.Enabled = _settings.GammaEnabled && !_gammaSimplifiedCheckBox.Checked;
-            _gammaDeleteCustomButton.Enabled = any && _gammaModeComboBox.SelectedItem is string selected && !BuiltInPresets.Contains(selected);
+            _gammaDeleteCustomButton.Enabled = any && _gammaModeComboBox.SelectedItem is string selected && !PresetDefinitions.IsBuiltIn(selected);
         }
 
         private bool TryApplyPreset(string name)
         {
-            for (int i = 0; i < BuiltInPresets.Length; i++)
+            var builtIn = PresetDefinitions.GetByName(name);
+            if (builtIn != null)
             {
-                if (name == BuiltInPresets[i])
-                {
-                    ApplyBuiltInPreset(i);
-                    return true;
-                }
+                _settings.GammaEnabled = builtIn.Enabled;
+                _settings.GammaRScale = builtIn.RScale;
+                _settings.GammaGScale = builtIn.GScale;
+                _settings.GammaBScale = builtIn.BScale;
+                _settings.GammaValue = builtIn.GammaValue;
+                _settings.MasterBrightness = builtIn.MasterBrightness;
+                return true;
             }
 
             var custom = _settings.CustomGammaPresets.FirstOrDefault(cp => cp.Name == name);
@@ -236,44 +214,29 @@ namespace LumiShift
                 _settings.GammaBScale = custom.BScale;
                 _settings.GammaValue = custom.GammaValue;
                 _settings.MasterBrightness = custom.MasterBrightness;
+
+                if (custom.PerDisplaySnapshot != null && custom.PerDisplaySnapshot.Count > 0)
+                {
+                    _settings.GammaPerDisplay.Clear();
+                    foreach (var kvp in custom.PerDisplaySnapshot)
+                    {
+                        _settings.GammaPerDisplay[kvp.Key] = new PerDisplayGamma
+                        {
+                            RScale = kvp.Value.RScale,
+                            GScale = kvp.Value.GScale,
+                            BScale = kvp.Value.BScale,
+                            GammaValue = kvp.Value.GammaValue,
+                            MasterBrightness = kvp.Value.MasterBrightness,
+                            Enabled = kvp.Value.Enabled,
+                            Source = "manual"
+                        };
+                    }
+                    PopulateMonitorSelector();
+                }
+
                 return true;
             }
             return false;
-        }
-
-        private void ApplyBuiltInPreset(int index)
-        {
-            switch (index)
-            {
-                case 0:
-                    _settings.GammaEnabled = false;
-                    _settings.GammaRScale = 1.0;
-                    _settings.GammaGScale = 1.0;
-                    _settings.GammaBScale = 1.0;
-                    _settings.GammaValue = 1.0;
-                    break;
-                case 1:
-                    _settings.GammaEnabled = true;
-                    _settings.GammaRScale = 1.05;
-                    _settings.GammaGScale = 1.0;
-                    _settings.GammaBScale = 0.78;
-                    _settings.GammaValue = 1.0;
-                    break;
-                case 2:
-                    _settings.GammaEnabled = true;
-                    _settings.GammaRScale = 1.08;
-                    _settings.GammaGScale = 1.0;
-                    _settings.GammaBScale = 0.70;
-                    _settings.GammaValue = 1.08;
-                    break;
-                case 3:
-                    _settings.GammaEnabled = true;
-                    _settings.GammaRScale = 0.98;
-                    _settings.GammaGScale = 1.0;
-                    _settings.GammaBScale = 1.06;
-                    _settings.GammaValue = 0.92;
-                    break;
-            }
         }
 
         private static string PromptForName(string prompt, string title, string defaultValue)
@@ -312,18 +275,17 @@ namespace LumiShift
             _gammaCheckBox.Enabled = supported;
             _gammaSimplifiedCheckBox.Enabled = supported;
 
+            PopulateMonitorSelector();
+
             if (supported)
             {
                 _gammaCheckBox.Checked = _settings.GammaEnabled;
                 _gammaSimplifiedCheckBox.Checked = false;
 
-                _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(_settings.GammaRScale * 100.0));
-                _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(_settings.GammaGScale * 100.0));
-                _gammaBSlider.Value = ClampSlider(_gammaBSlider, (int)Math.Round(_settings.GammaBScale * 100.0));
-                _gammaValueSlider.Value = ClampSlider(_gammaValueSlider, (int)Math.Round(_settings.GammaValue * 100.0));
-                _gammaBrightSlider.Value = ClampSlider(_gammaBrightSlider, _settings.MasterBrightness);
+                SyncSlidersToSelectedMonitor();
 
                 string current = GetCurrentPresetName();
+                _currentPresetName = current;
                 if (current != null && !_isPopulatingComboBox)
                     _gammaModeComboBox.SelectedItem = current;
 
@@ -337,6 +299,65 @@ namespace LumiShift
             }
 
             _isUpdatingGammaSliders = false;
+        }
+
+        private void PopulateMonitorSelector()
+        {
+            int prevIndex = _monitorSelectorComboBox.SelectedIndex;
+            _monitorSelectorComboBox.Items.Clear();
+            _monitorSelectorComboBox.Items.Add("所有显示器");
+            foreach (var monitor in _monitorManager.Monitors)
+            {
+                string label = monitor.DisplayName;
+                if (_settings.GammaPerDisplay.TryGetValue(monitor.DeviceId, out var pdg))
+                {
+                    string sourceTag = pdg.Source == "schedule" ? "定时" : "手动";
+                    label += $" [{sourceTag}]";
+                }
+                _monitorSelectorComboBox.Items.Add(label);
+            }
+            if (prevIndex >= 0 && prevIndex < _monitorSelectorComboBox.Items.Count)
+                _monitorSelectorComboBox.SelectedIndex = prevIndex;
+            else
+                _monitorSelectorComboBox.SelectedIndex = 0;
+        }
+
+        private void SyncSlidersToSelectedMonitor()
+        {
+            if (IsGlobalMonitorSelected())
+            {
+                _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(_settings.GammaRScale * 100.0));
+                _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(_settings.GammaGScale * 100.0));
+                _gammaBSlider.Value = ClampSlider(_gammaBSlider, (int)Math.Round(_settings.GammaBScale * 100.0));
+                _gammaValueSlider.Value = ClampSlider(_gammaValueSlider, (int)Math.Round(_settings.GammaValue * 100.0));
+                _gammaBrightSlider.Value = ClampSlider(_gammaBrightSlider, _settings.MasterBrightness);
+                _gammaCheckBox.Checked = _settings.GammaEnabled;
+                _resetDisplayGammaButton.Enabled = false;
+            }
+            else
+            {
+                string deviceId = GetSelectedMonitorDeviceId();
+                if (deviceId != null && _settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
+                {
+                    _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(pdg.RScale * 100.0));
+                    _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(pdg.GScale * 100.0));
+                    _gammaBSlider.Value = ClampSlider(_gammaBSlider, (int)Math.Round(pdg.BScale * 100.0));
+                    _gammaValueSlider.Value = ClampSlider(_gammaValueSlider, (int)Math.Round(pdg.GammaValue * 100.0));
+                    _gammaBrightSlider.Value = ClampSlider(_gammaBrightSlider, pdg.MasterBrightness);
+                    _gammaCheckBox.Checked = pdg.Enabled;
+                    _resetDisplayGammaButton.Enabled = true;
+                }
+                else
+                {
+                    _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(_settings.GammaRScale * 100.0));
+                    _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(_settings.GammaGScale * 100.0));
+                    _gammaBSlider.Value = ClampSlider(_gammaBSlider, (int)Math.Round(_settings.GammaBScale * 100.0));
+                    _gammaValueSlider.Value = ClampSlider(_gammaValueSlider, (int)Math.Round(_settings.GammaValue * 100.0));
+                    _gammaBrightSlider.Value = ClampSlider(_gammaBrightSlider, _settings.MasterBrightness);
+                    _gammaCheckBox.Checked = _settings.GammaEnabled;
+                    _resetDisplayGammaButton.Enabled = false;
+                }
+            }
         }
 
         private static int ClampSlider(ModernSlider slider, int val)
@@ -371,8 +392,89 @@ namespace LumiShift
 
         private void UpdateScheduleOverrideStatus()
         {
-            if (_scheduleManualOverride && _settings.ScheduleEnabled)
-                _gammaStatusLabel.Text = "手动调整已覆盖定时设置，下次时段切换时恢复定时";
+            if (!_settings.ScheduleEnabled)
+            {
+                _gammaStatusLabel.Text = "";
+                UpdateTitleBar();
+                return;
+            }
+
+            if (_scheduleManualOverride)
+            {
+                string nextInfo = GetNextScheduleInfo();
+                _gammaStatusLabel.Text = string.IsNullOrEmpty(nextInfo)
+                    ? "手动调整已覆盖定时设置，下次时段切换时恢复定时"
+                    : $"手动调整已覆盖定时设置，{nextInfo}恢复定时";
+            }
+            else
+            {
+                string currentPreset = GetCurrentPresetName() ?? "自定义";
+                _gammaStatusLabel.Text = $"定时运行中: 当前预设 \"{currentPreset}\"";
+            }
+
+            UpdateTitleBar();
+        }
+
+        private string GetNextScheduleInfo()
+        {
+            if (_settings.ScheduleSegments == null || _settings.ScheduleSegments.Count == 0)
+                return "";
+
+            var current = DateTime.Now.TimeOfDay;
+            ScheduleSegment nextSegment = null;
+            TimeSpan minDiff = TimeSpan.MaxValue;
+
+            foreach (var segment in _settings.ScheduleSegments)
+            {
+                var startParts = segment.StartTime.Split(':');
+                if (startParts.Length < 2) continue;
+                var start = new TimeSpan(int.Parse(startParts[0]), int.Parse(startParts[1]), 0);
+
+                TimeSpan diff;
+                if (start > current)
+                    diff = start - current;
+                else
+                    diff = TimeSpan.FromHours(24) - (current - start);
+
+                if (diff < minDiff)
+                {
+                    minDiff = diff;
+                    nextSegment = segment;
+                }
+            }
+
+            if (nextSegment == null) return "";
+
+            if (minDiff.TotalHours < 1)
+                return $"{(int)minDiff.TotalMinutes}分钟后";
+            return $"{(int)minDiff.TotalHours}小时{(int)minDiff.Minutes}分钟后";
+        }
+
+        private void UpdateTitleBar()
+        {
+            if (!_settings.ScheduleEnabled)
+            {
+                Text = "LumiShift";
+                _trayIcon.Text = "LumiShift";
+                return;
+            }
+
+            string currentPreset = GetCurrentPresetName() ?? "自定义";
+
+            if (_scheduleManualOverride)
+            {
+                string nextInfo = GetNextScheduleInfo();
+                string overrideText = string.IsNullOrEmpty(nextInfo)
+                    ? "手动调整"
+                    : $"手动调整 ({nextInfo}恢复)";
+                Text = $"LumiShift - {overrideText}";
+                _trayIcon.Text = $"LumiShift - {overrideText}";
+            }
+            else
+            {
+                Text = $"LumiShift - 定时: {currentPreset}";
+                _trayIcon.Text = $"LumiShift - 定时: {currentPreset}";
+            }
         }
 
         private void UpdateColorTempFromSliders()
@@ -436,24 +538,83 @@ namespace LumiShift
             _settings.GammaEnabled = true;
         }
 
+        private bool IsGlobalMonitorSelected()
+        {
+            return _monitorSelectorComboBox.SelectedIndex <= 0;
+        }
+
+        private string GetSelectedMonitorDeviceId()
+        {
+            int idx = _monitorSelectorComboBox.SelectedIndex - 1;
+            if (idx < 0 || idx >= _monitorManager.Monitors.Count)
+                return null;
+            return _monitorManager.Monitors[idx].DeviceId;
+        }
+
         private void ApplyGammaToSystem()
         {
-            if (_settings.GammaEnabled)
+            bool hasOverrides = _settings.GammaPerDisplay != null &&
+                                _settings.GammaPerDisplay.Count > 0;
+
+            if (!hasOverrides)
             {
-                var parameters = new GammaParameters
+                if (_settings.GammaEnabled)
                 {
-                    RScale = _settings.GammaRScale,
-                    GScale = _settings.GammaGScale,
-                    BScale = _settings.GammaBScale,
-                    Gamma = _settings.GammaValue,
-                    MasterBrightness = _settings.MasterBrightness
-                };
-                _gammaController.ApplyGamma(Screen.AllScreens, parameters);
+                    var parameters = new GammaParameters
+                    {
+                        RScale = _settings.GammaRScale,
+                        GScale = _settings.GammaGScale,
+                        BScale = _settings.GammaBScale,
+                        Gamma = _settings.GammaValue,
+                        MasterBrightness = _settings.MasterBrightness
+                    };
+                    _gammaController.ApplyGamma(Screen.AllScreens, parameters);
+                }
+                else
+                {
+                    _gammaController.ResetGamma(Screen.AllScreens);
+                }
+                return;
             }
-            else
+
+            var perScreenParams = new Dictionary<string, GammaParameters>();
+
+            foreach (var monitor in _monitorManager.Monitors)
             {
-                _gammaController.ResetGamma(Screen.AllScreens);
+                var screen = monitor.Screen;
+                if (screen == null) continue;
+
+                if (_settings.GammaPerDisplay.TryGetValue(monitor.DeviceId, out var overrideGamma))
+                {
+                    if (_settings.GammaEnabled && overrideGamma.Enabled)
+                    {
+                        perScreenParams[screen.DeviceName] = new GammaParameters
+                        {
+                            RScale = overrideGamma.RScale,
+                            GScale = overrideGamma.GScale,
+                            BScale = overrideGamma.BScale,
+                            Gamma = overrideGamma.GammaValue,
+                            MasterBrightness = overrideGamma.MasterBrightness
+                        };
+                    }
+                }
+                else
+                {
+                    if (_settings.GammaEnabled)
+                    {
+                        perScreenParams[screen.DeviceName] = new GammaParameters
+                        {
+                            RScale = _settings.GammaRScale,
+                            GScale = _settings.GammaGScale,
+                            BScale = _settings.GammaBScale,
+                            Gamma = _settings.GammaValue,
+                            MasterBrightness = _settings.MasterBrightness
+                        };
+                    }
+                }
             }
+
+            _gammaController.ApplyGammaPerScreen(perScreenParams);
         }
 
         private void UpdateBrightnessUI()
@@ -469,7 +630,7 @@ namespace LumiShift
                     ColumnCount = 3,
                     RowCount = 1,
                     AutoSize = true,
-                    Width = 330,
+                    Width = 400,
                     Padding = new Padding(4),
                     BackColor = Color.Transparent
                 };
@@ -490,7 +651,7 @@ namespace LumiShift
                 {
                     Minimum = 0,
                     Maximum = 100,
-                    Width = 180,
+                    Width = 210,
                     Value = currentBrightness,
                     Enabled = monitor.Controller?.IsSupported ?? false
                 };
@@ -531,32 +692,7 @@ namespace LumiShift
             _isUpdatingSchedule = true;
 
             _scheduleEnabledCheckBox.Checked = _settings.ScheduleEnabled;
-            _scheduleNightPresetComboBox.SelectedItem = _settings.ScheduleNightPreset;
-            _scheduleDayPresetComboBox.SelectedItem = _settings.ScheduleDayPreset;
-
-            try
-            {
-                var parts = _settings.ScheduleNightStart.Split(':');
-                int h = int.Parse(parts[0]);
-                int m = parts.Length > 1 ? int.Parse(parts[1]) : 0;
-                _scheduleNightStartPicker.Value = DateTime.Today.AddHours(h).AddMinutes(m);
-            }
-            catch
-            {
-                _scheduleNightStartPicker.Value = DateTime.Today.AddHours(18);
-            }
-
-            try
-            {
-                var parts = _settings.ScheduleNightEnd.Split(':');
-                int h = int.Parse(parts[0]);
-                int m = parts.Length > 1 ? int.Parse(parts[1]) : 0;
-                _scheduleNightEndPicker.Value = DateTime.Today.AddHours(h).AddMinutes(m);
-            }
-            catch
-            {
-                _scheduleNightEndPicker.Value = DateTime.Today.AddHours(6);
-            }
+            _gammaScheduleToggle.Checked = _settings.ScheduleEnabled;
 
             _scheduleTimer.Enabled = _settings.ScheduleEnabled;
             if (_settings.ScheduleEnabled)
@@ -883,6 +1019,16 @@ namespace LumiShift
                         btn.BackColor = Colors.Surface;
                         btn.ForeColor = Colors.Red;
                     }
+                    else if (btn.Tag as string == "resetDisplayGamma")
+                    {
+                        btn.BackColor = Colors.Surface;
+                        btn.ForeColor = Colors.Red;
+                    }
+                    else
+                    {
+                        btn.BackColor = Colors.Surface;
+                        btn.ForeColor = Colors.TextPrimary;
+                    }
                 }
                 else if (c is ToggleSwitch || c is ModernSlider)
                 {
@@ -921,7 +1067,7 @@ namespace LumiShift
             _trayMenu.Items.Add(gammaItem);
 
             var quickMenu = new ToolStripMenuItem("快速切换预设");
-            foreach (var p in BuiltInPresets)
+            foreach (var p in PresetDefinitions.GetNames())
             {
                 bool isActive = _settings.GammaEnabled && GetCurrentPresetName() == p;
                 var item = new ToolStripMenuItem(p) { Checked = isActive };
@@ -942,6 +1088,18 @@ namespace LumiShift
                 }
             }
             _trayMenu.Items.Add(quickMenu);
+
+            if (_settings.ScheduleEnabled && _scheduleManualOverride)
+            {
+                var restoreItem = new ToolStripMenuItem("恢复定时控制", null, (s, ev) =>
+                {
+                    _scheduleManualOverride = false;
+                    ScheduleTimer_Tick(null, null);
+                    UpdateTrayMenu();
+                });
+                _trayMenu.Items.Add(restoreItem);
+            }
+
             _trayMenu.Items.Add(new ToolStripSeparator());
 
             var checkUpdateItem = new ToolStripMenuItem("检查更新", null, (s, ev) => UpdateService.CheckForUpdate(silent: false));
@@ -980,17 +1138,17 @@ namespace LumiShift
         private void SyncSlidersToSettings()
         {
             _isUpdatingGammaSliders = true;
-            _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(_settings.GammaRScale * 100.0));
-            _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(_settings.GammaGScale * 100.0));
-            _gammaBSlider.Value = ClampSlider(_gammaBSlider, (int)Math.Round(_settings.GammaBScale * 100.0));
-            _gammaValueSlider.Value = ClampSlider(_gammaValueSlider, (int)Math.Round(_settings.GammaValue * 100.0));
-            _gammaBrightSlider.Value = ClampSlider(_gammaBrightSlider, _settings.MasterBrightness);
+            SyncSlidersToSelectedMonitor();
             UpdateGammaLabels();
             UpdateColorTempFromSliders();
-            string current = GetCurrentPresetName();
-            if (current != null)
-                _gammaModeComboBox.SelectedItem = current;
-            _gammaCheckBox.Checked = _settings.GammaEnabled;
+            if (_currentPresetName != null && _gammaModeComboBox.Items.Contains(_currentPresetName))
+                _gammaModeComboBox.SelectedItem = _currentPresetName;
+            else
+            {
+                string current = GetCurrentPresetName();
+                if (current != null)
+                    _gammaModeComboBox.SelectedItem = current;
+            }
             RefreshSliderVisibility();
             RefreshCustomPresetButtons();
             _isUpdatingGammaSliders = false;
@@ -1006,20 +1164,37 @@ namespace LumiShift
 
             try
             {
-                var now = DateTime.Now;
-                var startTime = _scheduleNightStartPicker.Value;
-                var endTime = _scheduleNightEndPicker.Value;
-                var nightStart = new TimeSpan(startTime.Hour, startTime.Minute, 0);
-                var nightEnd = new TimeSpan(endTime.Hour, endTime.Minute, 0);
-                var current = now.TimeOfDay;
+                var current = DateTime.Now.TimeOfDay;
 
-                bool isNight;
-                if (nightStart < nightEnd)
-                    isNight = current >= nightStart && current < nightEnd;
-                else
-                    isNight = current >= nightStart || current < nightEnd;
+                string targetMode = null;
+                ScheduleSegment targetSegment = null;
 
-                string targetMode = isNight ? _settings.ScheduleNightPreset : _settings.ScheduleDayPreset;
+                foreach (var segment in _settings.ScheduleSegments)
+                {
+                    var startParts = segment.StartTime.Split(':');
+                    var endParts = segment.EndTime.Split(':');
+                    if (startParts.Length < 2 || endParts.Length < 2) continue;
+
+                    var start = new TimeSpan(int.Parse(startParts[0]), int.Parse(startParts[1]), 0);
+                    var end = new TimeSpan(int.Parse(endParts[0]), int.Parse(endParts[1]), 0);
+
+                    if (start == end) continue;
+
+                    bool inSegment;
+                    if (start < end)
+                        inSegment = current >= start && current < end;
+                    else
+                        inSegment = current >= start || current < end;
+
+                    if (inSegment)
+                    {
+                        targetMode = segment.PresetName;
+                        targetSegment = segment;
+                        break;
+                    }
+                }
+
+                if (targetMode == null) return;
 
                 if (_scheduleManualOverride)
                 {
@@ -1073,18 +1248,55 @@ namespace LumiShift
 
                 ApplyGammaToSystem();
                 if (!_isUpdatingGammaSliders)
+                {
+                    _currentPresetName = targetMode;
                     SyncSlidersToSettings();
+                }
 
                 SettingsStore.SaveSettings(_settings);
 
-                string tag = isNight ? "夜间" : "白天";
-                _gammaStatusLabel.Text = $"定时切换: 已切换至{tag}预设 \"{targetMode}\"";
+                _gammaStatusLabel.Text = $"定时切换: 已切换至预设 \"{targetMode}\"";
                 UpdateTrayMenu();
                 _lastScheduleMode = targetMode;
+
+                ApplyScheduleMonitorPresets(targetSegment);
             }
             catch
             {
             }
+        }
+
+        private void ApplyScheduleMonitorPresets(ScheduleSegment segment)
+        {
+            if (segment?.MonitorPresets == null || segment.MonitorPresets.Count == 0)
+                return;
+
+            foreach (var monitor in _monitorManager.Monitors)
+            {
+                if (!segment.MonitorPresets.TryGetValue(monitor.DeviceId, out var presetName))
+                    continue;
+
+                double r, g, b, gv;
+                int mb;
+                bool en;
+
+                if (!PresetDefinitions.TryResolveParams(presetName, _settings.CustomGammaPresets,
+                    out r, out g, out b, out gv, out mb, out en))
+                    continue;
+
+                if (!_settings.GammaPerDisplay.TryGetValue(monitor.DeviceId, out var pdg))
+                {
+                    pdg = new PerDisplayGamma();
+                    _settings.GammaPerDisplay[monitor.DeviceId] = pdg;
+                }
+                pdg.RScale = r; pdg.GScale = g; pdg.BScale = b;
+                pdg.GammaValue = gv; pdg.MasterBrightness = mb; pdg.Enabled = en;
+                pdg.Source = "schedule";
+            }
+
+            ApplyGammaToSystem();
+            PopulateMonitorSelector();
+            SettingsStore.SaveSettings(_settings);
         }
 
         #endregion
@@ -1094,7 +1306,35 @@ namespace LumiShift
         private void GammaCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             if (_isUpdatingGammaSliders) return;
-            _settings.GammaEnabled = _gammaCheckBox.Checked;
+
+            if (IsGlobalMonitorSelected())
+            {
+                _settings.GammaEnabled = _gammaCheckBox.Checked;
+            }
+            else
+            {
+                string deviceId = GetSelectedMonitorDeviceId();
+                if (deviceId != null)
+                {
+                    if (!_settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
+                    {
+                        pdg = new PerDisplayGamma
+                        {
+                            RScale = _settings.GammaRScale,
+                            GScale = _settings.GammaGScale,
+                            BScale = _settings.GammaBScale,
+                            GammaValue = _settings.GammaValue,
+                            MasterBrightness = _settings.MasterBrightness,
+                            Source = "manual"
+                        };
+                        _settings.GammaPerDisplay[deviceId] = pdg;
+                    }
+                    pdg.Enabled = _gammaCheckBox.Checked;
+                    pdg.Source = "manual";
+                    PopulateMonitorSelector();
+                }
+            }
+
             if (_settings.ScheduleEnabled)
                 _scheduleManualOverride = true;
             RefreshSliderVisibility();
@@ -1121,7 +1361,41 @@ namespace LumiShift
             _isUpdatingGammaSliders = true;
 
             ApplyColorTempToSettings(_gammaColorTempSlider.Value);
-            _settings.MasterBrightness = _gammaBrightSlider.Value;
+
+            if (IsGlobalMonitorSelected())
+            {
+                _settings.MasterBrightness = _gammaBrightSlider.Value;
+            }
+            else
+            {
+                string deviceId = GetSelectedMonitorDeviceId();
+                if (deviceId != null)
+                {
+                    if (!_settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
+                    {
+                        pdg = new PerDisplayGamma
+                        {
+                            RScale = _settings.GammaRScale,
+                            GScale = _settings.GammaGScale,
+                            BScale = _settings.GammaBScale,
+                            GammaValue = _settings.GammaValue,
+                            MasterBrightness = _settings.MasterBrightness,
+                            Enabled = _settings.GammaEnabled,
+                            Source = "manual"
+                        };
+                        _settings.GammaPerDisplay[deviceId] = pdg;
+                        PopulateMonitorSelector();
+                    }
+                    pdg.RScale = _settings.GammaRScale;
+                    pdg.GScale = _settings.GammaGScale;
+                    pdg.BScale = _settings.GammaBScale;
+                    pdg.GammaValue = _settings.GammaValue;
+                    pdg.MasterBrightness = _gammaBrightSlider.Value;
+                    pdg.Enabled = true;
+                    pdg.Source = "manual";
+                    _resetDisplayGammaButton.Enabled = true;
+                }
+            }
 
             _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(_settings.GammaRScale * 100.0));
             _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(_settings.GammaGScale * 100.0));
@@ -1133,6 +1407,7 @@ namespace LumiShift
             _gammaCheckBox.Checked = true;
 
             string current = GetCurrentPresetName();
+            _currentPresetName = current;
             if (current != null)
                 _gammaModeComboBox.SelectedItem = current;
 
@@ -1148,25 +1423,46 @@ namespace LumiShift
 
             if (!(_gammaModeComboBox.SelectedItem is string selected)) return;
 
+            _currentPresetName = selected;
+
             if (_settings.ScheduleEnabled)
                 _scheduleManualOverride = true;
 
-            int builtInIndex = Array.IndexOf(BuiltInPresets, selected);
-            if (builtInIndex >= 0)
+            if (IsGlobalMonitorSelected())
             {
-                ApplyBuiltInPreset(builtInIndex);
+                TryApplyPreset(selected);
             }
             else
             {
-                var custom = _settings.CustomGammaPresets.FirstOrDefault(cp => cp.Name == selected);
-                if (custom != null)
+                string deviceId = GetSelectedMonitorDeviceId();
+                if (deviceId != null)
                 {
-                    _settings.GammaEnabled = custom.Enabled;
-                    _settings.GammaRScale = custom.RScale;
-                    _settings.GammaGScale = custom.GScale;
-                    _settings.GammaBScale = custom.BScale;
-                    _settings.GammaValue = custom.GammaValue;
-                    _settings.MasterBrightness = custom.MasterBrightness;
+                    double r, g, b, gv;
+                    int mb;
+                    bool en;
+
+                    if (PresetDefinitions.TryResolveParams(selected, _settings.CustomGammaPresets,
+                        out r, out g, out b, out gv, out mb, out en))
+                    {
+                        if (!_settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
+                        {
+                            pdg = new PerDisplayGamma
+                            {
+                                RScale = _settings.GammaRScale,
+                                GScale = _settings.GammaGScale,
+                                BScale = _settings.GammaBScale,
+                                GammaValue = _settings.GammaValue,
+                                MasterBrightness = _settings.MasterBrightness,
+                                Enabled = _settings.GammaEnabled,
+                                Source = "manual"
+                            };
+                            _settings.GammaPerDisplay[deviceId] = pdg;
+                        }
+                        pdg.RScale = r; pdg.GScale = g; pdg.BScale = b;
+                        pdg.GammaValue = gv; pdg.MasterBrightness = mb; pdg.Enabled = en;
+                        pdg.Source = "manual";
+                        PopulateMonitorSelector();
+                    }
                 }
             }
 
@@ -1185,15 +1481,50 @@ namespace LumiShift
                 _scheduleManualOverride = true;
 
             UpdateGammaLabels();
-            _settings.GammaRScale = _gammaRSlider.Value / 100.0;
-            _settings.GammaGScale = _gammaGSlider.Value / 100.0;
-            _settings.GammaBScale = _gammaBSlider.Value / 100.0;
-            _settings.GammaValue = _gammaValueSlider.Value / 100.0;
-            _settings.MasterBrightness = _gammaBrightSlider.Value;
-            _settings.GammaEnabled = _gammaCheckBox.Checked;
+
+            if (IsGlobalMonitorSelected())
+            {
+                _settings.GammaRScale = _gammaRSlider.Value / 100.0;
+                _settings.GammaGScale = _gammaGSlider.Value / 100.0;
+                _settings.GammaBScale = _gammaBSlider.Value / 100.0;
+                _settings.GammaValue = _gammaValueSlider.Value / 100.0;
+                _settings.MasterBrightness = _gammaBrightSlider.Value;
+                _settings.GammaEnabled = _gammaCheckBox.Checked;
+            }
+            else
+            {
+                string deviceId = GetSelectedMonitorDeviceId();
+                if (deviceId != null)
+                {
+                    if (!_settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
+                    {
+                        pdg = new PerDisplayGamma
+                        {
+                            RScale = _settings.GammaRScale,
+                            GScale = _settings.GammaGScale,
+                            BScale = _settings.GammaBScale,
+                            GammaValue = _settings.GammaValue,
+                            MasterBrightness = _settings.MasterBrightness,
+                            Enabled = _settings.GammaEnabled,
+                            Source = "manual"
+                        };
+                        _settings.GammaPerDisplay[deviceId] = pdg;
+                        PopulateMonitorSelector();
+                    }
+                    pdg.RScale = _gammaRSlider.Value / 100.0;
+                    pdg.GScale = _gammaGSlider.Value / 100.0;
+                    pdg.BScale = _gammaBSlider.Value / 100.0;
+                    pdg.GammaValue = _gammaValueSlider.Value / 100.0;
+                    pdg.MasterBrightness = _gammaBrightSlider.Value;
+                    pdg.Enabled = _gammaCheckBox.Checked;
+                    pdg.Source = "manual";
+                    _resetDisplayGammaButton.Enabled = true;
+                }
+            }
 
             UpdateColorTempFromSliders();
             string current = GetCurrentPresetName();
+            _currentPresetName = current;
             if (current != null && !_isPopulatingComboBox)
                 _gammaModeComboBox.SelectedItem = current;
 
@@ -1211,7 +1542,7 @@ namespace LumiShift
             name = name.Trim();
             if (name.Length == 0) return;
 
-            if (Array.IndexOf(BuiltInPresets, name) >= 0)
+            if (PresetDefinitions.IsBuiltIn(name))
             {
                 MessageBox.Show("该名称与内置预设冲突，请更换名称。", "提示",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1237,10 +1568,29 @@ namespace LumiShift
                 MasterBrightness = _settings.MasterBrightness,
                 Enabled = _settings.GammaEnabled
             };
+
+            if (_settings.GammaPerDisplay != null && _settings.GammaPerDisplay.Count > 0)
+            {
+                preset.PerDisplaySnapshot = new Dictionary<string, PerDisplayGamma>();
+                foreach (var kvp in _settings.GammaPerDisplay)
+                {
+                    preset.PerDisplaySnapshot[kvp.Key] = new PerDisplayGamma
+                    {
+                        RScale = kvp.Value.RScale,
+                        GScale = kvp.Value.GScale,
+                        BScale = kvp.Value.BScale,
+                        GammaValue = kvp.Value.GammaValue,
+                        MasterBrightness = kvp.Value.MasterBrightness,
+                        Enabled = kvp.Value.Enabled,
+                        Source = kvp.Value.Source
+                    };
+                }
+            }
+
             _settings.CustomGammaPresets.Add(preset);
 
             PopulatePresetComboBox();
-            PopulateScheduleComboBoxes();
+            _currentPresetName = name;
             _gammaModeComboBox.SelectedItem = name;
             SettingsStore.SaveSettings(_settings);
             UpdateTrayMenu();
@@ -1252,7 +1602,7 @@ namespace LumiShift
         private void GammaDeleteCustomButton_Click(object sender, EventArgs e)
         {
             if (!(_gammaModeComboBox.SelectedItem is string selected)) return;
-            if (BuiltInPresets.Contains(selected)) return;
+            if (PresetDefinitions.IsBuiltIn(selected)) return;
 
             if (MessageBox.Show($"确定要删除自定义预设 \"{selected}\" 吗？", "确认删除",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
@@ -1262,11 +1612,11 @@ namespace LumiShift
             _settings.CustomGammaPresets.RemoveAll(cp => cp.Name == selected);
 
             PopulatePresetComboBox();
-            PopulateScheduleComboBoxes();
 
             if (wasActive)
             {
-                ApplyBuiltInPreset(0);
+                _currentPresetName = PresetDefinitions.BuiltIns[0].Name;
+                TryApplyPreset(PresetDefinitions.BuiltIns[0].Name);
                 SyncSlidersToSettings();
                 ApplyGammaToSystem();
             }
@@ -1294,6 +1644,7 @@ namespace LumiShift
         {
             if (_settings.ScheduleEnabled)
                 _scheduleManualOverride = true;
+            _currentPresetName = presetName;
             TryApplyPreset(presetName);
             SyncSlidersToSettings();
             ApplyGammaToSystem();
@@ -1302,10 +1653,74 @@ namespace LumiShift
             UpdateScheduleOverrideStatus();
         }
 
+        private void MonitorSelectorComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_isUpdatingGammaSliders) return;
+            _isUpdatingGammaSliders = true;
+            SyncSlidersToSelectedMonitor();
+            UpdateGammaLabels();
+            UpdateColorTempFromSliders();
+            RefreshSliderVisibility();
+            _isUpdatingGammaSliders = false;
+        }
+
+        private void ResetDisplayGammaButton_Click(object sender, EventArgs e)
+        {
+            string deviceId = GetSelectedMonitorDeviceId();
+            if (deviceId == null) return;
+
+            bool isFromSchedule = _settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg) && pdg.Source == "schedule";
+
+            if (isFromSchedule && _settings.ScheduleEnabled)
+            {
+                if (MessageBox.Show(
+                    "此配置由定时调度生成，重置后将在下次时段切换时恢复。\n\n是否仍要重置？",
+                    "定时配置提示", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
+                    return;
+            }
+
+            _settings.GammaPerDisplay.Remove(deviceId);
+            PopulateMonitorSelector();
+
+            _isUpdatingGammaSliders = true;
+            SyncSlidersToSelectedMonitor();
+            UpdateGammaLabels();
+            UpdateColorTempFromSliders();
+            _isUpdatingGammaSliders = false;
+
+            ApplyGammaToSystem();
+            SettingsStore.SaveSettings(_settings);
+            UpdateTrayMenu();
+
+            _gammaStatusLabel.Text = isFromSchedule && _settings.ScheduleEnabled
+                ? "已重置为全局设置（定时调度将在下次时段切换时恢复）"
+                : "已重置为全局设置";
+        }
+
+        private void GammaScheduleToggle_CheckedChanged(object sender, EventArgs e)
+        {
+            if (_isUpdatingSchedule) return;
+            _settings.ScheduleEnabled = _gammaScheduleToggle.Checked;
+            _scheduleEnabledCheckBox.Checked = _settings.ScheduleEnabled;
+            _scheduleTimer.Enabled = _settings.ScheduleEnabled;
+            if (_settings.ScheduleEnabled)
+            {
+                _lastScheduleMode = "";
+                _scheduleManualOverride = false;
+                ScheduleTimer_Tick(null, null);
+            }
+            else
+            {
+                UpdateScheduleOverrideStatus();
+            }
+            SettingsStore.SaveSettings(_settings);
+        }
+
         private void ScheduleEnabledCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             if (_isUpdatingSchedule) return;
             _settings.ScheduleEnabled = _scheduleEnabledCheckBox.Checked;
+            _gammaScheduleToggle.Checked = _settings.ScheduleEnabled;
             _scheduleTimer.Enabled = _settings.ScheduleEnabled;
             if (_settings.ScheduleEnabled)
             {
@@ -1316,39 +1731,20 @@ namespace LumiShift
             SettingsStore.SaveSettings(_settings);
         }
 
-        private void ScheduleNightStartPicker_ValueChanged(object sender, EventArgs e)
+        private void ScheduleConfigButton_Click(object sender, EventArgs e)
         {
-            if (_isUpdatingSchedule) return;
-            var t = _scheduleNightStartPicker.Value;
-            _settings.ScheduleNightStart = $"{t.Hour:D2}:{t.Minute:D2}";
-            if (_settings.ScheduleEnabled)
+            using (var dlg = new ScheduleConfigForm(_settings.ScheduleSegments, _settings.CustomGammaPresets, _monitorManager.Monitors.ToList()))
             {
-                _lastScheduleMode = "";
-                _scheduleManualOverride = false;
-                ScheduleTimer_Tick(null, null);
+                if (dlg.ShowDialog(this) == DialogResult.OK && dlg.ResultSegments != null)
+                {
+                    _settings.ScheduleSegments = dlg.ResultSegments;
+                    OnScheduleSegmentChanged();
+                }
             }
-            SettingsStore.SaveSettings(_settings);
         }
 
-        private void ScheduleNightEndPicker_ValueChanged(object sender, EventArgs e)
+        private void OnScheduleSegmentChanged()
         {
-            if (_isUpdatingSchedule) return;
-            var t = _scheduleNightEndPicker.Value;
-            _settings.ScheduleNightEnd = $"{t.Hour:D2}:{t.Minute:D2}";
-            if (_settings.ScheduleEnabled)
-            {
-                _lastScheduleMode = "";
-                _scheduleManualOverride = false;
-                ScheduleTimer_Tick(null, null);
-            }
-            SettingsStore.SaveSettings(_settings);
-        }
-
-        private void SchedulePresetComboBox_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (_isUpdatingSchedule) return;
-            _settings.ScheduleNightPreset = _scheduleNightPresetComboBox.SelectedItem?.ToString() ?? "护眼模式";
-            _settings.ScheduleDayPreset = _scheduleDayPresetComboBox.SelectedItem?.ToString() ?? "标准";
             if (_settings.ScheduleEnabled)
             {
                 _lastScheduleMode = "";

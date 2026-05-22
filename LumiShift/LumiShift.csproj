@@ -70,6 +70,7 @@
     <Compile Include="Form1.Designer.cs">
       <DependentUpon>Form1.cs</DependentUpon>
     </Compile>
+    <Compile Include="ScheduleConfigForm.cs" />
     <Compile Include="Infrastructure\BrightnessController.cs" />
     <Compile Include="Infrastructure\EyeProtectionService.cs" />
     <Compile Include="Infrastructure\GammaController.cs" />
@@ -78,6 +79,7 @@
     <Compile Include="Infrastructure\NativeMethods.cs" />
     <Compile Include="Infrastructure\NightLightController.cs" />
     <Compile Include="Models\UserSettings.cs" />
+    <Compile Include="Models\PresetDefinitions.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Resources\DesignConstants.cs" />
