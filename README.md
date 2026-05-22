@@ -4,7 +4,6 @@
 
 **轻量级屏幕亮度与 Gamma 校正工具 — 让你的屏幕更护眼**
 
-[![GitHub Release](https://img.shields.io/github/v/release/SummerRay160/LumiShift?style=flat-square&logo=github)](https://github.com/SummerRay160/LumiShift/releases/latest)
 [![License](https://img.shields.io/github/license/SummerRay160/LumiShift?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-blue?style=flat-square&logo=windows)]()
 
