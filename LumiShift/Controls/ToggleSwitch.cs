@@ -34,9 +34,10 @@ namespace LumiShift.Controls
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                      ControlStyles.ResizeRedraw | ControlStyles.DoubleBuffer |
-                     ControlStyles.OptimizedDoubleBuffer, true);
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
             Width = 42;
             Height = 22;
+            BackColor = Color.Transparent;
             _animProgress = _checked ? 1f : 0f;
             _animTimer = new Timer { Interval = 16 };
             _animTimer.Tick += OnAnimationTick;
@@ -61,17 +62,15 @@ namespace LumiShift.Controls
             Invalidate();
         }
 
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            base.OnPaintBackground(e);
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-
-            using (var bgBrush = new SolidBrush(Colors.Background))
-            {
-                g.FillRectangle(bgBrush, ClientRectangle);
-            }
-
-            Form1.DrawBackgroundOnGraphics(g, ClientRectangle);
 
             float h = Height;
             float w = Width;

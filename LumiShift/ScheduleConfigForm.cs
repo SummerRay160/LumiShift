@@ -48,6 +48,16 @@ namespace LumiShift
 
             BuildUI();
             RebuildSegmentPanel();
+
+            ThemeManager.ThemeChanged += OnThemeChanged;
+            FormClosed += (s, e) => ThemeManager.ThemeChanged -= OnThemeChanged;
+        }
+
+        private void OnThemeChanged(object sender, EventArgs e)
+        {
+            BackColor = Colors.Background;
+            Invalidate(true);
+            RebuildSegmentPanel();
         }
 
         protected override void OnPaintBackground(PaintEventArgs e)
@@ -56,7 +66,42 @@ namespace LumiShift
             if (Form1.StaticUseBackgroundImage && Form1.StaticBackgroundImage != null)
             {
                 e.Graphics.Clear(Colors.Background);
-                Form1.DrawBackgroundOnGraphics(e.Graphics, ClientRectangle);
+                DrawOwnBackground(e.Graphics);
+            }
+        }
+
+        private void DrawOwnBackground(Graphics g)
+        {
+            var img = Form1.StaticBackgroundImage;
+            if (img == null) return;
+
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+
+            using (var attributes = new System.Drawing.Imaging.ImageAttributes())
+            {
+                var matrix = new System.Drawing.Imaging.ColorMatrix(new float[][]
+                {
+                    new float[] { 1, 0, 0, 0, 0 },
+                    new float[] { 0, 1, 0, 0, 0 },
+                    new float[] { 0, 0, 1, 0, 0 },
+                    new float[] { 0, 0, 0, Form1.StaticBackgroundOpacity, 0 },
+                    new float[] { 0, 0, 0, 0, 1 }
+                });
+                attributes.SetColorMatrix(matrix, System.Drawing.Imaging.ColorMatrixFlag.Default, System.Drawing.Imaging.ColorAdjustType.Bitmap);
+
+                int imgW = img.Width;
+                int imgH = img.Height;
+                int areaW = ClientSize.Width;
+                int areaH = ClientSize.Height;
+
+                float scale = Math.Max((float)areaW / imgW, (float)areaH / imgH);
+                int drawW = (int)(imgW * scale);
+                int drawH = (int)(imgH * scale);
+                int x = (areaW - drawW) / 2;
+                int y = (areaH - drawH) / 2;
+
+                g.DrawImage(img, new Rectangle(x, y, drawW, drawH),
+                    0, 0, imgW, imgH, GraphicsUnit.Pixel, attributes);
             }
         }
 
@@ -70,7 +115,8 @@ namespace LumiShift
                 Location = new Point(Spacing.LG, y),
                 AutoSize = true,
                 Font = Typography.Caption,
-                ForeColor = Colors.TextSecondary
+                ForeColor = Colors.TextSecondary,
+                BackColor = Color.Transparent
             };
             y += 24;
 
@@ -82,9 +128,9 @@ namespace LumiShift
                 BackColor = Color.Transparent
             };
 
-            var hStart = new Label { Text = "时段", Location = new Point(0, 0), AutoSize = true, Font = Typography.Caption, ForeColor = Colors.TextSecondary };
-            var hPreset = new Label { Text = "预设", Location = new Point(210, 0), AutoSize = true, Font = Typography.Caption, ForeColor = Colors.TextSecondary };
-            var hMonitor = new Label { Text = "显示器", Location = new Point(340, 0), AutoSize = true, Font = Typography.Caption, ForeColor = Colors.TextSecondary };
+            var hStart = new Label { Text = "时段", Location = new Point(0, 0), AutoSize = true, Font = Typography.Caption, ForeColor = Colors.TextSecondary, BackColor = Color.Transparent };
+            var hPreset = new Label { Text = "预设", Location = new Point(210, 0), AutoSize = true, Font = Typography.Caption, ForeColor = Colors.TextSecondary, BackColor = Color.Transparent };
+            var hMonitor = new Label { Text = "显示器", Location = new Point(340, 0), AutoSize = true, Font = Typography.Caption, ForeColor = Colors.TextSecondary, BackColor = Color.Transparent };
             headerRow.Controls.AddRange(new Control[] { hStart, hPreset, hMonitor });
             y += 24;
 
@@ -293,7 +339,8 @@ namespace LumiShift
                     Location = new Point(92, 8),
                     AutoSize = true,
                     Font = Typography.Body,
-                    ForeColor = Colors.TextSecondary
+                    ForeColor = Colors.TextSecondary,
+                    BackColor = Color.Transparent
                 };
 
                 var endPicker = new DateTimePicker
@@ -338,7 +385,8 @@ namespace LumiShift
                     Location = new Point(388, 9),
                     AutoSize = true,
                     Font = Typography.Caption,
-                    ForeColor = hasMonitorPresets ? Colors.Brand : Colors.TextSecondary
+                    ForeColor = hasMonitorPresets ? Colors.Brand : Colors.TextSecondary,
+                    BackColor = Color.Transparent
                 };
 
                 var deleteBtn = new Button
@@ -445,7 +493,8 @@ namespace LumiShift
                             Location = new Point(8, my + 2),
                             AutoSize = true,
                             Font = Typography.Caption,
-                            ForeColor = Colors.Border
+                            ForeColor = Colors.Border,
+                            BackColor = Color.Transparent
                         };
 
                         var monLabel = new Label
@@ -454,7 +503,8 @@ namespace LumiShift
                             Location = new Point(36, my + 2),
                             AutoSize = true,
                             Font = Typography.Caption,
-                            ForeColor = Colors.TextSecondary
+                            ForeColor = Colors.TextSecondary,
+                            BackColor = Color.Transparent
                         };
 
                         var monCombo = new ComboBox

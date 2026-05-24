@@ -34,6 +34,8 @@ namespace LumiShift.Resources
     {
         private static ThemeMode _currentMode = ThemeMode.Auto;
         private static ThemeColors _active;
+        private static bool _watching;
+        private static bool _lastSystemDark;
 
         public static event EventHandler ThemeChanged;
 
@@ -72,6 +74,34 @@ namespace LumiShift.Resources
             return true;
         }
 
+        public static void StartWatchingSystemTheme()
+        {
+            if (_watching) return;
+            _watching = true;
+            _lastSystemDark = IsSystemDarkMode();
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        }
+
+        public static void StopWatchingSystemTheme()
+        {
+            if (!_watching) return;
+            _watching = false;
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        }
+
+        private static void OnUserPreferenceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
+        {
+            if (_currentMode != ThemeMode.Auto) return;
+            if (e.Category != Microsoft.Win32.UserPreferenceCategory.General) return;
+
+            bool isDark = IsSystemDarkMode();
+            if (isDark == _lastSystemDark) return;
+            _lastSystemDark = isDark;
+
+            UpdateActiveTheme();
+            ThemeChanged?.Invoke(null, EventArgs.Empty);
+        }
+
         public static void UpdateActiveTheme()
         {
             bool useDark;
@@ -101,7 +131,7 @@ namespace LumiShift.Resources
                 Red = Color.FromArgb(0xFF, 0x6B, 0x6B),
                 Yellow = Color.FromArgb(0xFF, 0xD9, 0x3D),
                 TextPrimary = Color.FromArgb(0xF0, 0xF0, 0xF5),
-                TextSecondary = Color.FromArgb(0x9A, 0x9A, 0xB0),
+                TextSecondary = Color.FromArgb(0xD0, 0xD0, 0xE0),
                 TextDisabled = Color.FromArgb(0x5A, 0x5A, 0x72),
                 TabInactive = Color.FromArgb(0x1E, 0x1F, 0x2E)
             };
