@@ -65,6 +65,12 @@ namespace LumiShift.Controls
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            using (var bgBrush = new SolidBrush(Colors.Background))
+            {
+                g.FillRectangle(bgBrush, ClientRectangle);
+            }
+
             Form1.DrawBackgroundOnGraphics(g, ClientRectangle);
 
             float h = Height;

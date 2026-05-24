@@ -55,6 +55,7 @@ namespace LumiShift
             base.OnPaintBackground(e);
             if (Form1.StaticUseBackgroundImage && Form1.StaticBackgroundImage != null)
             {
+                e.Graphics.Clear(Colors.Background);
                 Form1.DrawBackgroundOnGraphics(e.Graphics, ClientRectangle);
             }
         }
