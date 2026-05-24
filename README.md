@@ -25,8 +25,10 @@
 ![亮度控制](.github/Screenshot/Screenshot_brightness.png)
 
 - 基于 WMI 和 DDC/CI 双协议，独立调节每台显示器的硬件亮度
-- 自动检测所有连接的显示器，无需手动配置
+- 自动检测所有连接的显示器，支持 EDID 解析与厂商名称映射，智能显示设备名称
+- 显示器热插拔检测，自动清理失效配置，位置推断逻辑优化多屏排序
 - 滑块实时调节，设置自动持久化
+- 支持单显示器独立 Gamma 预设，通过托盘菜单快速切换单屏配置
 
 #### Gamma 校正与色温调节
 
@@ -66,12 +68,13 @@
 #### 主题切换
 
 - 深色 / 浅色 / 跟随系统自动切换三种模式
+- 实时监听 Windows 系统主题变更，界面配色即时同步
 - 全控件树递归刷新，确保所有 UI 元素一致
 
 #### 系统托盘
 
 - 最小化到托盘运行，不占用任务栏
-- 右键菜单：快速切换预设、开关 Gamma、检查更新、关闭显示器、退出
+- 右键菜单：快速切换预设、单显示器独立 Gamma 预设切换、开关 Gamma、检查更新、关闭显示器、退出
 
 #### 开机自启
 
@@ -172,8 +175,10 @@ LumiShift is an open-source screen adjustment tool for Windows that combines mul
 ![Brightness Control](.github/Screenshot/Screenshot_brightness.png)
 
 - Independent hardware brightness adjustment per monitor via WMI and DDC/CI dual protocols
-- Automatic detection of all connected monitors
+- Automatic detection of all connected monitors with EDID parsing and vendor name mapping for intelligent device naming
+- Hot-plug detection with automatic cleanup of stale configurations; position inference for smart multi-monitor sorting
 - Real-time slider adjustment with automatic settings persistence
+- Per-monitor independent Gamma presets with quick single-screen switching from tray menu
 
 #### Gamma Correction & Color Temperature
 
@@ -213,12 +218,13 @@ LumiShift is an open-source screen adjustment tool for Windows that combines mul
 #### Theme Switching
 
 - Dark / Light / Auto (follows system) modes
+- Real-time Windows system theme monitoring with instant UI color sync
 - Recursive control tree refresh for consistent UI
 
 #### System Tray
 
 - Minimize to tray, no taskbar clutter
-- Right-click menu: quick preset switch, Gamma toggle, check for updates, turn off monitor, exit
+- Right-click menu: quick preset switch, per-monitor Gamma preset switching, Gamma toggle, check for updates, turn off monitor, exit
 
 #### Auto Start
 
