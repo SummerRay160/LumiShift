@@ -12,9 +12,9 @@
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
-    <ApplicationVersion>1.1.0</ApplicationVersion>
+    <ApplicationVersion>1.1.1</ApplicationVersion>
     <ApplicationRevision>0</ApplicationRevision>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <Company>LumiShift</Company>
     <Description>屏幕亮度与Gamma校正工具</Description>
     <Copyright>Copyright © 2026</Copyright>
@@ -70,7 +70,9 @@
     <Compile Include="Form1.Designer.cs">
       <DependentUpon>Form1.cs</DependentUpon>
     </Compile>
-    <Compile Include="ScheduleConfigForm.cs" />
+    <Compile Include="ScheduleConfigForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Infrastructure\BrightnessController.cs" />
     <Compile Include="Infrastructure\EyeProtectionService.cs" />
     <Compile Include="Infrastructure\GammaController.cs" />

@@ -10,6 +10,7 @@ using LumiShift.Infrastructure;
 using LumiShift.Models;
 using LumiShift.Resources;
 using LumiShift.Services;
+using Microsoft.Win32;
 
 namespace LumiShift
 {
@@ -19,6 +20,8 @@ namespace LumiShift
         internal static Image StaticBackgroundImage { get; set; }
         internal static float StaticBackgroundOpacity { get; set; } = 0.3f;
         internal static bool StaticUseBackgroundImage { get; set; }
+        internal static Size StaticFormClientSize { get; set; }
+        internal static Bitmap StaticCachedBackground { get; set; }
 
         private GammaController _gammaController;
         private MonitorManager _monitorManager;
@@ -71,6 +74,7 @@ namespace LumiShift
         private Label _bgImageOpacityLabel;
         private Label _bgImageStatusLabel;
         private Image _backgroundImage;
+        private Bitmap _cachedBackground;
         private bool _isUpdatingBgImageUI;
 
         private bool _isUpdatingGammaSliders;
@@ -106,10 +110,14 @@ namespace LumiShift
             _gammaController = new GammaController();
 
             _gammaController.StatusChanged += OnGammaStatusChanged;
+            _monitorManager.MonitorsChanged += OnMonitorsChanged;
+
+            SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
             ThemeManager.CurrentMode = (ThemeMode)_settings.ThemeMode;
             ThemeManager.UpdateActiveTheme();
             ThemeManager.ThemeChanged += OnThemeChanged;
+            ThemeManager.StartWatchingSystemTheme();
 
             _lastScheduleMode = "";
             _scheduleTimer = new Timer { Interval = 30000 };
@@ -127,6 +135,7 @@ namespace LumiShift
             LoadBackgroundImage();
             SyncBackgroundStaticFields();
             SubscribeBackgroundPaintEvents();
+            ClientSizeChanged += OnFormClientSizeChanged;
             UpdateTrayMenu();
 
             var updateTimer = new Timer { Interval = 3000 };
@@ -164,6 +173,30 @@ namespace LumiShift
             }
 
             return null;
+        }
+
+        private string GetMonitorPresetName(string deviceId)
+        {
+            if (_settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
+            {
+                if (!pdg.Enabled) return PresetDefinitions.BuiltIns[0].Name;
+
+                foreach (var bip in PresetDefinitions.BuiltIns)
+                {
+                    if (bip.Matches(pdg.RScale, pdg.GScale, pdg.BScale, pdg.GammaValue, pdg.MasterBrightness))
+                        return bip.Name;
+                }
+                foreach (var cp in _settings.CustomGammaPresets)
+                {
+                    if (Math.Abs(pdg.RScale - cp.RScale) < 0.01 &&
+                        Math.Abs(pdg.GScale - cp.GScale) < 0.01 &&
+                        Math.Abs(pdg.BScale - cp.BScale) < 0.01 &&
+                        Math.Abs(pdg.GammaValue - cp.GammaValue) < 0.01 &&
+                        Math.Abs(pdg.MasterBrightness - cp.MasterBrightness) <= 1)
+                        return cp.Name;
+                }
+            }
+            return GetCurrentPresetName();
         }
 
         private void PopulatePresetComboBox()
@@ -237,6 +270,35 @@ namespace LumiShift
                 return true;
             }
             return false;
+        }
+
+        private void ApplyPresetToMonitor(string presetName, string deviceId)
+        {
+            double r, g, b, gv;
+            int mb;
+            bool en;
+
+            if (!PresetDefinitions.TryResolveParams(presetName, _settings.CustomGammaPresets,
+                out r, out g, out b, out gv, out mb, out en))
+                return;
+
+            if (!_settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
+            {
+                pdg = new PerDisplayGamma();
+                _settings.GammaPerDisplay[deviceId] = pdg;
+            }
+            pdg.RScale = r; pdg.GScale = g; pdg.BScale = b;
+            pdg.GammaValue = gv; pdg.MasterBrightness = mb; pdg.Enabled = en;
+            pdg.Source = "manual";
+
+            if (_settings.ScheduleEnabled)
+                _scheduleManualOverride = true;
+
+            ApplyGammaToSystem();
+            UpdateTrayMenu();
+            SettingsStore.SaveSettings(_settings);
+            PopulateMonitorSelector();
+            UpdateScheduleOverrideStatus();
         }
 
         private static string PromptForName(string prompt, string title, string defaultValue)
@@ -625,13 +687,11 @@ namespace LumiShift
             {
                 string deviceId = monitor.DeviceId;
 
-                var row = new TableLayoutPanel
+                var row = new Panel
                 {
-                    ColumnCount = 3,
-                    RowCount = 1,
-                    AutoSize = true,
-                    Width = 400,
-                    Padding = new Padding(4),
+                    Width = _brightnessPanel.Width,
+                    Height = 56,
+                    Padding = new Padding(Spacing.LG, 8, Spacing.LG, 6),
                     BackColor = Color.Transparent
                 };
 
@@ -647,22 +707,37 @@ namespace LumiShift
                     _settings.BrightnessPerDisplay[deviceId] = currentBrightness;
                 }
 
+                var nameLabel = new Label
+                {
+                    Text = monitor.DisplayName,
+                    AutoSize = true,
+                    Font = Typography.Body,
+                    ForeColor = Colors.TextSecondary
+                };
+                nameLabel.Location = new Point((row.Width - row.Padding.Horizontal - nameLabel.Width) / 2, row.Padding.Top);
+
                 var tb = new ModernSlider
                 {
                     Minimum = 0,
                     Maximum = 100,
-                    Width = 210,
+                    Width = 220,
                     Value = currentBrightness,
                     Enabled = monitor.Controller?.IsSupported ?? false
                 };
+
                 var valLabel = new Label
                 {
                     Text = $"{currentBrightness}%",
                     AutoSize = true,
                     TextAlign = ContentAlignment.MiddleLeft,
-                    Padding = new Padding(6, 0, 0, 0),
+                    Font = Typography.Mono,
                     ForeColor = Colors.TextPrimary
                 };
+
+                int sliderGroupWidth = tb.Width + valLabel.PreferredWidth + 10;
+                int sliderX = (row.Width - row.Padding.Horizontal - sliderGroupWidth) / 2;
+                tb.Location = new Point(sliderX, row.Padding.Top + 26);
+                valLabel.Location = new Point(sliderX + tb.Width + 10, row.Padding.Top + 30);
 
                 tb.ValueChanged += (s, ev) =>
                 {
@@ -672,17 +747,7 @@ namespace LumiShift
                     SettingsStore.SaveSettings(_settings);
                 };
 
-                row.Controls.Add(new Label
-                {
-                    Text = monitor.DisplayName,
-                    AutoSize = true,
-                    TextAlign = ContentAlignment.MiddleLeft,
-                    Anchor = AnchorStyles.Left,
-                    ForeColor = Colors.TextSecondary
-                }, 0, 0);
-                row.Controls.Add(tb, 1, 0);
-                row.Controls.Add(valLabel, 2, 0);
-
+                row.Controls.AddRange(new Control[] { nameLabel, tb, valLabel });
                 _brightnessPanel.Controls.Add(row);
             }
         }
@@ -816,6 +881,7 @@ namespace LumiShift
             {
                 _bgImageStatusLabel.Text = "未设置";
                 SyncBackgroundStaticFields();
+                RebuildBackgroundCache();
                 InvalidateBackgroundDisplay();
                 return;
             }
@@ -845,6 +911,7 @@ namespace LumiShift
             }
 
             SyncBackgroundStaticFields();
+            RebuildBackgroundCache();
             InvalidateBackgroundDisplay();
         }
 
@@ -932,6 +999,7 @@ namespace LumiShift
             _settings.BackgroundImageOpacity = _bgImageOpacitySlider.Value;
             _bgImageOpacityLabel.Text = $"{_bgImageOpacitySlider.Value}%";
             SyncBackgroundStaticFields();
+            RebuildBackgroundCache();
             InvalidateBackgroundDisplay();
             SettingsStore.SaveSettings(_settings);
         }
@@ -1067,26 +1135,75 @@ namespace LumiShift
             _trayMenu.Items.Add(gammaItem);
 
             var quickMenu = new ToolStripMenuItem("快速切换预设");
+
+            bool anyMonitorOverride = _settings.GammaPerDisplay != null && _settings.GammaPerDisplay.Count > 0;
+
+            var allMonitorsItem = new ToolStripMenuItem("全部显示器");
+            string globalPresetName = GetCurrentPresetName();
             foreach (var p in PresetDefinitions.GetNames())
             {
-                bool isActive = _settings.GammaEnabled && GetCurrentPresetName() == p;
+                bool isActive = !anyMonitorOverride && _settings.GammaEnabled && globalPresetName == p;
                 var item = new ToolStripMenuItem(p) { Checked = isActive };
                 string cp = p;
                 item.Click += (s, ev) => QuickPreset_Click(cp);
-                quickMenu.DropDownItems.Add(item);
+                allMonitorsItem.DropDownItems.Add(item);
             }
             if (_settings.CustomGammaPresets.Count > 0)
             {
-                quickMenu.DropDownItems.Add(new ToolStripSeparator());
+                allMonitorsItem.DropDownItems.Add(new ToolStripSeparator());
                 foreach (var cp in _settings.CustomGammaPresets)
                 {
-                    bool isActive = _settings.GammaEnabled && GetCurrentPresetName() == cp.Name;
+                    bool isActive = !anyMonitorOverride && _settings.GammaEnabled && globalPresetName == cp.Name;
                     var item = new ToolStripMenuItem(cp.Name) { Checked = isActive };
                     string name = cp.Name;
                     item.Click += (s, ev) => QuickPreset_Click(name);
-                    quickMenu.DropDownItems.Add(item);
+                    allMonitorsItem.DropDownItems.Add(item);
                 }
             }
+            quickMenu.DropDownItems.Add(allMonitorsItem);
+
+            if (_monitorManager.Monitors.Count > 1 || anyMonitorOverride)
+            {
+                quickMenu.DropDownItems.Add(new ToolStripSeparator());
+
+                foreach (var monitor in _monitorManager.Monitors)
+                {
+                    string deviceId = monitor.DeviceId;
+                    string monitorLabel = monitor.DisplayName;
+                    if (_settings.GammaPerDisplay.ContainsKey(deviceId))
+                        monitorLabel += $" ({GetMonitorPresetName(deviceId)})";
+
+                    var monitorItem = new ToolStripMenuItem(monitorLabel);
+                    string currentMonitorPreset = GetMonitorPresetName(deviceId);
+
+                    foreach (var p in PresetDefinitions.GetNames())
+                    {
+                        bool isActive = currentMonitorPreset == p;
+                        var item = new ToolStripMenuItem(p) { Checked = isActive };
+                        string presetName = p;
+                        string monDeviceId = deviceId;
+                        item.Click += (s, ev) => ApplyPresetToMonitor(presetName, monDeviceId);
+                        monitorItem.DropDownItems.Add(item);
+                    }
+
+                    if (_settings.CustomGammaPresets.Count > 0)
+                    {
+                        monitorItem.DropDownItems.Add(new ToolStripSeparator());
+                        foreach (var cp in _settings.CustomGammaPresets)
+                        {
+                            bool isActive = currentMonitorPreset == cp.Name;
+                            var item = new ToolStripMenuItem(cp.Name) { Checked = isActive };
+                            string presetName = cp.Name;
+                            string monDeviceId = deviceId;
+                            item.Click += (s, ev) => ApplyPresetToMonitor(presetName, monDeviceId);
+                            monitorItem.DropDownItems.Add(item);
+                        }
+                    }
+
+                    quickMenu.DropDownItems.Add(monitorItem);
+                }
+            }
+
             _trayMenu.Items.Add(quickMenu);
 
             if (_settings.ScheduleEnabled && _scheduleManualOverride)
@@ -1783,13 +1900,100 @@ namespace LumiShift
                 _gammaStatusLabel.Text = status;
         }
 
+        private void OnDisplaySettingsChanged(object sender, EventArgs e)
+        {
+            if (InvokeRequired)
+            {
+                Invoke(new Action(() => HandleDisplayChange()));
+            }
+            else
+            {
+                HandleDisplayChange();
+            }
+        }
+
+        private void OnMonitorsChanged()
+        {
+            if (InvokeRequired)
+            {
+                Invoke(new Action(() => RefreshAllMonitorUI()));
+            }
+            else
+            {
+                RefreshAllMonitorUI();
+            }
+        }
+
+        private void HandleDisplayChange()
+        {
+            var removedIds = _monitorManager.RefreshMonitors();
+            CleanupStaleSettings(removedIds);
+            RefreshAllMonitorUI();
+        }
+
+        private void CleanupStaleSettings(HashSet<string> removedDeviceIds)
+        {
+            if (removedDeviceIds == null || removedDeviceIds.Count == 0)
+                return;
+
+            foreach (var id in removedDeviceIds)
+            {
+                _settings.BrightnessPerDisplay.Remove(id);
+                _settings.GammaPerDisplay.Remove(id);
+            }
+
+            if (_settings.ScheduleSegments != null)
+            {
+                foreach (var segment in _settings.ScheduleSegments)
+                {
+                    if (segment.MonitorPresets != null)
+                    {
+                        foreach (var id in removedDeviceIds)
+                        {
+                            segment.MonitorPresets.Remove(id);
+                        }
+                        if (segment.MonitorPresets.Count == 0)
+                            segment.MonitorPresets = null;
+                    }
+                }
+            }
+
+            if (_settings.CustomGammaPresets != null)
+            {
+                foreach (var preset in _settings.CustomGammaPresets)
+                {
+                    if (preset.PerDisplaySnapshot != null)
+                    {
+                        foreach (var id in removedDeviceIds)
+                        {
+                            preset.PerDisplaySnapshot.Remove(id);
+                        }
+                        if (preset.PerDisplaySnapshot.Count == 0)
+                            preset.PerDisplaySnapshot = null;
+                    }
+                }
+            }
+
+            SettingsStore.SaveSettings(_settings);
+        }
+
+        private void RefreshAllMonitorUI()
+        {
+            UpdateBrightnessUI();
+            UpdateGammaUI();
+            ApplyGammaToSystem();
+        }
+
         private void ExitApplication()
         {
+            SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+            ThemeManager.StopWatchingSystemTheme();
             _scheduleTimer?.Stop();
             _gammaController?.ResetGamma(Screen.AllScreens);
             _gammaController?.Dispose();
             _monitorManager?.Dispose();
             _trayIcon?.Dispose();
+            _cachedBackground?.Dispose();
             _backgroundImage?.Dispose();
             Application.Exit();
         }
@@ -1845,43 +2049,64 @@ namespace LumiShift
         protected override void OnPaintBackground(PaintEventArgs e)
         {
             base.OnPaintBackground(e);
-            DrawBackgroundImage(e.Graphics, ClientRectangle);
+            DrawBackgroundImage(e.Graphics, ClientRectangle, Point.Empty);
         }
 
-        private void DrawBackgroundImage(Graphics g, Rectangle bounds)
+        private void RebuildBackgroundCache()
         {
-            if (_backgroundImage == null || !_settings.UseBackgroundImage) return;
+            _cachedBackground?.Dispose();
+            _cachedBackground = null;
 
-            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            if (_backgroundImage == null || !_settings.UseBackgroundImage)
+            {
+                StaticCachedBackground = null;
+                return;
+            }
+
+            int formW = ClientSize.Width;
+            int formH = ClientSize.Height;
+            if (formW <= 0 || formH <= 0) return;
 
             float opacity = _settings.BackgroundImageOpacity / 100f;
 
-            using (var attributes = new System.Drawing.Imaging.ImageAttributes())
+            _cachedBackground = new Bitmap(formW, formH);
+            using (var g = Graphics.FromImage(_cachedBackground))
             {
-                var matrix = new System.Drawing.Imaging.ColorMatrix(new float[][]
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+
+                using (var attributes = new System.Drawing.Imaging.ImageAttributes())
                 {
-                    new float[] { 1, 0, 0, 0, 0 },
-                    new float[] { 0, 1, 0, 0, 0 },
-                    new float[] { 0, 0, 1, 0, 0 },
-                    new float[] { 0, 0, 0, opacity, 0 },
-                    new float[] { 0, 0, 0, 0, 1 }
-                });
-                attributes.SetColorMatrix(matrix, System.Drawing.Imaging.ColorMatrixFlag.Default, System.Drawing.Imaging.ColorAdjustType.Bitmap);
+                    var matrix = new System.Drawing.Imaging.ColorMatrix(new float[][]
+                    {
+                        new float[] { 1, 0, 0, 0, 0 },
+                        new float[] { 0, 1, 0, 0, 0 },
+                        new float[] { 0, 0, 1, 0, 0 },
+                        new float[] { 0, 0, 0, opacity, 0 },
+                        new float[] { 0, 0, 0, 0, 1 }
+                    });
+                    attributes.SetColorMatrix(matrix, System.Drawing.Imaging.ColorMatrixFlag.Default, System.Drawing.Imaging.ColorAdjustType.Bitmap);
 
-                int imgW = _backgroundImage.Width;
-                int imgH = _backgroundImage.Height;
-                int areaW = bounds.Width;
-                int areaH = bounds.Height;
+                    int imgW = _backgroundImage.Width;
+                    int imgH = _backgroundImage.Height;
 
-                float scale = Math.Max((float)areaW / imgW, (float)areaH / imgH);
-                int drawW = (int)(imgW * scale);
-                int drawH = (int)(imgH * scale);
-                int x = bounds.X + (areaW - drawW) / 2;
-                int y = bounds.Y + (areaH - drawH) / 2;
+                    float scale = Math.Max((float)formW / imgW, (float)formH / imgH);
+                    int drawW = (int)(imgW * scale);
+                    int drawH = (int)(imgH * scale);
+                    int x = (formW - drawW) / 2;
+                    int y = (formH - drawH) / 2;
 
-                g.DrawImage(_backgroundImage, new Rectangle(x, y, drawW, drawH),
-                    0, 0, imgW, imgH, GraphicsUnit.Pixel, attributes);
+                    g.DrawImage(_backgroundImage, new Rectangle(x, y, drawW, drawH),
+                        0, 0, imgW, imgH, GraphicsUnit.Pixel, attributes);
+                }
             }
+
+            StaticCachedBackground = _cachedBackground;
+        }
+
+        private void DrawBackgroundImage(Graphics g, Rectangle bounds, Point offset)
+        {
+            if (_cachedBackground == null) return;
+            g.DrawImage(_cachedBackground, -offset.X, -offset.Y);
         }
 
         private void SubscribeBackgroundPaintEvents()
@@ -1895,18 +2120,34 @@ namespace LumiShift
             _tabControl.Paint += OnTabControlPaint;
         }
 
+        private void OnFormClientSizeChanged(object sender, EventArgs e)
+        {
+            SyncBackgroundStaticFields();
+            RebuildBackgroundCache();
+            InvalidateBackgroundDisplay();
+        }
+
         private void OnTabPagePaint(object sender, PaintEventArgs e)
         {
-            DrawBackgroundImage(e.Graphics, ((Control)sender).ClientRectangle);
+            var ctrl = (Control)sender;
+            var offset = Point.Subtract(ctrl.PointToScreen(Point.Empty), (Size)PointToScreen(Point.Empty));
+            DrawBackgroundImage(e.Graphics, ctrl.ClientRectangle, offset);
         }
 
         private void OnTabControlPaint(object sender, PaintEventArgs e)
         {
-            DrawBackgroundImage(e.Graphics, ((Control)sender).ClientRectangle);
+            var ctrl = (Control)sender;
+            var offset = Point.Subtract(ctrl.PointToScreen(Point.Empty), (Size)PointToScreen(Point.Empty));
+            int tabHeaderH = ctrl.DisplayRectangle.Y;
+            if (tabHeaderH > 0 && e.ClipRectangle.Y < tabHeaderH)
+            {
+                DrawBackgroundImage(e.Graphics, new Rectangle(0, 0, ctrl.Width, tabHeaderH), offset);
+            }
         }
 
         private void InvalidateBackgroundDisplay()
         {
+            Invalidate();
             foreach (TabPage page in _tabControl.TabPages)
             {
                 page.Invalidate();
@@ -1919,40 +2160,13 @@ namespace LumiShift
             StaticBackgroundImage = _backgroundImage;
             StaticBackgroundOpacity = _settings.BackgroundImageOpacity / 100f;
             StaticUseBackgroundImage = _settings.UseBackgroundImage;
+            StaticFormClientSize = ClientSize;
         }
 
-        internal static void DrawBackgroundOnGraphics(Graphics g, Rectangle bounds)
+        internal static void DrawBackgroundOnGraphics(Graphics g, Rectangle bounds, Point offset)
         {
-            if (!StaticUseBackgroundImage || StaticBackgroundImage == null) return;
-
-            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-
-            using (var attributes = new System.Drawing.Imaging.ImageAttributes())
-            {
-                var matrix = new System.Drawing.Imaging.ColorMatrix(new float[][]
-                {
-                    new float[] { 1, 0, 0, 0, 0 },
-                    new float[] { 0, 1, 0, 0, 0 },
-                    new float[] { 0, 0, 1, 0, 0 },
-                    new float[] { 0, 0, 0, StaticBackgroundOpacity, 0 },
-                    new float[] { 0, 0, 0, 0, 1 }
-                });
-                attributes.SetColorMatrix(matrix, System.Drawing.Imaging.ColorMatrixFlag.Default, System.Drawing.Imaging.ColorAdjustType.Bitmap);
-
-                int imgW = StaticBackgroundImage.Width;
-                int imgH = StaticBackgroundImage.Height;
-                int areaW = bounds.Width;
-                int areaH = bounds.Height;
-
-                float scale = Math.Max((float)areaW / imgW, (float)areaH / imgH);
-                int drawW = (int)(imgW * scale);
-                int drawH = (int)(imgH * scale);
-                int x = bounds.X + (areaW - drawW) / 2;
-                int y = bounds.Y + (areaH - drawH) / 2;
-
-                g.DrawImage(StaticBackgroundImage, new Rectangle(x, y, drawW, drawH),
-                    0, 0, imgW, imgH, GraphicsUnit.Pixel, attributes);
-            }
+            if (StaticCachedBackground == null) return;
+            g.DrawImage(StaticCachedBackground, -offset.X, -offset.Y);
         }
 
         protected override void OnLoad(EventArgs e)
