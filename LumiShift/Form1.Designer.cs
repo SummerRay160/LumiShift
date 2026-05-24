@@ -381,7 +381,7 @@ namespace LumiShift
                 Location = new Point(0, 0),
                 Width = 400,
                 Height = 410,
-                AutoScroll = true,
+                AutoScroll = false,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 BackColor = Color.Transparent
