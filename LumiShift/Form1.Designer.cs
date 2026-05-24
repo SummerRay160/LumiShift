@@ -88,6 +88,11 @@ namespace LumiShift
 
         internal static void ApplyLabelTheme(Label lbl, char role)
         {
+            if (role == 'b')
+                lbl.BackColor = Colors.Border;
+            else
+                lbl.BackColor = Color.Transparent;
+
             if (role == 'p')
                 lbl.ForeColor = Colors.TextPrimary;
             else if (role == 's')
@@ -96,8 +101,6 @@ namespace LumiShift
                 lbl.ForeColor = Colors.Green;
             else if (role == 'r')
                 lbl.ForeColor = Colors.Red;
-            else if (role == 'b')
-                lbl.BackColor = Colors.Border;
             else
                 lbl.ForeColor = Colors.TextPrimary;
         }
@@ -176,7 +179,8 @@ namespace LumiShift
                 Location = new Point(Spacing.LG, gy),
                 AutoSize = true,
                 Font = Typography.Caption,
-                ForeColor = Colors.TextSecondary
+                ForeColor = Colors.TextSecondary,
+                BackColor = Color.Transparent
             };
 
             gy += 18;
@@ -439,7 +443,8 @@ namespace LumiShift
                 Location = new Point(Spacing.LG, sy),
                 AutoSize = true,
                 Font = Typography.Caption,
-                ForeColor = Colors.TextSecondary
+                ForeColor = Colors.TextSecondary,
+                BackColor = Color.Transparent
             };
 
             sy += 20;
@@ -632,6 +637,7 @@ namespace LumiShift
                 Location = new Point(Spacing.LG + versionLabel.PreferredWidth + 8, sy),
                 AutoSize = true,
                 Font = Typography.Caption,
+                BackColor = Color.Transparent,
                 LinkColor = Colors.TextSecondary,
                 ActiveLinkColor = Colors.Brand,
                 VisitedLinkColor = Colors.TextSecondary
@@ -713,7 +719,9 @@ namespace LumiShift
 
             int presetButtonWidth = 100;
             int presetGap = 10;
-            int presetStartX = Spacing.LG;
+            int presetTotalWidth = presetButtonWidth * 3 + presetGap * 2;
+            int presetContainerWidth = 340;
+            int presetStartX = Spacing.LG + (presetContainerWidth - presetTotalWidth) / 2;
 
             _eyeProtectionPreset1Button = CreatePresetButton(presetStartX, ey, presetButtonWidth, presetColors[0]);
             _eyeProtectionPreset2Button = CreatePresetButton(presetStartX + presetButtonWidth + presetGap, ey, presetButtonWidth, presetColors[1]);

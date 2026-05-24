@@ -83,17 +83,15 @@ namespace LumiShift.Controls
             return (int)(_minimum + ratio * (_maximum - _minimum));
         }
 
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            base.OnPaintBackground(e);
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-
-            using (var bgBrush = new SolidBrush(Colors.Background))
-            {
-                g.FillRectangle(bgBrush, ClientRectangle);
-            }
-
-            Form1.DrawBackgroundOnGraphics(g, ClientRectangle);
 
             float trackY = Height / 2f - 2f;
             float trackH = 4f;
