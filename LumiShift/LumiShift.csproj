@@ -12,9 +12,9 @@
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
-    <ApplicationVersion>1.1.1</ApplicationVersion>
+    <ApplicationVersion>1.1.2</ApplicationVersion>
     <ApplicationRevision>0</ApplicationRevision>
-    <Version>1.1.1</Version>
+    <Version>1.1.2</Version>
     <Company>LumiShift</Company>
     <Description>屏幕亮度与Gamma校正工具</Description>
     <Copyright>Copyright © 2026</Copyright>
