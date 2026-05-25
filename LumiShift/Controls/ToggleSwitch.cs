@@ -67,6 +67,9 @@ namespace LumiShift.Controls
             base.OnPaintBackground(e);
         }
 
+        private static readonly Color ThumbEdgeColor = Color.FromArgb(30, 0, 0, 0);
+        private static readonly Color GlowColorStatic = Color.FromArgb(40, 0, 0, 0);
+
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
@@ -88,33 +91,26 @@ namespace LumiShift.Controls
             Color trackColor = _checked ? Colors.Green : Colors.BorderLight;
 
             using (var trackPath = CreateRoundRect(trackX, trackY, trackW, trackH, trackH / 2f))
-            using (var trackBrush = new SolidBrush(trackColor))
             {
-                g.FillPath(trackBrush, trackPath);
+                g.FillPath(GdiCache.GetBrush(trackColor), trackPath);
             }
 
             if (_checked)
             {
                 using (var glowPath = CreateRoundRect(trackX, trackY, trackW, trackH, trackH / 2f))
-                using (var glowBrush = new SolidBrush(Color.FromArgb(40, Colors.Green)))
                 {
+                    g.FillPath(GdiCache.GetBrush(Color.FromArgb(40, Colors.Green)), glowPath);
                     var big = new RectangleF(trackX - 2, trackY - 2, trackW + 4, trackH + 4);
                     using (var gp = CreateRoundRect(big.X, big.Y, big.Width, big.Height, big.Height / 2f))
                     {
-                        g.FillPath(glowBrush, gp);
+                        g.FillPath(GdiCache.GetBrush(Color.FromArgb(40, Colors.Green)), gp);
                     }
                 }
             }
 
-            using (var thumbBrush = new SolidBrush(_hovered ? Colors.BrandHover : Color.White))
-            {
-                g.FillEllipse(thumbBrush, thumbX, thumbY, thumbSize, thumbSize);
-            }
+            g.FillEllipse(GdiCache.GetBrush(_hovered ? Colors.BrandHover : Color.White), thumbX, thumbY, thumbSize, thumbSize);
 
-            using (var edgePen = new Pen(Color.FromArgb(30, 0, 0, 0), 1f))
-            {
-                g.DrawEllipse(edgePen, thumbX, thumbY, thumbSize, thumbSize);
-            }
+            g.DrawEllipse(GdiCache.GetPen(ThumbEdgeColor), thumbX, thumbY, thumbSize, thumbSize);
         }
 
         protected override void OnMouseClick(MouseEventArgs e)
@@ -136,6 +132,16 @@ namespace LumiShift.Controls
             _hovered = false;
             Invalidate();
             base.OnMouseLeave(e);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _animTimer?.Dispose();
+                _animTimer = null;
+            }
+            base.Dispose(disposing);
         }
 
         private static GraphicsPath CreateRoundRect(float x, float y, float w, float h, float r)

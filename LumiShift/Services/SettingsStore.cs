@@ -12,7 +12,10 @@ namespace LumiShift.Services
                 Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location),
                 "settings.json");
 
-        private static readonly JavaScriptSerializer Serializer = new JavaScriptSerializer();
+        private static readonly JavaScriptSerializer SerializerInstance = new JavaScriptSerializer();
+        private static readonly object SerializerLock = new object();
+
+        public static JavaScriptSerializer Serializer => SerializerInstance;
 
         public static UserSettings LoadSettings()
         {
@@ -21,7 +24,11 @@ namespace LumiShift.Services
                 if (File.Exists(SettingsFilePath))
                 {
                     string json = File.ReadAllText(SettingsFilePath);
-                    var settings = Serializer.Deserialize<UserSettings>(json) ?? new UserSettings();
+                    UserSettings settings;
+                    lock (SerializerLock)
+                    {
+                        settings = SerializerInstance.Deserialize<UserSettings>(json) ?? new UserSettings();
+                    }
                     MigrateSettings(settings);
                     return settings;
                 }
@@ -38,7 +45,11 @@ namespace LumiShift.Services
         {
             try
             {
-                string json = Serializer.Serialize(settings);
+                string json;
+                lock (SerializerLock)
+                {
+                    json = SerializerInstance.Serialize(settings);
+                }
                 File.WriteAllText(SettingsFilePath, json);
             }
             catch

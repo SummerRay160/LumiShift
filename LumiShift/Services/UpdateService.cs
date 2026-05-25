@@ -6,7 +6,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using System.Web.Script.Serialization;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace LumiShift.Services
@@ -15,8 +15,6 @@ namespace LumiShift.Services
     {
         private const string RepoApiUrl = "https://api.github.com/repos/SummerRay160/LumiShift/releases/latest";
         private const string RepoReleaseUrl = "https://github.com/SummerRay160/LumiShift/releases/latest";
-
-        private static readonly JavaScriptSerializer Serializer = new JavaScriptSerializer();
 
         public static Version CurrentVersion
         {
@@ -32,66 +30,103 @@ namespace LumiShift.Services
             var bw = new System.ComponentModel.BackgroundWorker();
             bw.DoWork += (s, e) =>
             {
-                e.Result = FetchLatestRelease();
+                e.Result = FetchLatestReleaseAsync().GetAwaiter().GetResult();
             };
             bw.RunWorkerCompleted += (s, e) =>
             {
-                if (e.Error != null)
+                try
                 {
-                    if (!silent)
-                        MessageBox.Show($"检查更新失败: {e.Error.Message}", "更新检查",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
+                    if (e.Error != null)
+                    {
+                        if (!silent)
+                            MessageBox.Show($"检查更新失败: {e.Error.Message}", "更新检查",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
 
-                var release = e.Result as GitHubRelease;
-                if (release == null)
+                    var result = e.Result as FetchResult;
+                    if (result == null || result.Release == null)
+                    {
+                        if (!silent)
+                        {
+                            if (result?.IsApiError == true)
+                                MessageBox.Show($"无法获取更新信息，请检查网络连接。\n{result.ErrorMessage}", "更新检查",
+                                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            else
+                                MessageBox.Show("当前已是最新版本。", "更新检查",
+                                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                        return;
+                    }
+
+                    var release = result.Release;
+                    var latestVersion = ParseVersion(release.tag_name);
+                    if (latestVersion == null)
+                    {
+                        if (!silent)
+                            MessageBox.Show("无法解析远程版本号。", "更新检查",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+
+                    if (latestVersion <= CurrentVersion)
+                    {
+                        if (!silent)
+                            MessageBox.Show($"当前已是最新版本 ({CurrentVersion})。", "更新检查",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
+
+                    var settings = SettingsStore.LoadSettings();
+                    if (silent && settings.SkipVersion == latestVersion.ToString())
+                        return;
+
+                    ShowUpdateDialog(release, latestVersion);
+                }
+                finally
                 {
-                    if (!silent)
-                        MessageBox.Show("当前已是最新版本。", "更新检查",
-                            MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
+                    bw.Dispose();
                 }
-
-                var latestVersion = ParseVersion(release.tag_name);
-                if (latestVersion == null)
-                {
-                    if (!silent)
-                        MessageBox.Show("无法解析远程版本号。", "更新检查",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
-
-                if (latestVersion <= CurrentVersion)
-                {
-                    if (!silent)
-                        MessageBox.Show($"当前已是最新版本 ({CurrentVersion})。", "更新检查",
-                            MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
-                }
-
-                var settings = SettingsStore.LoadSettings();
-                if (silent && settings.SkipVersion == latestVersion.ToString())
-                    return;
-
-                ShowUpdateDialog(release, latestVersion);
             };
             bw.RunWorkerAsync();
         }
 
-        private static GitHubRelease FetchLatestRelease()
+        private static async Task<FetchResult> FetchLatestReleaseAsync()
         {
             using (var client = new HttpClient())
             {
                 client.DefaultRequestHeaders.Add("User-Agent", "LumiShift-UpdateCheck");
                 client.Timeout = TimeSpan.FromSeconds(10);
 
-                var response = client.GetAsync(RepoApiUrl).Result;
-                if (!response.IsSuccessStatusCode)
-                    return null;
+                HttpResponseMessage response;
+                try
+                {
+                    response = await client.GetAsync(RepoApiUrl);
+                }
+                catch (Exception ex)
+                {
+                    return new FetchResult { IsApiError = true, ErrorMessage = ex.Message };
+                }
 
-                var json = response.Content.ReadAsStringAsync().Result;
-                return Serializer.Deserialize<GitHubRelease>(json);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var reason = response.ReasonPhrase ?? response.StatusCode.ToString();
+                    return new FetchResult
+                    {
+                        IsApiError = true,
+                        ErrorMessage = $"服务器返回错误: {(int)response.StatusCode} {reason}"
+                    };
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                var release = SettingsStore.Serializer.Deserialize<GitHubRelease>(json);
+                if (release == null)
+                    return new FetchResult { IsApiError = true, ErrorMessage = "无法解析服务器响应" };
+
+                if (release.draft || release.prerelease)
+                    return new FetchResult { Release = null };
+
+                return new FetchResult { Release = release };
             }
         }
 
@@ -134,6 +169,13 @@ namespace LumiShift.Services
             }
         }
 
+        private class FetchResult
+        {
+            public GitHubRelease Release { get; set; }
+            public bool IsApiError { get; set; }
+            public string ErrorMessage { get; set; }
+        }
+
         private class GitHubRelease
         {
             public string tag_name { get; set; }
@@ -166,6 +208,20 @@ namespace LumiShift.Services
         public UpdateDialog()
         {
             InitializeComponents();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _titleLabel?.Dispose();
+                _versionLabel?.Dispose();
+                _changelogBox?.Dispose();
+                _downloadButton?.Dispose();
+                _skipButton?.Dispose();
+                _laterButton?.Dispose();
+            }
+            base.Dispose(disposing);
         }
 
         private void InitializeComponents()

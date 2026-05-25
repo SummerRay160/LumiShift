@@ -3,7 +3,9 @@ using System.Drawing;
 using System.Reflection;
 using System.Windows.Forms;
 using LumiShift.Controls;
+using LumiShift.Infrastructure;
 using LumiShift.Resources;
+using Microsoft.Win32;
 
 namespace LumiShift
 {
@@ -18,8 +20,63 @@ namespace LumiShift
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing && (components != null))
-                components.Dispose();
+            if (disposing)
+            {
+                ThemeManager.ThemeChanged -= OnThemeChanged;
+
+                if (_bgService != null)
+                {
+                    _bgService.GammaController.StatusChanged -= OnGammaStatusChanged;
+                    _bgService.MonitorsChanged -= OnMonitorsChanged;
+                    _bgService.ScheduleStateChanged -= OnScheduleStateChanged;
+                }
+
+                if (_brightnessPanel != null)
+                {
+                    foreach (Control c in _brightnessPanel.Controls)
+                        c.Dispose();
+                    _brightnessPanel.Controls.Clear();
+                }
+
+                _brightnessRows?.Clear();
+
+                if (_tabControl != null)
+                {
+                    foreach (TabPage page in _tabControl.TabPages)
+                    {
+                        foreach (Control c in page.Controls)
+                        {
+                            if (c is Panel panel)
+                            {
+                                foreach (Control child in panel.Controls)
+                                    child.Dispose();
+                                panel.Controls.Clear();
+                            }
+                            c.Dispose();
+                        }
+                        page.Controls.Clear();
+
+                        var pageBg = page.BackgroundImage;
+                        page.BackgroundImage = null;
+                        pageBg?.Dispose();
+                    }
+                }
+
+                BackgroundImage = null;
+                _cachedBackground?.Dispose();
+                _cachedBackground = null;
+                _backgroundImage?.Dispose();
+                _backgroundImage = null;
+
+                StaticCachedBackground?.Dispose();
+                StaticCachedBackground = null;
+                StaticBackgroundImage?.Dispose();
+                StaticBackgroundImage = null;
+                StaticUseBackgroundImage = false;
+
+                if (components != null)
+                    components.Dispose();
+            }
             base.Dispose(disposing);
         }
 
@@ -53,16 +110,6 @@ namespace LumiShift
             Icon = LoadAppIcon();
 
             ResumeLayout(false);
-
-            _trayIcon = new NotifyIcon(components)
-            {
-                Text = "LumiShift",
-                Icon = LoadAppIcon(),
-                Visible = false
-            };
-            _trayMenu = new ContextMenuStrip(components);
-            _trayIcon.ContextMenuStrip = _trayMenu;
-            _trayIcon.DoubleClick += (s, e) => ShowMainWindow();
         }
 
         private void RefreshTabTheme()

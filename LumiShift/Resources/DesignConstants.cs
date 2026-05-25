@@ -112,6 +112,7 @@ namespace LumiShift.Resources
             else
                 useDark = IsSystemDarkMode();
             _active = useDark ? GetDarkTheme() : GetLightTheme();
+            Controls.GdiCache.Clear();
         }
 
         public static ThemeColors GetDarkTheme()
