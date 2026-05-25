@@ -6,20 +6,61 @@ using System.Windows.Forms;
 
 namespace LumiShift.Infrastructure
 {
-    public class GammaParameters
+    public readonly struct GammaParameters
     {
-        public double RScale { get; set; } = 1.0;
-        public double GScale { get; set; } = 1.0;
-        public double BScale { get; set; } = 1.0;
-        public double Gamma { get; set; } = 1.0;
-        public int MasterBrightness { get; set; } = 100;
+        public double RScale { get; }
+        public double GScale { get; }
+        public double BScale { get; }
+        public double Gamma { get; }
+        public int MasterBrightness { get; }
+
+        public GammaParameters(double rScale, double gScale, double bScale, double gamma, int masterBrightness)
+        {
+            RScale = rScale;
+            GScale = gScale;
+            BScale = bScale;
+            Gamma = gamma;
+            MasterBrightness = masterBrightness;
+        }
     }
 
     public class GammaController : IDisposable
     {
         private bool _disposed;
 
+        private ushort[] _cachedRampRed = new ushort[256];
+        private ushort[] _cachedRampGreen = new ushort[256];
+        private ushort[] _cachedRampBlue = new ushort[256];
+        private double _cachedGamma = -1;
+        private double _cachedRScale = -1;
+        private double _cachedGScale = -1;
+        private double _cachedBScale = -1;
+        private double _cachedMaster = -1;
+
+        private static readonly RAMP DefaultRamp;
+        private readonly object _rampLock = new object();
+
         public event EventHandler<string> StatusChanged;
+
+        static GammaController()
+        {
+            var ramp = new RAMP
+            {
+                Red = new ushort[256],
+                Green = new ushort[256],
+                Blue = new ushort[256]
+            };
+            for (int i = 0; i < 256; i++)
+            {
+                double x = i / 255.0;
+                double value = Math.Pow(x, 1.0);
+                ushort val = (ushort)Math.Max(0, Math.Min(65535, Math.Round(value * 65535.0)));
+                ramp.Red[i] = val;
+                ramp.Green[i] = val;
+                ramp.Blue[i] = val;
+            }
+            DefaultRamp = ramp;
+        }
 
         public GammaController()
         {
@@ -80,14 +121,15 @@ namespace LumiShift.Infrastructure
 
         public bool ApplyGamma(IEnumerable<Screen> screens, GammaParameters parameters)
         {
-            if (parameters == null)
-                return ResetGamma(screens);
-
             try
             {
                 double master = 0.15 + parameters.MasterBrightness / 100.0 * 0.85;
 
-                var ramp = GenerateRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
+                RAMP ramp;
+                lock (_rampLock)
+                {
+                    ramp = GetOrBuildRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
+                }
 
                 bool allSucceeded = true;
 
@@ -138,7 +180,7 @@ namespace LumiShift.Infrastructure
         {
             try
             {
-                var ramp = GenerateRamp(1.0, 1.0, 1.0, 1.0, 1.0);
+                var ramp = DefaultRamp;
                 bool allSucceeded = true;
 
                 foreach (var screen in screens)
@@ -178,7 +220,7 @@ namespace LumiShift.Infrastructure
             try
             {
                 bool allSucceeded = true;
-                var defaultRamp = GenerateRamp(1.0, 1.0, 1.0, 1.0, 1.0);
+                var defaultRamp = DefaultRamp;
 
                 foreach (var screen in Screen.AllScreens)
                 {
@@ -194,7 +236,11 @@ namespace LumiShift.Infrastructure
                         if (perScreenParams.TryGetValue(screen.DeviceName, out var parameters))
                         {
                             double master = 0.15 + parameters.MasterBrightness / 100.0 * 0.85;
-                            var ramp = GenerateRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
+                            RAMP ramp;
+                            lock (_rampLock)
+                            {
+                                ramp = GetOrBuildRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
+                            }
                             if (!SetDeviceGammaRamp(hdc, ref ramp))
                                 allSucceeded = false;
                         }
@@ -226,15 +272,38 @@ namespace LumiShift.Infrastructure
             }
         }
 
-        private static RAMP GenerateRamp(double gamma, double rScale, double gScale, double bScale, double master)
+        private RAMP GetOrBuildRamp(double gamma, double rScale, double gScale, double bScale, double master)
         {
-            var ramp = new RAMP
+            if (Math.Abs(_cachedGamma - gamma) > 0.001 ||
+                Math.Abs(_cachedRScale - rScale) > 0.001 ||
+                Math.Abs(_cachedGScale - gScale) > 0.001 ||
+                Math.Abs(_cachedBScale - bScale) > 0.001 ||
+                Math.Abs(_cachedMaster - master) > 0.001)
             {
-                Red = new ushort[256],
-                Green = new ushort[256],
-                Blue = new ushort[256]
-            };
+                if (_cachedRampRed == null)
+                {
+                    _cachedRampRed = new ushort[256];
+                    _cachedRampGreen = new ushort[256];
+                    _cachedRampBlue = new ushort[256];
+                }
+                BuildRamp(gamma, rScale, gScale, bScale, master);
+                _cachedGamma = gamma;
+                _cachedRScale = rScale;
+                _cachedGScale = gScale;
+                _cachedBScale = bScale;
+                _cachedMaster = master;
+            }
 
+            return new RAMP
+            {
+                Red = _cachedRampRed ?? new ushort[256],
+                Green = _cachedRampGreen ?? new ushort[256],
+                Blue = _cachedRampBlue ?? new ushort[256]
+            };
+        }
+
+        private void BuildRamp(double gamma, double rScale, double gScale, double bScale, double master)
+        {
             for (int i = 0; i < 256; i++)
             {
                 double x = i / 255.0;
@@ -244,12 +313,10 @@ namespace LumiShift.Infrastructure
                 double gVal = value * 65535.0 * gScale * master;
                 double bVal = value * 65535.0 * bScale * master;
 
-                ramp.Red[i] = (ushort)Math.Max(0, Math.Min(65535, Math.Round(rVal)));
-                ramp.Green[i] = (ushort)Math.Max(0, Math.Min(65535, Math.Round(gVal)));
-                ramp.Blue[i] = (ushort)Math.Max(0, Math.Min(65535, Math.Round(bVal)));
+                _cachedRampRed[i] = (ushort)Math.Max(0, Math.Min(65535, Math.Round(rVal)));
+                _cachedRampGreen[i] = (ushort)Math.Max(0, Math.Min(65535, Math.Round(gVal)));
+                _cachedRampBlue[i] = (ushort)Math.Max(0, Math.Min(65535, Math.Round(bVal)));
             }
-
-            return ramp;
         }
 
         public void Dispose()
@@ -257,6 +324,22 @@ namespace LumiShift.Infrastructure
             if (!_disposed)
             {
                 _disposed = true;
+                TrimCache();
+            }
+        }
+
+        public void TrimCache()
+        {
+            lock (_rampLock)
+            {
+                _cachedRampRed = null;
+                _cachedRampGreen = null;
+                _cachedRampBlue = null;
+                _cachedGamma = -1;
+                _cachedRScale = -1;
+                _cachedGScale = -1;
+                _cachedBScale = -1;
+                _cachedMaster = -1;
             }
         }
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
 using LumiShift.Infrastructure;
@@ -10,6 +11,20 @@ namespace LumiShift
     {
         private static readonly Mutex _mutex =
             new Mutex(true, "LumiShift_SingleInstance_Mutex");
+
+        internal static readonly Icon AppIcon = LoadAppIcon();
+
+        private static Icon LoadAppIcon()
+        {
+            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            var resourceName = "LumiShift.app.ico";
+            using (var stream = assembly.GetManifestResourceStream(resourceName))
+            {
+                if (stream != null)
+                    return new Icon(stream);
+            }
+            return System.Drawing.SystemIcons.Application;
+        }
 
         [STAThread]
         static void Main(string[] args)
@@ -44,7 +59,15 @@ namespace LumiShift
                 Services.SettingsStore.SaveSettings(settings);
             }
 
-            Application.Run(new Form1());
+            var context = new ApplicationContext();
+            var bgService = new BackgroundService();
+
+            if (!bgService.Settings.StartMinimized)
+                bgService.ShowMainWindow();
+            else
+                bgService.ScheduleLightweightModeEntry();
+
+            Application.Run(context);
         }
     }
 }

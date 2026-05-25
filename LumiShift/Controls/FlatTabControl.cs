@@ -21,6 +21,12 @@ namespace LumiShift.Controls
             Appearance = TabAppearance.Normal;
         }
 
+        private static readonly StringFormat CenteredStringFormat = new StringFormat
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center
+        };
+
         protected override void OnDrawItem(DrawItemEventArgs e)
         {
             if (e.Index < 0 || e.Index >= TabCount) return;
@@ -31,38 +37,30 @@ namespace LumiShift.Controls
             var tabBounds = e.Bounds;
             bool selected = SelectedIndex == e.Index;
 
-            using (var bgBrush = new SolidBrush(selected ? Colors.Background : Colors.TabInactive))
-            {
-                g.FillRectangle(bgBrush, tabBounds);
-            }
+            g.FillRectangle(GdiCache.GetBrush(selected ? Colors.Background : Colors.TabInactive), tabBounds);
 
             if (selected)
             {
-                using (var lineBrush = new SolidBrush(Colors.Brand))
-                {
-                    g.FillRectangle(lineBrush, tabBounds.X + 8, tabBounds.Bottom - 2,
-                        tabBounds.Width - 16, 2);
-                }
+                g.FillRectangle(GdiCache.GetBrush(Colors.Brand), tabBounds.X + 8, tabBounds.Bottom - 2,
+                    tabBounds.Width - 16, 2);
             }
 
             string text = TabPages[e.Index].Text;
-            using (var textBrush = new SolidBrush(selected ? Colors.TextPrimary : Colors.TextSecondary))
-            using (var sf = new StringFormat
-            {
-                Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center
-            })
-            {
-                g.DrawString(text, Font, textBrush, tabBounds, sf);
-            }
+            g.DrawString(text, Font, GdiCache.GetBrush(selected ? Colors.TextPrimary : Colors.TextSecondary), tabBounds, CenteredStringFormat);
 
             if (e.Index == TabCount - 1)
             {
-                using (var borderPen = new Pen(Colors.Border))
-                {
-                    g.DrawLine(borderPen, 0, tabBounds.Bottom, ClientSize.Width, tabBounds.Bottom);
-                }
+                g.DrawLine(GdiCache.GetPen(Colors.Border), 0, tabBounds.Bottom, ClientSize.Width, tabBounds.Bottom);
             }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                CenteredStringFormat?.Dispose();
+            }
+            base.Dispose(disposing);
         }
 
         protected override void OnSelectedIndexChanged(EventArgs e)

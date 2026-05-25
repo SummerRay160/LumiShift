@@ -10,6 +10,7 @@ namespace LumiShift.Infrastructure
         private readonly string _instanceName;
         private readonly string _deviceId;
         private readonly string _displayName;
+        private int _cachedBrightness = -1;
 
         public string DeviceId => _deviceId;
         public string DisplayName => _displayName;
@@ -30,30 +31,41 @@ namespace LumiShift.Infrastructure
                 using (var searcher = new ManagementObjectSearcher("root/WMI",
                     $"SELECT * FROM WmiMonitorBrightness WHERE InstanceName='{_instanceName.Replace("'", "''")}'"))
                 {
-                    foreach (ManagementObject mo in searcher.Get())
+                    using (var collection = searcher.Get())
                     {
-                        byte currentBrightness = (byte)mo["CurrentBrightness"];
-                        return currentBrightness;
+                        foreach (ManagementObject mo in collection)
+                        {
+                            using (mo)
+                            {
+                                byte currentBrightness = (byte)mo["CurrentBrightness"];
+                                _cachedBrightness = currentBrightness;
+                                return currentBrightness;
+                            }
+                        }
                     }
                 }
             }
             catch
             {
             }
-            return 50;
+            return _cachedBrightness >= 0 ? _cachedBrightness : 50;
         }
 
         public void SetBrightness(int percent)
         {
+            percent = Math.Max(0, Math.Min(100, percent));
+            if (_cachedBrightness == percent) return;
+
             try
             {
                 using (var methodClass = new ManagementObject("root/WMI",
                     $"WmiMonitorBrightnessMethods.InstanceName='{_instanceName.Replace("'", "''")}'", null))
                 {
                     var inParams = methodClass.GetMethodParameters("WmiSetBrightness");
-                    inParams["Brightness"] = (byte)Math.Max(0, Math.Min(100, percent));
+                    inParams["Brightness"] = (byte)percent;
                     inParams["Timeout"] = 1;
                     methodClass.InvokeMethod("WmiSetBrightness", inParams, null);
+                    _cachedBrightness = percent;
                 }
             }
             catch
@@ -69,6 +81,7 @@ namespace LumiShift.Infrastructure
         private readonly Screen _screen;
         private IntPtr _physicalMonitor;
         private bool _disposed;
+        private int _cachedBrightness = -1;
 
         public string DeviceId => _deviceId;
         public string DisplayName => _displayName;
@@ -134,21 +147,26 @@ namespace LumiShift.Infrastructure
                 {
                     if (max > min)
                     {
-                        return (int)Math.Round((double)(current - min) / (max - min) * 100);
+                        int brightness = (int)Math.Round((double)(current - min) / (max - min) * 100);
+                        _cachedBrightness = brightness;
+                        return brightness;
                     }
+                    _cachedBrightness = (int)current;
                     return (int)current;
                 }
             }
             catch
             {
             }
-            return 50;
+            return _cachedBrightness >= 0 ? _cachedBrightness : 50;
         }
 
         public void SetBrightness(int percent)
         {
             if (_physicalMonitor == IntPtr.Zero || !IsSupported)
                 return;
+
+            if (_cachedBrightness == percent) return;
 
             try
             {
@@ -157,6 +175,7 @@ namespace LumiShift.Infrastructure
                 {
                     uint newValue = min + (uint)Math.Round((double)percent / 100.0 * (max - min));
                     NativeMethods.SetMonitorBrightness(_physicalMonitor, newValue);
+                    _cachedBrightness = percent;
                 }
             }
             catch
@@ -165,6 +184,17 @@ namespace LumiShift.Infrastructure
         }
 
         public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        ~DdcBrightnessController()
+        {
+            Dispose(false);
+        }
+
+        private void Dispose(bool disposing)
         {
             if (!_disposed && _physicalMonitor != IntPtr.Zero)
             {
