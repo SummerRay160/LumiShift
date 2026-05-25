@@ -29,7 +29,6 @@ namespace LumiShift
         private bool _disposed;
         private bool _exiting;
         private bool _trayMenuNeedsRebuild;
-        private bool _trayMenuBuilt;
 
         internal bool IsExiting => _exiting;
         internal bool ScheduleManualOverride => _scheduleManualOverride;
@@ -126,20 +125,15 @@ namespace LumiShift
 
         private void OnTrayMenuOpening(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (_trayMenuNeedsRebuild)
-            {
-                _trayMenuNeedsRebuild = false;
-                RebuildTrayMenu();
-                GC.Collect(0, GCCollectionMode.Forced);
-            }
         }
 
         private void OnTrayMenuClosed(object sender, ToolStripDropDownClosedEventArgs e)
         {
-            GC.Collect(0, GCCollectionMode.Forced);
-            GC.WaitForPendingFinalizers();
-            GC.Collect(0, GCCollectionMode.Forced);
-            GcHelper.TrimWorkingSet();
+            if (_trayMenuNeedsRebuild)
+            {
+                _trayMenuNeedsRebuild = false;
+                RebuildTrayMenu();
+            }
         }
 
         internal void UpdateTrayMenu()
@@ -151,45 +145,28 @@ namespace LumiShift
         {
             if (_trayMenu == null) return;
 
-            if (!_trayMenuBuilt)
+            for (int i = _trayMenu.Items.Count - 1; i >= 0; i--)
             {
-                _trayMenuBuilt = true;
-                BuildTrayMenuFull();
-                return;
+                var item = _trayMenu.Items[i];
+                _trayMenu.Items.RemoveAt(i);
+                RecursiveDispose(item);
             }
 
-            var dynamicCount = 0;
-            for (int i = 0; i < _trayMenu.Items.Count; i++)
+            BuildTrayMenuFull();
+        }
+
+        private static void RecursiveDispose(ToolStripItem item)
+        {
+            if (item is ToolStripMenuItem menuItem)
             {
-                if (_trayMenu.Items[i] is ToolStripSeparator)
+                while (menuItem.DropDownItems.Count > 0)
                 {
-                    dynamicCount = i;
-                    break;
+                    var subItem = menuItem.DropDownItems[0];
+                    menuItem.DropDownItems.RemoveAt(0);
+                    RecursiveDispose(subItem);
                 }
             }
-
-            var oldDynamic = new ToolStripItem[dynamicCount];
-            for (int i = 0; i < dynamicCount; i++)
-            {
-                oldDynamic[i] = _trayMenu.Items[0];
-                _trayMenu.Items.RemoveAt(0);
-            }
-            foreach (var item in oldDynamic)
-            {
-                if (item is ToolStripMenuItem menuItem)
-                {
-                    var subItems = new ToolStripItem[menuItem.DropDownItems.Count];
-                    menuItem.DropDownItems.CopyTo(subItems, 0);
-                    foreach (var subItem in subItems)
-                    {
-                        subItem.Dispose();
-                    }
-                    menuItem.DropDownItems.Clear();
-                }
-                item.Dispose();
-            }
-
-            AddDynamicTrayItems();
+            item.Dispose();
         }
 
         private void BuildTrayMenuFull()
@@ -210,8 +187,6 @@ namespace LumiShift
             _trayMenu.Items.Add(new ToolStripSeparator());
             var exitItem = new ToolStripMenuItem("退出", null, (s, ev) => ExitApplication());
             _trayMenu.Items.Add(exitItem);
-
-            _trayIcon.ContextMenuStrip = _trayMenu;
         }
 
         private void AddDynamicTrayItems()
@@ -310,7 +285,6 @@ namespace LumiShift
                 _trayMenu.Items.Add(restoreItem);
             }
 
-            _trayIcon.ContextMenuStrip = _trayMenu;
             UpdateTrayText();
         }
 
@@ -1061,7 +1035,9 @@ namespace LumiShift
 
             if (_trayMenu != null)
             {
-                foreach (ToolStripItem item in _trayMenu.Items)
+                var items = new ToolStripItem[_trayMenu.Items.Count];
+                _trayMenu.Items.CopyTo(items, 0);
+                foreach (ToolStripItem item in items)
                     item.Dispose();
                 _trayMenu.Items.Clear();
             }
