@@ -88,6 +88,9 @@ namespace LumiShift.Controls
             base.OnPaintBackground(e);
         }
 
+        private static readonly Color ShadowColor = Color.FromArgb(30, 0, 0, 0);
+        private static readonly Color HighlightColor = Color.FromArgb(50, 255, 255, 255);
+
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
@@ -107,37 +110,29 @@ namespace LumiShift.Controls
                 : Colors.TextDisabled;
 
             using (var trackPath = CreateRoundRect(8f, trackY, Width - 16f, trackH, trackH / 2f))
-            using (var trackBrush = new SolidBrush(inactiveTrack))
             {
-                g.FillPath(trackBrush, trackPath);
+                g.FillPath(GdiCache.GetBrush(inactiveTrack), trackPath);
             }
 
             float filledW = thumbCenter - 8f;
             if (filledW > 0 && isActive)
             {
                 using (var fillPath = CreateRoundRect(8f, trackY, filledW, trackH, trackH / 2f))
-                using (var fillBrush = new SolidBrush(activeTrack))
                 {
-                    g.FillPath(fillBrush, fillPath);
+                    g.FillPath(GdiCache.GetBrush(activeTrack), fillPath);
                 }
             }
 
             float thumbX = thumbCenter - thumbSize / 2f;
             float thumbY = (Height - thumbSize) / 2f;
 
-            using (var shadowBrush = new SolidBrush(Color.FromArgb(30, 0, 0, 0)))
-            {
-                g.FillEllipse(shadowBrush, thumbX + 1, thumbY + 1, thumbSize, thumbSize);
-            }
+            g.FillEllipse(GdiCache.GetBrush(ShadowColor), thumbX + 1, thumbY + 1, thumbSize, thumbSize);
 
-            g.FillEllipse(new SolidBrush(thumbColor), thumbX, thumbY, thumbSize, thumbSize);
+            g.FillEllipse(GdiCache.GetBrush(thumbColor), thumbX, thumbY, thumbSize, thumbSize);
 
             if (_hoveredThumb && isActive)
             {
-                using (var hlBrush = new SolidBrush(Color.FromArgb(50, 255, 255, 255)))
-                {
-                    g.FillEllipse(hlBrush, thumbX + 3, thumbY + 3, thumbSize / 2f, thumbSize / 2f);
-                }
+                g.FillEllipse(GdiCache.GetBrush(HighlightColor), thumbX + 3, thumbY + 3, thumbSize / 2f, thumbSize / 2f);
             }
         }
 
