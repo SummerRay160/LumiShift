@@ -118,35 +118,38 @@ msbuild LumiShift.sln /p:Configuration=Release
 
 ```
 LumiShift/
-├── Controls/                      # 自定义控件
-│   ├── FlatTabControl.cs          # 扁平化选项卡
-│   ├── ModernSlider.cs            # 现代风格滑块
-│   └── ToggleSwitch.cs            # 开关切换控件
-├── Infrastructure/                # 核心基础设施
-│   ├── BrightnessController.cs    # WMI / DDC/CI 亮度控制
-│   ├── GammaController.cs         # Gamma 校正 (SetDeviceGammaRamp)
-│   ├── EyeProtectionService.cs    # 护眼模式 (SetSysColors + 注册表)
-│   ├── NightLightController.cs    # Windows 夜间模式控制
-│   ├── MonitorManager.cs          # 显示器管理 (EDID/热插拔/位置推断)
-│   ├── NativeMethods.cs           # Win32 API 声明
-│   └── IBrightnessController.cs   # 亮度控制接口
+├── BackgroundService.cs            # 后台服务（托盘/调度/定时器）
+├── Controls/                       # 自定义控件
+│   ├── FlatTabControl.cs           # 扁平化选项卡
+│   ├── GdiCache.cs                 # GDI 对象缓存池
+│   ├── ModernSlider.cs             # 现代风格滑块
+│   └── ToggleSwitch.cs             # 开关切换控件
+├── Infrastructure/                 # 核心基础设施
+│   ├── BrightnessController.cs     # WMI / DDC/CI 亮度控制
+│   ├── GammaController.cs          # Gamma 校正 (SetDeviceGammaRamp)
+│   ├── GcHelper.cs                 # GC 回收与工作集修剪
+│   ├── EyeProtectionService.cs     # 护眼模式 (SetSysColors + 注册表)
+│   ├── NightLightController.cs     # Windows 夜间模式控制
+│   ├── MonitorManager.cs           # 显示器管理 (EDID/热插拔/位置推断)
+│   ├── NativeMethods.cs            # Win32 API 声明
+│   ├── WeakEvent.cs                # 弱事件模式实现
+│   └── IBrightnessController.cs    # 亮度控制接口
 ├── Models/
-│   ├── PresetDefinitions.cs       # 预设定义
-│   └── UserSettings.cs            # 用户设置模型
+│   ├── PresetDefinitions.cs        # 预设定义
+│   └── UserSettings.cs             # 用户设置模型
 ├── Properties/
-│   └── AssemblyInfo.cs            # 程序集信息
+│   └── AssemblyInfo.cs             # 程序集信息
 ├── Resources/
-│   └── DesignConstants.cs         # 主题与设计常量
+│   └── DesignConstants.cs          # 主题与设计常量
 ├── Services/
-│   ├── AutoApplyService.cs        # 自动覆盖服务
-│   ├── SettingsStore.cs           # 设置持久化
-│   └── UpdateService.cs           # 自动更新服务
-├── Form1.cs                       # 主窗体逻辑
-├── Form1.Designer.cs              # 主窗体设计器
-├── ScheduleConfigForm.cs          # 定时调度配置窗体
-├── Program.cs                     # 入口点（单实例 + 命令行参数）
-├── App.config                     # 应用配置
-└── LumiShift.csproj               # 项目文件
+│   ├── SettingsStore.cs            # 设置持久化
+│   └── UpdateService.cs            # 自动更新服务
+├── Form1.cs                        # 主窗体逻辑
+├── Form1.Designer.cs               # 主窗体设计器
+├── ScheduleConfigForm.cs           # 定时调度配置窗体
+├── Program.cs                      # 入口点（单实例 + 命令行参数）
+├── App.config                      # 应用配置
+└── LumiShift.csproj                # 项目文件
 ```
 
 ### 🛠️ 技术栈
@@ -293,35 +296,38 @@ msbuild LumiShift.sln /p:Configuration=Release
 
 ```
 LumiShift/
-├── Controls/                      # Custom controls
-│   ├── FlatTabControl.cs          # Flat tab control
-│   ├── ModernSlider.cs            # Modern-style slider
-│   └── ToggleSwitch.cs            # Toggle switch control
-├── Infrastructure/                # Core infrastructure
-│   ├── BrightnessController.cs    # WMI / DDC/CI brightness control
-│   ├── GammaController.cs         # Gamma correction (SetDeviceGammaRamp)
-│   ├── EyeProtectionService.cs    # Eye protection (SetSysColors + Registry)
-│   ├── NightLightController.cs    # Windows Night Light control
-│   ├── MonitorManager.cs          # Monitor management (EDID/hot-plug/position)
-│   ├── NativeMethods.cs           # Win32 API declarations
-│   └── IBrightnessController.cs   # Brightness control interface
+├── BackgroundService.cs            # Background service (tray/schedule/timer)
+├── Controls/                       # Custom controls
+│   ├── FlatTabControl.cs           # Flat tab control
+│   ├── GdiCache.cs                 # GDI object cache pool
+│   ├── ModernSlider.cs             # Modern-style slider
+│   └── ToggleSwitch.cs             # Toggle switch control
+├── Infrastructure/                 # Core infrastructure
+│   ├── BrightnessController.cs     # WMI / DDC/CI brightness control
+│   ├── GammaController.cs          # Gamma correction (SetDeviceGammaRamp)
+│   ├── GcHelper.cs                 # GC collection & working set trim
+│   ├── EyeProtectionService.cs     # Eye protection (SetSysColors + Registry)
+│   ├── NightLightController.cs     # Windows Night Light control
+│   ├── MonitorManager.cs           # Monitor management (EDID/hot-plug/position)
+│   ├── NativeMethods.cs            # Win32 API declarations
+│   ├── WeakEvent.cs                # Weak event pattern implementation
+│   └── IBrightnessController.cs    # Brightness control interface
 ├── Models/
-│   ├── PresetDefinitions.cs       # Preset definitions
-│   └── UserSettings.cs            # User settings model
+│   ├── PresetDefinitions.cs        # Preset definitions
+│   └── UserSettings.cs             # User settings model
 ├── Properties/
-│   └── AssemblyInfo.cs            # Assembly information
+│   └── AssemblyInfo.cs             # Assembly information
 ├── Resources/
-│   └── DesignConstants.cs         # Theme & design constants
+│   └── DesignConstants.cs          # Theme & design constants
 ├── Services/
-│   ├── AutoApplyService.cs        # Auto-apply service
-│   ├── SettingsStore.cs           # Settings persistence
-│   └── UpdateService.cs           # Auto-update service
-├── Form1.cs                       # Main form logic
-├── Form1.Designer.cs              # Main form designer
-├── ScheduleConfigForm.cs          # Schedule configuration form
-├── Program.cs                     # Entry point (single instance + CLI args)
-├── App.config                     # Application configuration
-└── LumiShift.csproj               # Project file
+│   ├── SettingsStore.cs            # Settings persistence
+│   └── UpdateService.cs            # Auto-update service
+├── Form1.cs                        # Main form logic
+├── Form1.Designer.cs               # Main form designer
+├── ScheduleConfigForm.cs           # Schedule configuration form
+├── Program.cs                      # Entry point (single instance + CLI args)
+├── App.config                      # Application configuration
+└── LumiShift.csproj                # Project file
 ```
 
 ### 🛠️ Tech Stack
