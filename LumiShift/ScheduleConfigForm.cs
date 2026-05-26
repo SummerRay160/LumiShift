@@ -17,6 +17,7 @@ namespace LumiShift
         private const int MaxSegments = 10;
 
         private readonly List<MonitorInfo> _monitors;
+        private readonly bool _hasMultipleMonitors;
         private List<ScheduleSegment> _segments;
         private List<GammaPreset> _customPresets;
         private FlowLayoutPanel _segmentPanel;
@@ -36,12 +37,14 @@ namespace LumiShift
                 StartTime = s.StartTime,
                 EndTime = s.EndTime,
                 PresetName = s.PresetName,
+                SyncMode = s.SyncMode,
                 MonitorPresets = s.MonitorPresets != null
                     ? new Dictionary<string, string>(s.MonitorPresets)
                     : null
             }).ToList();
             _customPresets = customPresets;
             _monitors = monitors ?? new List<MonitorInfo>();
+            _hasMultipleMonitors = _monitors.Count > 1;
 
             Text = "定时调度配置";
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -119,14 +122,17 @@ namespace LumiShift
 
             var hintLabel = new Label
             {
-                Text = "配置各时段的起止时间与对应预设，时段不可重叠",
+                Text = _hasMultipleMonitors
+                    ? "配置各时段的起止时间与预设；\"统一\"表示所有显示器使用相同预设，\"独立\"可为每个显示器分别指定"
+                    : "配置各时段的起止时间与对应预设，时段不可重叠",
                 Location = new Point(Spacing.LG, y),
-                AutoSize = true,
+                Width = 538,
+                Height = 28,
                 Font = Typography.Caption,
                 ForeColor = Colors.TextSecondary,
                 BackColor = Color.Transparent
             };
-            y += 24;
+            y += 32;
 
             var headerRow = new Panel
             {
@@ -138,8 +144,14 @@ namespace LumiShift
 
             var hStart = new Label { Text = "时段", Location = new Point(0, 0), AutoSize = true, Font = Typography.Caption, ForeColor = Colors.TextSecondary, BackColor = Color.Transparent };
             var hPreset = new Label { Text = "预设", Location = new Point(210, 0), AutoSize = true, Font = Typography.Caption, ForeColor = Colors.TextSecondary, BackColor = Color.Transparent };
-            var hMonitor = new Label { Text = "显示器", Location = new Point(340, 0), AutoSize = true, Font = Typography.Caption, ForeColor = Colors.TextSecondary, BackColor = Color.Transparent };
-            headerRow.Controls.AddRange(new Control[] { hStart, hPreset, hMonitor });
+            headerRow.Controls.AddRange(new Control[] { hStart, hPreset });
+
+            if (_hasMultipleMonitors)
+            {
+                var hMode = new Label { Text = "多屏", Location = new Point(340, 0), AutoSize = true, Font = Typography.Caption, ForeColor = Colors.TextSecondary, BackColor = Color.Transparent };
+                headerRow.Controls.Add(hMode);
+            }
+
             y += 24;
 
             _segmentPanel = new FlowLayoutPanel
@@ -183,7 +195,7 @@ namespace LumiShift
                 Location = new Point(Spacing.LG, y),
                 Width = 538,
                 Height = 1,
-                BackColor = Colors.Border
+                BackColor = Colors.BorderLight
             };
             y += 10;
 
@@ -344,8 +356,8 @@ namespace LumiShift
         {
             _segmentPanel.SuspendLayout();
             var oldRow = _segmentPanel.Controls[index];
-            oldRow.Dispose();
             _segmentPanel.Controls.RemoveAt(index);
+            oldRow.Dispose();
             _segmentPanel.Controls.Add(CreateSegmentRow(index));
             _segmentPanel.Controls.SetChildIndex(_segmentPanel.Controls[_segmentPanel.Controls.Count - 1], index);
             _segmentPanel.ResumeLayout(true);
@@ -355,7 +367,8 @@ namespace LumiShift
         {
             var segment = _segments[i];
             int idx = i;
-            bool hasMonitorPresets = segment.MonitorPresets != null && segment.MonitorPresets.Count > 0;
+            bool isIndependent = segment.SyncMode == false;
+            bool hasMonitorPresets = _hasMultipleMonitors && isIndependent && segment.MonitorPresets != null && segment.MonitorPresets.Count > 0;
 
             int containerHeight = 36;
             if (hasMonitorPresets)
@@ -424,39 +437,171 @@ namespace LumiShift
             };
             FillPresetCombo(presetCombo, segment.PresetName);
 
-            var monitorToggle = new ToggleSwitch
-            {
-                Location = new Point(340, 6),
-                Checked = hasMonitorPresets,
-                Width = 44
-            };
+            container.Controls.AddRange(new Control[] { startPicker, arrowLbl, endPicker, presetCombo });
 
-            var monitorLabel = new Label
+            if (_hasMultipleMonitors)
             {
-                Text = hasMonitorPresets ? "独立" : "统一",
-                Location = new Point(388, 9),
-                AutoSize = true,
-                Font = Typography.Caption,
-                ForeColor = hasMonitorPresets ? Colors.Brand : Colors.TextSecondary,
-                BackColor = Color.Transparent
-            };
+                var monitorToggle = new ToggleSwitch
+                {
+                    Location = new Point(340, 6),
+                    Checked = isIndependent,
+                    Width = 44
+                };
 
-            var deleteBtn = new Button
+                var monitorLabel = new Label
+                {
+                    Text = isIndependent ? "独立" : "统一",
+                    Location = new Point(388, 9),
+                    AutoSize = true,
+                    Font = Typography.Caption,
+                    ForeColor = isIndependent ? Colors.Brand : Colors.TextSecondary,
+                    BackColor = Color.Transparent
+                };
+
+                var modeTip = new ToolTip();
+                modeTip.SetToolTip(monitorToggle, isIndependent ? "独立模式：每个显示器可使用不同预设" : "统一模式：所有显示器使用相同预设");
+                modeTip.SetToolTip(monitorLabel, isIndependent ? "独立模式：每个显示器可使用不同预设" : "统一模式：所有显示器使用相同预设");
+
+                var deleteBtn = new Button
+                {
+                    Text = "×",
+                    Location = new Point(440, 6),
+                    Width = 24,
+                    Height = 24,
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.Transparent,
+                    ForeColor = Colors.TextSecondary,
+                    Font = Typography.Caption,
+                    FlatAppearance = { BorderSize = 0 },
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Cursor = Cursors.Hand
+                };
+                deleteBtn.MouseEnter += (s, ev) => { deleteBtn.BackColor = Colors.Red; deleteBtn.ForeColor = Color.White; };
+                deleteBtn.MouseLeave += (s, ev) => { deleteBtn.BackColor = Color.Transparent; deleteBtn.ForeColor = Colors.TextSecondary; };
+
+                monitorToggle.CheckedChanged += (s, ev) =>
+                {
+                    if (_isUpdatingToggle) return;
+                    if (monitorToggle.Checked)
+                    {
+                        segment.SyncMode = false;
+                        if (segment.MonitorPresets == null)
+                            segment.MonitorPresets = new Dictionary<string, string>();
+                        if (segment.MonitorPresets.Count == 0)
+                        {
+                            foreach (var m in _monitors)
+                                segment.MonitorPresets[m.DeviceId] = segment.PresetName;
+                        }
+                    }
+                    else
+                    {
+                        if (segment.MonitorPresets != null && segment.MonitorPresets.Count > 0)
+                        {
+                            bool hasCustom = false;
+                            foreach (var m in _monitors)
+                            {
+                                if (segment.MonitorPresets.TryGetValue(m.DeviceId, out var mp) && mp != segment.PresetName)
+                                {
+                                    hasCustom = true;
+                                    break;
+                                }
+                            }
+                            if (hasCustom)
+                            {
+                                if (MessageBox.Show("切换到统一模式将清除各显示器的独立预设配置，是否继续？", "确认",
+                                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                                {
+                                    _isUpdatingToggle = true;
+                                    monitorToggle.Checked = true;
+                                    _isUpdatingToggle = false;
+                                    return;
+                                }
+                            }
+                            segment.MonitorPresets.Clear();
+                            segment.MonitorPresets = null;
+                        }
+                        segment.SyncMode = true;
+                    }
+                    ReplaceSegmentRow(idx);
+                };
+
+                deleteBtn.Click += (s, ev) =>
+                {
+                    if (MessageBox.Show($"确定删除此时段（{_segments[idx].StartTime} - {_segments[idx].EndTime}）？", "确认删除",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                    {
+                        _segments.RemoveAt(idx);
+                        _segmentPanel.SuspendLayout();
+                        var oldRow = _segmentPanel.Controls[idx];
+                        _segmentPanel.Controls.RemoveAt(idx);
+                        oldRow.Dispose();
+                        for (int j = idx; j < _segments.Count; j++)
+                        {
+                            var existingRow = _segmentPanel.Controls[j];
+                            _segmentPanel.Controls.RemoveAt(j);
+                            existingRow.Dispose();
+                            _segmentPanel.Controls.Add(CreateSegmentRow(j));
+                            _segmentPanel.Controls.SetChildIndex(_segmentPanel.Controls[_segmentPanel.Controls.Count - 1], j);
+                        }
+                        _segmentPanel.ResumeLayout(true);
+                    }
+                };
+
+                container.Controls.AddRange(new Control[] { monitorToggle, monitorLabel, deleteBtn });
+            }
+            else
             {
-                Text = "×",
-                Location = new Point(440, 6),
-                Width = 24,
-                Height = 24,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.Transparent,
-                ForeColor = Colors.TextSecondary,
-                Font = Typography.Caption,
-                FlatAppearance = { BorderSize = 0 },
-                TextAlign = ContentAlignment.MiddleCenter,
-                Cursor = Cursors.Hand
-            };
-            deleteBtn.MouseEnter += (s, ev) => { deleteBtn.BackColor = Colors.Red; deleteBtn.ForeColor = Color.White; };
-            deleteBtn.MouseLeave += (s, ev) => { deleteBtn.BackColor = Color.Transparent; deleteBtn.ForeColor = Colors.TextSecondary; };
+                var allScreensHint = new Label
+                {
+                    Text = "所有屏幕",
+                    Location = new Point(340, 9),
+                    AutoSize = true,
+                    Font = Typography.Caption,
+                    ForeColor = Colors.TextSecondary,
+                    BackColor = Color.Transparent
+                };
+
+                var deleteBtn = new Button
+                {
+                    Text = "×",
+                    Location = new Point(440, 6),
+                    Width = 24,
+                    Height = 24,
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.Transparent,
+                    ForeColor = Colors.TextSecondary,
+                    Font = Typography.Caption,
+                    FlatAppearance = { BorderSize = 0 },
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Cursor = Cursors.Hand
+                };
+                deleteBtn.MouseEnter += (s, ev) => { deleteBtn.BackColor = Colors.Red; deleteBtn.ForeColor = Color.White; };
+                deleteBtn.MouseLeave += (s, ev) => { deleteBtn.BackColor = Color.Transparent; deleteBtn.ForeColor = Colors.TextSecondary; };
+
+                deleteBtn.Click += (s, ev) =>
+                {
+                    if (MessageBox.Show($"确定删除此时段（{_segments[idx].StartTime} - {_segments[idx].EndTime}）？", "确认删除",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                    {
+                        _segments.RemoveAt(idx);
+                        _segmentPanel.SuspendLayout();
+                        var oldRow = _segmentPanel.Controls[idx];
+                        _segmentPanel.Controls.RemoveAt(idx);
+                        oldRow.Dispose();
+                        for (int j = idx; j < _segments.Count; j++)
+                        {
+                            var existingRow = _segmentPanel.Controls[j];
+                            _segmentPanel.Controls.RemoveAt(j);
+                            existingRow.Dispose();
+                            _segmentPanel.Controls.Add(CreateSegmentRow(j));
+                            _segmentPanel.Controls.SetChildIndex(_segmentPanel.Controls[_segmentPanel.Controls.Count - 1], j);
+                        }
+                        _segmentPanel.ResumeLayout(true);
+                    }
+                };
+
+                container.Controls.AddRange(new Control[] { allScreensHint, deleteBtn });
+            }
 
             startPicker.ValueChanged += (s, ev) =>
             {
@@ -475,74 +620,6 @@ namespace LumiShift
                 _segments[idx].PresetName = presetCombo.SelectedItem?.ToString() ?? "标准";
             };
 
-            monitorToggle.CheckedChanged += (s, ev) =>
-            {
-                if (_isUpdatingToggle) return;
-                if (monitorToggle.Checked)
-                {
-                    if (segment.MonitorPresets == null)
-                        segment.MonitorPresets = new Dictionary<string, string>();
-                    if (segment.MonitorPresets.Count == 0)
-                    {
-                        foreach (var m in _monitors)
-                            segment.MonitorPresets[m.DeviceId] = segment.PresetName;
-                    }
-                }
-                else
-                {
-                    if (segment.MonitorPresets != null && segment.MonitorPresets.Count > 0)
-                    {
-                        bool hasCustom = false;
-                        foreach (var m in _monitors)
-                        {
-                            if (segment.MonitorPresets.TryGetValue(m.DeviceId, out var mp) && mp != segment.PresetName)
-                            {
-                                hasCustom = true;
-                                break;
-                            }
-                        }
-                        if (hasCustom)
-                        {
-                            if (MessageBox.Show("收起将清除各显示器的独立预设配置，是否继续？", "确认",
-                                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-                            {
-                                _isUpdatingToggle = true;
-                                monitorToggle.Checked = true;
-                                _isUpdatingToggle = false;
-                                return;
-                            }
-                        }
-                        segment.MonitorPresets.Clear();
-                        segment.MonitorPresets = null;
-                    }
-                }
-                ReplaceSegmentRow(idx);
-            };
-
-            deleteBtn.Click += (s, ev) =>
-            {
-                if (MessageBox.Show($"确定删除此时段（{_segments[idx].StartTime} - {_segments[idx].EndTime}）？", "确认删除",
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                {
-                    _segments.RemoveAt(idx);
-                    _segmentPanel.SuspendLayout();
-                    var oldRow = _segmentPanel.Controls[idx];
-                    oldRow.Dispose();
-                    _segmentPanel.Controls.RemoveAt(idx);
-                    for (int j = idx; j < _segments.Count; j++)
-                    {
-                        var existingRow = _segmentPanel.Controls[j];
-                        existingRow.Dispose();
-                        _segmentPanel.Controls.RemoveAt(j);
-                        _segmentPanel.Controls.Add(CreateSegmentRow(j));
-                        _segmentPanel.Controls.SetChildIndex(_segmentPanel.Controls[_segmentPanel.Controls.Count - 1], j);
-                    }
-                    _segmentPanel.ResumeLayout(true);
-                }
-            };
-
-            container.Controls.AddRange(new Control[] { startPicker, arrowLbl, endPicker, presetCombo, monitorToggle, monitorLabel, deleteBtn });
-
             if (hasMonitorPresets)
             {
                 int my = 40;
@@ -557,7 +634,7 @@ namespace LumiShift
                         Location = new Point(8, my + 2),
                         AutoSize = true,
                         Font = Typography.Caption,
-                        ForeColor = Colors.Border,
+                        ForeColor = Colors.TextDisabled,
                         BackColor = Color.Transparent
                     };
 

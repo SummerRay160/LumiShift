@@ -83,7 +83,6 @@
     <Compile Include="Infrastructure\MonitorManager.cs" />
     <Compile Include="Infrastructure\NativeMethods.cs" />
     <Compile Include="Infrastructure\NightLightController.cs" />
-    <Compile Include="Infrastructure\WeakEvent.cs" />
     <Compile Include="Models\UserSettings.cs" />
     <Compile Include="Models\PresetDefinitions.cs" />
     <Compile Include="Program.cs" />
