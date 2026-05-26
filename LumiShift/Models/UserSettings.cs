@@ -19,6 +19,7 @@ namespace LumiShift.Models
         public string StartTime { get; set; } = "06:00";
         public string EndTime { get; set; } = "18:00";
         public string PresetName { get; set; } = "标准";
+        public bool? SyncMode { get; set; }
         public Dictionary<string, string> MonitorPresets { get; set; }
     }
 

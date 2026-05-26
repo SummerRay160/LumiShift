@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -28,14 +27,10 @@ namespace LumiShift.Infrastructure
     {
         private bool _disposed;
 
-        private ushort[] _cachedRampRed = new ushort[256];
-        private ushort[] _cachedRampGreen = new ushort[256];
-        private ushort[] _cachedRampBlue = new ushort[256];
-        private double _cachedGamma = -1;
-        private double _cachedRScale = -1;
-        private double _cachedGScale = -1;
-        private double _cachedBScale = -1;
-        private double _cachedMaster = -1;
+        private const int MaxCacheSize = 6;
+        private readonly Dictionary<int, RAMP> _rampCache = new Dictionary<int, RAMP>();
+        private readonly LinkedList<int> _cacheKeyOrder = new LinkedList<int>();
+        private readonly Dictionary<int, LinkedListNode<int>> _keyToNode = new Dictionary<int, LinkedListNode<int>>();
 
         private static readonly RAMP DefaultRamp;
         private readonly object _rampLock = new object();
@@ -272,38 +267,54 @@ namespace LumiShift.Infrastructure
             }
         }
 
-        private RAMP GetOrBuildRamp(double gamma, double rScale, double gScale, double bScale, double master)
+        private static int ComputeRampKey(double gamma, double rScale, double gScale, double bScale, double master)
         {
-            if (Math.Abs(_cachedGamma - gamma) > 0.001 ||
-                Math.Abs(_cachedRScale - rScale) > 0.001 ||
-                Math.Abs(_cachedGScale - gScale) > 0.001 ||
-                Math.Abs(_cachedBScale - bScale) > 0.001 ||
-                Math.Abs(_cachedMaster - master) > 0.001)
-            {
-                if (_cachedRampRed == null)
-                {
-                    _cachedRampRed = new ushort[256];
-                    _cachedRampGreen = new ushort[256];
-                    _cachedRampBlue = new ushort[256];
-                }
-                BuildRamp(gamma, rScale, gScale, bScale, master);
-                _cachedGamma = gamma;
-                _cachedRScale = rScale;
-                _cachedGScale = gScale;
-                _cachedBScale = bScale;
-                _cachedMaster = master;
-            }
-
-            return new RAMP
-            {
-                Red = _cachedRampRed ?? new ushort[256],
-                Green = _cachedRampGreen ?? new ushort[256],
-                Blue = _cachedRampBlue ?? new ushort[256]
-            };
+            int h = 17;
+            h = h * 31 + (int)(gamma * 1000);
+            h = h * 31 + (int)(rScale * 1000);
+            h = h * 31 + (int)(gScale * 1000);
+            h = h * 31 + (int)(bScale * 1000);
+            h = h * 31 + (int)(master * 1000);
+            return h;
         }
 
-        private void BuildRamp(double gamma, double rScale, double gScale, double bScale, double master)
+        private RAMP GetOrBuildRamp(double gamma, double rScale, double gScale, double bScale, double master)
         {
+            int key = ComputeRampKey(gamma, rScale, gScale, bScale, master);
+
+            if (_rampCache.TryGetValue(key, out var cached))
+            {
+                var node = _keyToNode[key];
+                _cacheKeyOrder.Remove(node);
+                _cacheKeyOrder.AddLast(node);
+                return cached;
+            }
+
+            var ramp = BuildRamp(gamma, rScale, gScale, bScale, master);
+
+            if (_rampCache.Count >= MaxCacheSize && _cacheKeyOrder.First != null)
+            {
+                int oldestKey = _cacheKeyOrder.First.Value;
+                _cacheKeyOrder.RemoveFirst();
+                _rampCache.Remove(oldestKey);
+                _keyToNode.Remove(oldestKey);
+            }
+
+            _rampCache[key] = ramp;
+            var newNode = _cacheKeyOrder.AddLast(key);
+            _keyToNode[key] = newNode;
+            return ramp;
+        }
+
+        private static RAMP BuildRamp(double gamma, double rScale, double gScale, double bScale, double master)
+        {
+            var ramp = new RAMP
+            {
+                Red = new ushort[256],
+                Green = new ushort[256],
+                Blue = new ushort[256]
+            };
+
             for (int i = 0; i < 256; i++)
             {
                 double x = i / 255.0;
@@ -313,10 +324,12 @@ namespace LumiShift.Infrastructure
                 double gVal = value * 65535.0 * gScale * master;
                 double bVal = value * 65535.0 * bScale * master;
 
-                _cachedRampRed[i] = (ushort)Math.Max(0, Math.Min(65535, Math.Round(rVal)));
-                _cachedRampGreen[i] = (ushort)Math.Max(0, Math.Min(65535, Math.Round(gVal)));
-                _cachedRampBlue[i] = (ushort)Math.Max(0, Math.Min(65535, Math.Round(bVal)));
+                ramp.Red[i] = (ushort)Math.Max(0, Math.Min(65535, Math.Round(rVal)));
+                ramp.Green[i] = (ushort)Math.Max(0, Math.Min(65535, Math.Round(gVal)));
+                ramp.Blue[i] = (ushort)Math.Max(0, Math.Min(65535, Math.Round(bVal)));
             }
+
+            return ramp;
         }
 
         public void Dispose()
@@ -332,14 +345,9 @@ namespace LumiShift.Infrastructure
         {
             lock (_rampLock)
             {
-                _cachedRampRed = null;
-                _cachedRampGreen = null;
-                _cachedRampBlue = null;
-                _cachedGamma = -1;
-                _cachedRScale = -1;
-                _cachedGScale = -1;
-                _cachedBScale = -1;
-                _cachedMaster = -1;
+                _rampCache.Clear();
+                _cacheKeyOrder.Clear();
+                _keyToNode.Clear();
             }
         }
     }

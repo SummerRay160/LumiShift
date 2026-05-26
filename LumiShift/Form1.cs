@@ -947,6 +947,11 @@ namespace LumiShift
             if (IsGlobalMonitorSelected())
             {
                 Settings.GammaEnabled = _gammaCheckBox.Checked;
+                if (Settings.GammaPerDisplay.Count > 0)
+                {
+                    Settings.GammaPerDisplay.Clear();
+                    PopulateMonitorSelector();
+                }
             }
             else
             {
@@ -1003,6 +1008,11 @@ namespace LumiShift
             if (IsGlobalMonitorSelected())
             {
                 Settings.MasterBrightness = _gammaBrightSlider.Value;
+                if (Settings.GammaPerDisplay.Count > 0)
+                {
+                    Settings.GammaPerDisplay.Clear();
+                    PopulateMonitorSelector();
+                }
             }
             else
             {
@@ -1069,6 +1079,11 @@ namespace LumiShift
             if (IsGlobalMonitorSelected())
             {
                 _bgService.TryApplyPreset(selected);
+                if (Settings.GammaPerDisplay.Count > 0)
+                {
+                    Settings.GammaPerDisplay.Clear();
+                    PopulateMonitorSelector();
+                }
             }
             else
             {
@@ -1128,6 +1143,11 @@ namespace LumiShift
                 Settings.GammaValue = _gammaValueSlider.Value / 100.0;
                 Settings.MasterBrightness = _gammaBrightSlider.Value;
                 Settings.GammaEnabled = _gammaCheckBox.Checked;
+                if (Settings.GammaPerDisplay.Count > 0)
+                {
+                    Settings.GammaPerDisplay.Clear();
+                    PopulateMonitorSelector();
+                }
             }
             else
             {
@@ -1269,6 +1289,46 @@ namespace LumiShift
         private void MonitorSelectorComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (_isUpdatingGammaSliders) return;
+
+            if (IsGlobalMonitorSelected() && Settings.GammaPerDisplay.Count > 0)
+            {
+                bool hasManual = Settings.GammaPerDisplay.Any(kvp => kvp.Value.Source == "manual");
+                bool hasSchedule = Settings.GammaPerDisplay.Any(kvp => kvp.Value.Source == "schedule");
+
+                if (hasManual || hasSchedule)
+                {
+                    string msg = hasSchedule && Settings.ScheduleEnabled
+                        ? "切换到\"所有显示器\"模式将同步所有显示器参数，定时调度的独立配置将被清除。\n\n是否继续？"
+                        : "切换到\"所有显示器\"模式将同步所有显示器参数，各显示器的独立配置将被清除。\n\n是否继续？";
+
+                    if (MessageBox.Show(msg, "同步确认", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                    {
+                        _isUpdatingGammaSliders = true;
+                        _monitorSelectorComboBox.SelectedIndex = 1;
+                        _isUpdatingGammaSliders = false;
+                        return;
+                    }
+                }
+
+                var primary = MonitorMgr.Monitors.FirstOrDefault(m => m.Screen?.Primary == true)
+                    ?? MonitorMgr.Monitors.FirstOrDefault();
+
+                if (primary != null && Settings.GammaPerDisplay.TryGetValue(primary.DeviceId, out var primaryPdg))
+                {
+                    Settings.GammaRScale = primaryPdg.RScale;
+                    Settings.GammaGScale = primaryPdg.GScale;
+                    Settings.GammaBScale = primaryPdg.BScale;
+                    Settings.GammaValue = primaryPdg.GammaValue;
+                    Settings.MasterBrightness = primaryPdg.MasterBrightness;
+                    Settings.GammaEnabled = primaryPdg.Enabled;
+                }
+
+                Settings.GammaPerDisplay.Clear();
+                _bgService.ApplyGammaToSystem();
+                SettingsStore.SaveSettings(Settings);
+                PopulateMonitorSelector();
+            }
+
             _isUpdatingGammaSliders = true;
             SyncSlidersToSelectedMonitor();
             UpdateGammaLabels();

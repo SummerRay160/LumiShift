@@ -72,15 +72,25 @@ namespace LumiShift.Services
                     {
                         StartTime = nightEnd,
                         EndTime = nightStart,
-                        PresetName = dayPreset
+                        PresetName = dayPreset,
+                        SyncMode = true
                     },
                     new ScheduleSegment
                     {
                         StartTime = nightStart,
                         EndTime = nightEnd,
-                        PresetName = nightPreset
+                        PresetName = nightPreset,
+                        SyncMode = true
                     }
                 };
+            }
+            else
+            {
+                foreach (var seg in settings.ScheduleSegments)
+                {
+                    if (seg.SyncMode == null)
+                        seg.SyncMode = true;
+                }
             }
         }
     }
