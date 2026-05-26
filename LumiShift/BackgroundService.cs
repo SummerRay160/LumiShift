@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Reflection;
+using System.Runtime;
 using System.Windows.Forms;
 using LumiShift.Infrastructure;
 using LumiShift.Models;
@@ -37,6 +38,15 @@ namespace LumiShift
 
         private const int ScheduleTimerIntervalNormal = 30000;
         private const int ScheduleTimerIntervalLightweight = 120000;
+
+        private ToolStripMenuItem _trayGammaItem;
+        private ToolStripMenuItem _trayQuickMenu;
+        private ToolStripMenuItem _trayAllMonitorsItem;
+        private ToolStripMenuItem _trayRestoreItem;
+        private Timer _microGcTimer;
+        private int _lightweightGcTickCount;
+        private const int LightweightGcMs = 30000;
+        private const int FullCompactEveryNTicks = 10;
 
         private struct ParsedSegment
         {
@@ -138,41 +148,174 @@ namespace LumiShift
 
         internal void UpdateTrayMenu()
         {
-            _trayMenuNeedsRebuild = true;
+            if (!Form1IsOpen())
+            {
+                RefreshDynamicTraySection();
+                ScheduleMicroGc();
+            }
+            else
+            {
+                _trayMenuNeedsRebuild = true;
+            }
         }
 
         private void RebuildTrayMenu()
         {
             if (_trayMenu == null) return;
 
-            for (int i = _trayMenu.Items.Count - 1; i >= 0; i--)
+            if (_trayGammaItem == null)
             {
-                var item = _trayMenu.Items[i];
-                _trayMenu.Items.RemoveAt(i);
-                RecursiveDispose(item);
+                for (int i = _trayMenu.Items.Count - 1; i >= 0; i--)
+                {
+                    var item = _trayMenu.Items[i];
+                    _trayMenu.Items.RemoveAt(i);
+                    RecursiveDispose(item);
+                }
+                _trayMenu.Items.Clear();
+                BuildDynamicTraySection();
+                BuildStaticTraySection();
             }
-
-            BuildTrayMenuFull();
+            else
+            {
+                ClearDynamicTraySection();
+                BuildDynamicTraySection();
+            }
         }
 
-        private static void RecursiveDispose(ToolStripItem item)
+        private void ClearDynamicTraySection()
         {
-            if (item is ToolStripMenuItem menuItem)
+            if (_trayRestoreItem != null)
             {
-                while (menuItem.DropDownItems.Count > 0)
+                _trayMenu.Items.Remove(_trayRestoreItem);
+                RecursiveDispose(_trayRestoreItem);
+                _trayRestoreItem = null;
+            }
+            if (_trayQuickMenu != null)
+            {
+                _trayMenu.Items.Remove(_trayQuickMenu);
+                RecursiveDispose(_trayQuickMenu);
+                _trayQuickMenu = null;
+                _trayAllMonitorsItem = null;
+            }
+            if (_trayGammaItem != null)
+            {
+                _trayMenu.Items.Remove(_trayGammaItem);
+                _trayGammaItem.Dispose();
+                _trayGammaItem = null;
+            }
+        }
+
+        private void BuildDynamicTraySection()
+        {
+            _trayGammaItem = new ToolStripMenuItem(
+                GammaController.IsSupported && Settings.GammaEnabled
+                    ? "Gamma 校正: 已启用"
+                    : "Gamma 校正: 已禁用")
+            {
+                Checked = Settings.GammaEnabled
+            };
+            _trayGammaItem.Click += (s, e) => GammaTrayToggle();
+            _trayMenu.Items.Add(_trayGammaItem);
+
+            _trayQuickMenu = new ToolStripMenuItem("快速切换预设");
+
+            BuildAllMonitorsSubMenu();
+
+            bool anyMonitorOverride = Settings.GammaPerDisplay != null && Settings.GammaPerDisplay.Count > 0;
+
+            if (MonitorManager.Monitors.Count > 1 || anyMonitorOverride)
+            {
+                _trayQuickMenu.DropDownItems.Add(new ToolStripSeparator());
+                foreach (var monitor in MonitorManager.Monitors)
                 {
-                    var subItem = menuItem.DropDownItems[0];
-                    menuItem.DropDownItems.RemoveAt(0);
-                    RecursiveDispose(subItem);
+                    BuildSingleMonitorSubMenu(monitor.DeviceId, monitor.DisplayName);
                 }
             }
-            item.Dispose();
+
+            _trayMenu.Items.Add(_trayQuickMenu);
+
+            if (Settings.ScheduleEnabled && _scheduleManualOverride)
+            {
+                _trayRestoreItem = new ToolStripMenuItem("恢复定时控制", null, (s, ev) =>
+                {
+                    _scheduleManualOverride = false;
+                    ScheduleTimer_Tick(null, null);
+                    UpdateTrayMenu();
+                    ScheduleStateChanged?.Invoke();
+                });
+                _trayMenu.Items.Add(_trayRestoreItem);
+            }
+
+            UpdateTrayText();
         }
 
-        private void BuildTrayMenuFull()
+        private void BuildAllMonitorsSubMenu()
         {
-            AddDynamicTrayItems();
+            bool anyMonitorOverride = Settings.GammaPerDisplay != null && Settings.GammaPerDisplay.Count > 0;
+            string globalPresetName = GetCurrentPresetName();
 
+            _trayAllMonitorsItem = new ToolStripMenuItem("全部显示器");
+            foreach (var p in PresetDefinitions.GetNames())
+            {
+                bool isActive = !anyMonitorOverride && Settings.GammaEnabled && globalPresetName == p;
+                var item = new ToolStripMenuItem(p) { Checked = isActive };
+                string cp = p;
+                item.Click += (s, ev) => QuickPreset(cp);
+                _trayAllMonitorsItem.DropDownItems.Add(item);
+            }
+            if (Settings.CustomGammaPresets.Count > 0)
+            {
+                _trayAllMonitorsItem.DropDownItems.Add(new ToolStripSeparator());
+                foreach (var cp in Settings.CustomGammaPresets)
+                {
+                    bool isActive = !anyMonitorOverride && Settings.GammaEnabled && globalPresetName == cp.Name;
+                    var item = new ToolStripMenuItem(cp.Name) { Checked = isActive };
+                    string name = cp.Name;
+                    item.Click += (s, ev) => QuickPreset(name);
+                    _trayAllMonitorsItem.DropDownItems.Add(item);
+                }
+            }
+            _trayQuickMenu.DropDownItems.Add(_trayAllMonitorsItem);
+        }
+
+        private void BuildSingleMonitorSubMenu(string deviceId, string displayName)
+        {
+            string monitorLabel = displayName;
+            if (Settings.GammaPerDisplay.ContainsKey(deviceId))
+                monitorLabel += $" ({GetMonitorPresetName(deviceId)})";
+
+            var monitorItem = new ToolStripMenuItem(monitorLabel);
+            string currentMonitorPreset = GetMonitorPresetName(deviceId);
+
+            foreach (var p in PresetDefinitions.GetNames())
+            {
+                bool isActive = currentMonitorPreset == p;
+                var item = new ToolStripMenuItem(p) { Checked = isActive };
+                string presetName = p;
+                string monDeviceId = deviceId;
+                item.Click += (s, ev) => ApplyPresetToMonitor(presetName, monDeviceId);
+                monitorItem.DropDownItems.Add(item);
+            }
+
+            if (Settings.CustomGammaPresets.Count > 0)
+            {
+                monitorItem.DropDownItems.Add(new ToolStripSeparator());
+                foreach (var cp in Settings.CustomGammaPresets)
+                {
+                    bool isActive = currentMonitorPreset == cp.Name;
+                    var item = new ToolStripMenuItem(cp.Name) { Checked = isActive };
+                    string presetName = cp.Name;
+                    string monDeviceId = deviceId;
+                    item.Click += (s, ev) => ApplyPresetToMonitor(presetName, monDeviceId);
+                    monitorItem.DropDownItems.Add(item);
+                }
+            }
+
+            _trayQuickMenu.DropDownItems.Add(monitorItem);
+        }
+
+        private void BuildStaticTraySection()
+        {
             _trayMenu.Items.Add(new ToolStripSeparator());
 
             var checkUpdateItem = new ToolStripMenuItem("检查更新", null, (s, ev) => UpdateService.CheckForUpdate(silent: false));
@@ -189,103 +332,73 @@ namespace LumiShift
             _trayMenu.Items.Add(exitItem);
         }
 
-        private void AddDynamicTrayItems()
+        private void RefreshDynamicTraySection()
         {
-            var gammaItem = new ToolStripMenuItem(
-                GammaController.IsSupported && Settings.GammaEnabled
-                    ? "Gamma 校正: 已启用"
-                    : "Gamma 校正: 已禁用")
+            if (_trayGammaItem == null) return;
+
+            bool gammaSupported = GammaController.IsSupported;
+            _trayGammaItem.Text = gammaSupported && Settings.GammaEnabled
+                ? "Gamma 校正: 已启用"
+                : "Gamma 校正: 已禁用";
+            _trayGammaItem.Checked = Settings.GammaEnabled;
+
+            RefreshAllMonitorsSubMenu();
+
+            bool hasRestoreItem = _trayRestoreItem != null;
+            bool needsRestoreItem = Settings.ScheduleEnabled && _scheduleManualOverride;
+
+            if (needsRestoreItem && !hasRestoreItem)
             {
-                Checked = Settings.GammaEnabled
-            };
-            gammaItem.Click += (s, e) => GammaTrayToggle();
-            _trayMenu.Items.Add(gammaItem);
-
-            var quickMenu = new ToolStripMenuItem("快速切换预设");
-
-            bool anyMonitorOverride = Settings.GammaPerDisplay != null && Settings.GammaPerDisplay.Count > 0;
-
-            var allMonitorsItem = new ToolStripMenuItem("全部显示器");
-            string globalPresetName = GetCurrentPresetName();
-            foreach (var p in PresetDefinitions.GetNames())
-            {
-                bool isActive = !anyMonitorOverride && Settings.GammaEnabled && globalPresetName == p;
-                var item = new ToolStripMenuItem(p) { Checked = isActive };
-                string cp = p;
-                item.Click += (s, ev) => QuickPreset(cp);
-                allMonitorsItem.DropDownItems.Add(item);
-            }
-            if (Settings.CustomGammaPresets.Count > 0)
-            {
-                allMonitorsItem.DropDownItems.Add(new ToolStripSeparator());
-                foreach (var cp in Settings.CustomGammaPresets)
-                {
-                    bool isActive = !anyMonitorOverride && Settings.GammaEnabled && globalPresetName == cp.Name;
-                    var item = new ToolStripMenuItem(cp.Name) { Checked = isActive };
-                    string name = cp.Name;
-                    item.Click += (s, ev) => QuickPreset(name);
-                    allMonitorsItem.DropDownItems.Add(item);
-                }
-            }
-            quickMenu.DropDownItems.Add(allMonitorsItem);
-
-            if (MonitorManager.Monitors.Count > 1 || anyMonitorOverride)
-            {
-                quickMenu.DropDownItems.Add(new ToolStripSeparator());
-
-                foreach (var monitor in MonitorManager.Monitors)
-                {
-                    string deviceId = monitor.DeviceId;
-                    string monitorLabel = monitor.DisplayName;
-                    if (Settings.GammaPerDisplay.ContainsKey(deviceId))
-                        monitorLabel += $" ({GetMonitorPresetName(deviceId)})";
-
-                    var monitorItem = new ToolStripMenuItem(monitorLabel);
-                    string currentMonitorPreset = GetMonitorPresetName(deviceId);
-
-                    foreach (var p in PresetDefinitions.GetNames())
-                    {
-                        bool isActive = currentMonitorPreset == p;
-                        var item = new ToolStripMenuItem(p) { Checked = isActive };
-                        string presetName = p;
-                        string monDeviceId = deviceId;
-                        item.Click += (s, ev) => ApplyPresetToMonitor(presetName, monDeviceId);
-                        monitorItem.DropDownItems.Add(item);
-                    }
-
-                    if (Settings.CustomGammaPresets.Count > 0)
-                    {
-                        monitorItem.DropDownItems.Add(new ToolStripSeparator());
-                        foreach (var cp in Settings.CustomGammaPresets)
-                        {
-                            bool isActive = currentMonitorPreset == cp.Name;
-                            var item = new ToolStripMenuItem(cp.Name) { Checked = isActive };
-                            string presetName = cp.Name;
-                            string monDeviceId = deviceId;
-                            item.Click += (s, ev) => ApplyPresetToMonitor(presetName, monDeviceId);
-                            monitorItem.DropDownItems.Add(item);
-                        }
-                    }
-
-                    quickMenu.DropDownItems.Add(monitorItem);
-                }
-            }
-
-            _trayMenu.Items.Add(quickMenu);
-
-            if (Settings.ScheduleEnabled && _scheduleManualOverride)
-            {
-                var restoreItem = new ToolStripMenuItem("恢复定时控制", null, (s, ev) =>
+                _trayRestoreItem = new ToolStripMenuItem("恢复定时控制", null, (s, ev) =>
                 {
                     _scheduleManualOverride = false;
                     ScheduleTimer_Tick(null, null);
                     UpdateTrayMenu();
                     ScheduleStateChanged?.Invoke();
                 });
-                _trayMenu.Items.Add(restoreItem);
+                int restoreIndex = _trayMenu.Items.IndexOf(_trayQuickMenu) + 1;
+                _trayMenu.Items.Insert(restoreIndex, _trayRestoreItem);
+            }
+            else if (!needsRestoreItem && hasRestoreItem)
+            {
+                _trayMenu.Items.Remove(_trayRestoreItem);
+                _trayRestoreItem.Dispose();
+                _trayRestoreItem = null;
             }
 
             UpdateTrayText();
+        }
+
+        private void RefreshAllMonitorsSubMenu()
+        {
+            if (_trayAllMonitorsItem == null) return;
+
+            bool anyMonitorOverride = Settings.GammaPerDisplay != null && Settings.GammaPerDisplay.Count > 0;
+            string globalPresetName = GetCurrentPresetName();
+
+            foreach (ToolStripItem item in _trayAllMonitorsItem.DropDownItems)
+            {
+                if (item is ToolStripMenuItem menuItem && item != null && !(item is ToolStripSeparator))
+                {
+                    string presetName = menuItem.Text;
+                    bool shouldCheck = !anyMonitorOverride && Settings.GammaEnabled && globalPresetName == presetName;
+                    menuItem.Checked = shouldCheck;
+                }
+            }
+        }
+
+        private static void RecursiveDispose(ToolStripItem item)
+        {
+            if (item is ToolStripMenuItem menuItem)
+            {
+                while (menuItem.DropDownItems.Count > 0)
+                {
+                    var subItem = menuItem.DropDownItems[0];
+                    menuItem.DropDownItems.RemoveAt(0);
+                    RecursiveDispose(subItem);
+                }
+            }
+            item.Dispose();
         }
 
         private void UpdateTrayText()
@@ -495,15 +608,18 @@ namespace LumiShift
             }
 
             var perScreenParams = new Dictionary<string, GammaParameters>();
+            var coveredDeviceNames = new HashSet<string>();
 
             foreach (var monitor in MonitorManager.Monitors)
             {
                 var screen = monitor.Screen;
                 if (screen == null) continue;
 
+                coveredDeviceNames.Add(screen.DeviceName);
+
                 if (Settings.GammaPerDisplay.TryGetValue(monitor.DeviceId, out var overrideGamma))
                 {
-                    if (Settings.GammaEnabled && overrideGamma.Enabled)
+                    if (overrideGamma.Enabled)
                     {
                         perScreenParams[screen.DeviceName] = new GammaParameters(
                             overrideGamma.RScale,
@@ -524,6 +640,20 @@ namespace LumiShift
                             Settings.GammaValue,
                             Settings.MasterBrightness);
                     }
+                }
+            }
+
+            foreach (Screen screen in Screen.AllScreens)
+            {
+                if (coveredDeviceNames.Contains(screen.DeviceName)) continue;
+                if (Settings.GammaEnabled)
+                {
+                    perScreenParams[screen.DeviceName] = new GammaParameters(
+                        Settings.GammaRScale,
+                        Settings.GammaGScale,
+                        Settings.GammaBScale,
+                        Settings.GammaValue,
+                        Settings.MasterBrightness);
                 }
             }
 
@@ -633,7 +763,17 @@ namespace LumiShift
 
         private void ApplyScheduleMonitorPresets(ScheduleSegment segment)
         {
-            if (segment?.MonitorPresets == null || segment.MonitorPresets.Count == 0)
+            if (segment == null) return;
+
+            if (segment.SyncMode != false)
+            {
+                Settings.GammaPerDisplay.Clear();
+                ApplyGammaToSystem();
+                SettingsStore.SaveSettings(Settings);
+                return;
+            }
+
+            if (segment.MonitorPresets == null || segment.MonitorPresets.Count == 0)
                 return;
 
             foreach (var monitor in MonitorManager.Monitors)
@@ -823,6 +963,12 @@ namespace LumiShift
         {
             var removedIds = MonitorManager.RefreshMonitors();
             CleanupStaleSettings(removedIds);
+            if (!Form1IsOpen())
+            {
+                ClearDynamicTraySection();
+                BuildDynamicTraySection();
+                ScheduleMicroGc();
+            }
         }
 
         private void CleanupStaleSettings(HashSet<string> removedDeviceIds)
@@ -897,6 +1043,9 @@ namespace LumiShift
                 _lightweightGcTimer?.Stop();
                 _lightweightGcTimer?.Dispose();
                 _lightweightGcTimer = null;
+                _microGcTimer?.Stop();
+                _microGcTimer?.Dispose();
+                _microGcTimer = null;
                 MonitorManager.ExitLightweightMode();
                 if (_scheduleTimer != null)
                     _scheduleTimer.Interval = ScheduleTimerIntervalNormal;
@@ -929,13 +1078,50 @@ namespace LumiShift
             GC.Collect(2, GCCollectionMode.Forced, true, true);
             GcHelper.TrimWorkingSet();
 
-            _lightweightGcTimer = new Timer { Interval = 300000 };
-            _lightweightGcTimer.Tick += (s, ev) =>
+            _lightweightGcTickCount = 0;
+            _lightweightGcTimer = new Timer { Interval = LightweightGcMs };
+            _lightweightGcTimer.Tick += LightweightGcTimer_Tick;
+            _lightweightGcTimer.Start();
+        }
+
+        private void LightweightGcTimer_Tick(object sender, EventArgs e)
+        {
+            _lightweightGcTickCount++;
+
+            if (_lightweightGcTickCount % FullCompactEveryNTicks == 0)
             {
+                GC.Collect(1, GCCollectionMode.Forced, false);
+                GC.WaitForPendingFinalizers();
+                GC.Collect(2, GCCollectionMode.Forced, true);
+                try
+                {
+                    GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                    GC.Collect(2, GCCollectionMode.Forced, true, true);
+                }
+                catch { }
+            }
+            else
+            {
+                GC.Collect(0, GCCollectionMode.Forced);
+            }
+
+            GcHelper.TrimWorkingSet();
+        }
+
+        private void ScheduleMicroGc()
+        {
+            if (_microGcTimer != null) return;
+
+            _microGcTimer = new Timer { Interval = 2000 };
+            _microGcTimer.Tick += (s, e) =>
+            {
+                _microGcTimer?.Stop();
+                _microGcTimer?.Dispose();
+                _microGcTimer = null;
                 GC.Collect(0, GCCollectionMode.Forced);
                 GcHelper.TrimWorkingSet();
             };
-            _lightweightGcTimer.Start();
+            _microGcTimer.Start();
         }
 
         internal void ScheduleLightweightModeEntry()
@@ -1020,6 +1206,10 @@ namespace LumiShift
             _lightweightGcTimer?.Stop();
             _lightweightGcTimer?.Dispose();
             _lightweightGcTimer = null;
+
+            _microGcTimer?.Stop();
+            _microGcTimer?.Dispose();
+            _microGcTimer = null;
 
             Controls.GdiCache.Clear();
 
