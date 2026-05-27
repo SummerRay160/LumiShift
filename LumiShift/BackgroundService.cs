@@ -22,6 +22,12 @@ namespace LumiShift
         private Timer _scheduleTimer;
         private string _lastScheduleMode;
         private bool _scheduleManualOverride;
+        private bool _preScheduleGammaEnabled;
+        private double _preScheduleGammaRScale;
+        private double _preScheduleGammaGScale;
+        private double _preScheduleGammaBScale;
+        private double _preScheduleGammaValue;
+        private int _preScheduleMasterBrightness;
         private NotifyIcon _trayIcon;
         private ContextMenuStrip _trayMenu;
         private Form1 _mainForm;
@@ -915,9 +921,35 @@ namespace LumiShift
             _scheduleTimer.Enabled = enabled;
             if (enabled)
             {
+                _preScheduleGammaEnabled = Settings.GammaEnabled;
+                _preScheduleGammaRScale = Settings.GammaRScale;
+                _preScheduleGammaGScale = Settings.GammaGScale;
+                _preScheduleGammaBScale = Settings.GammaBScale;
+                _preScheduleGammaValue = Settings.GammaValue;
+                _preScheduleMasterBrightness = Settings.MasterBrightness;
+
                 _lastScheduleMode = "";
                 _scheduleManualOverride = false;
                 ScheduleTimer_Tick(null, null);
+            }
+            else
+            {
+                var scheduleKeys = Settings.GammaPerDisplay
+                    .Where(kvp => kvp.Value.Source == "schedule")
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+                foreach (var key in scheduleKeys)
+                    Settings.GammaPerDisplay.Remove(key);
+
+                Settings.GammaEnabled = _preScheduleGammaEnabled;
+                Settings.GammaRScale = _preScheduleGammaRScale;
+                Settings.GammaGScale = _preScheduleGammaGScale;
+                Settings.GammaBScale = _preScheduleGammaBScale;
+                Settings.GammaValue = _preScheduleGammaValue;
+                Settings.MasterBrightness = _preScheduleMasterBrightness;
+
+                ApplyGammaToSystem();
+                ScheduleStateChanged?.Invoke();
             }
             SettingsStore.SaveSettings(Settings);
             UpdateTrayMenu();

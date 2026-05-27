@@ -288,7 +288,20 @@ namespace LumiShift
 
         private void RefreshSliderVisibility()
         {
-            bool enabled = Settings.GammaEnabled;
+            bool enabled;
+            if (IsGlobalMonitorSelected())
+            {
+                enabled = Settings.GammaEnabled;
+            }
+            else
+            {
+                string deviceId = GetSelectedMonitorDeviceId();
+                if (deviceId != null && Settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
+                    enabled = pdg.Enabled;
+                else
+                    enabled = Settings.GammaEnabled;
+            }
+
             bool simplified = _gammaSimplifiedCheckBox.Checked;
 
             _gammaModeComboBox.Enabled = enabled && !simplified;
