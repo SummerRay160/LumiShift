@@ -1705,5 +1705,71 @@ namespace LumiShift
                 }
             }));
         }
+
+        private const int WM_NCHITTEST = 0x0084;
+        private const int WM_NCRBUTTONUP = 0x00A5;
+        private const int HTCAPTION = 2;
+        private const int HTCLOSE = 20;
+        private const int HTMINBUTTON = 8;
+        private const int HTSYSMENU = 3;
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_NCHITTEST)
+            {
+                Point screenPoint = new Point(
+                    unchecked((short)((long)m.LParam & 0xFFFF)),
+                    unchecked((short)(((long)m.LParam >> 16) & 0xFFFF)));
+                Point clientPoint = PointToClient(screenPoint);
+
+                if (clientPoint.Y < 0)
+                {
+                    int btnW = 50;
+                    int rightEdge = ClientSize.Width;
+
+                    if (clientPoint.X >= rightEdge - btnW)
+                    {
+                        m.Result = (IntPtr)HTCLOSE;
+                    }
+                    else if (clientPoint.X >= rightEdge - btnW * 2 && MinimizeBox)
+                    {
+                        m.Result = (IntPtr)HTMINBUTTON;
+                    }
+                    else if (clientPoint.X <= btnW)
+                    {
+                        m.Result = (IntPtr)HTSYSMENU;
+                    }
+                    else
+                    {
+                        m.Result = (IntPtr)HTCAPTION;
+                    }
+                    return;
+                }
+
+                base.WndProc(ref m);
+                return;
+            }
+
+            if (m.Msg == WM_NCRBUTTONUP)
+            {
+                int hitTest = m.WParam.ToInt32();
+                if (hitTest == HTCAPTION || hitTest == HTSYSMENU)
+                {
+                    Point cursorPos = Cursor.Position;
+                    IntPtr sysMenu = NativeMethods.GetSystemMenu(Handle, false);
+                    int cmd = NativeMethods.TrackPopupMenu(sysMenu,
+                        NativeMethods.TPM_RETURNCMD | NativeMethods.TPM_LEFTALIGN | NativeMethods.TPM_TOPALIGN,
+                        cursorPos.X, cursorPos.Y, 0, Handle, IntPtr.Zero);
+                    if (cmd != 0)
+                    {
+                        NativeMethods.SendMessage(Handle, NativeMethods.WM_SYSCOMMAND,
+                            (IntPtr)cmd, IntPtr.Zero);
+                    }
+                    return;
+                }
+            }
+
+            base.WndProc(ref m);
+        }
     }
 }

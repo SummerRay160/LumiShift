@@ -14,6 +14,20 @@ namespace LumiShift.Infrastructure
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetSystemMenu(IntPtr hWnd, bool bRevert);
+
+        [DllImport("user32.dll")]
+        public static extern int TrackPopupMenu(IntPtr hMenu, uint uFlags, int x, int y,
+            int nReserved, IntPtr hWnd, IntPtr prcRect);
+
+        public const uint TPM_RETURNCMD = 0x0100;
+        public const uint TPM_LEFTALIGN = 0x0000;
+        public const uint TPM_TOPALIGN = 0x0000;
+
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
