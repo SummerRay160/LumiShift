@@ -9,7 +9,6 @@ namespace LumiShift.Infrastructure
         {
             GC.Collect(1, GCCollectionMode.Forced, false);
             GC.WaitForPendingFinalizers();
-            GC.Collect(1, GCCollectionMode.Forced, false);
             GC.Collect(2, GCCollectionMode.Forced, true);
             GC.WaitForPendingFinalizers();
 

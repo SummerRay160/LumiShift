@@ -73,6 +73,7 @@ namespace LumiShift
         private bool _isUpdatingBgImageUI;
 
         private bool _isUpdatingGammaSliders;
+        private bool _isUpdatingBrightness;
         private bool _isPopulatingComboBox;
         private bool _isUpdatingSchedule;
         private string _currentPresetName;
@@ -449,6 +450,7 @@ namespace LumiShift
 
         private void UpdateBrightnessUI()
         {
+            _isUpdatingBrightness = true;
             var activeDeviceIds = new HashSet<string>();
 
             foreach (var monitor in MonitorMgr.Monitors)
@@ -527,6 +529,7 @@ namespace LumiShift
 
                     tb.ValueChanged += (s, ev) =>
                     {
+                        if (_isUpdatingBrightness) return;
                         valLabel.Text = $"{tb.Value}%";
                         Settings.BrightnessPerDisplay[deviceId] = tb.Value;
                         monitor.Controller?.SetBrightness(tb.Value);
@@ -538,6 +541,8 @@ namespace LumiShift
                     _brightnessPanel.Controls.Add(row);
                 }
             }
+
+            _isUpdatingBrightness = false;
 
             var removedIds = new List<string>();
             foreach (var kvp in _brightnessRows)

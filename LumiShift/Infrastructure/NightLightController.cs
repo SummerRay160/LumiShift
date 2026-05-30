@@ -5,7 +5,7 @@ using Microsoft.Win32;
 
 namespace LumiShift.Infrastructure
 {
-    public class NightLightController
+    public class NightLightController : IDisposable
     {
         private const string RegistryPath =
             @"Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\" +
@@ -15,6 +15,7 @@ namespace LumiShift.Infrastructure
         private System.Threading.Timer _debounceTimer;
         private int _pendingStrength = -1;
         private readonly object _strengthLock = new object();
+        private bool _disposed;
 
         public event EventHandler<string> StatusChanged;
 
@@ -575,6 +576,19 @@ namespace LumiShift.Infrastructure
             }
             catch
             {
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            if (_debounceTimer != null)
+            {
+                _debounceTimer.Change(Timeout.Infinite, Timeout.Infinite);
+                _debounceTimer.Dispose();
+                _debounceTimer = null;
             }
         }
     }

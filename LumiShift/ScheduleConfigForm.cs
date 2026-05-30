@@ -27,6 +27,7 @@ namespace LumiShift
         private bool _isUpdatingToggle;
         private Timer _addDebounceTimer;
         private Bitmap _formBackground;
+        private readonly List<ToolTip> _activeToolTips = new List<ToolTip>();
 
         public List<ScheduleSegment> ResultSegments { get; private set; }
 
@@ -69,6 +70,10 @@ namespace LumiShift
             ThemeManager.ThemeChanged -= OnThemeChanged;
             _addDebounceTimer?.Dispose();
             _addDebounceTimer = null;
+
+            foreach (var tip in _activeToolTips)
+                tip.Dispose();
+            _activeToolTips.Clear();
 
             foreach (Control c in _segmentPanel.Controls)
                 c.Dispose();
@@ -339,6 +344,10 @@ namespace LumiShift
 
         private void RebuildSegmentPanel()
         {
+            foreach (var tip in _activeToolTips)
+                tip.Dispose();
+            _activeToolTips.Clear();
+
             _segmentPanel.SuspendLayout();
             foreach (Control c in _segmentPanel.Controls)
                 c.Dispose();
@@ -459,6 +468,7 @@ namespace LumiShift
                 };
 
                 var modeTip = new ToolTip();
+                _activeToolTips.Add(modeTip);
                 modeTip.SetToolTip(monitorToggle, isIndependent ? "独立模式：每个显示器可使用不同预设" : "统一模式：所有显示器使用相同预设");
                 modeTip.SetToolTip(monitorLabel, isIndependent ? "独立模式：每个显示器可使用不同预设" : "统一模式：所有显示器使用相同预设");
 

@@ -68,6 +68,10 @@ namespace LumiShift
                 bgService.ScheduleLightweightModeEntry();
 
             Application.Run(context);
+
+            _mutex.ReleaseMutex();
+            _mutex.Dispose();
+            AppIcon?.Dispose();
         }
     }
 }

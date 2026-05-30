@@ -31,6 +31,9 @@ namespace LumiShift
                     _bgService.ScheduleStateChanged -= OnScheduleStateChanged;
                 }
 
+                // Unsubscribe form-level events that may keep the form alive via queued delegates
+                try { ClientSizeChanged -= OnFormClientSizeChanged; } catch { }
+
                 if (_brightnessPanel != null)
                 {
                     foreach (Control c in _brightnessPanel.Controls)
@@ -63,15 +66,42 @@ namespace LumiShift
                 }
 
                 BackgroundImage = null;
-                _cachedBackground?.Dispose();
-                _cachedBackground = null;
-                _backgroundImage?.Dispose();
-                _backgroundImage = null;
 
-                StaticCachedBackground?.Dispose();
-                StaticCachedBackground = null;
-                StaticBackgroundImage?.Dispose();
-                StaticBackgroundImage = null;
+                // Dispose any static cached bitmaps (clear strong references that could prevent GC)
+                try
+                {
+                    if (StaticCachedBackground != null)
+                    {
+                        StaticCachedBackground.Dispose();
+                        StaticCachedBackground = null;
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    _cachedBackground?.Dispose();
+                    _cachedBackground = null;
+                }
+                catch { }
+
+                try
+                {
+                    if (StaticBackgroundImage != null)
+                    {
+                        StaticBackgroundImage.Dispose();
+                        StaticBackgroundImage = null;
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    _backgroundImage?.Dispose();
+                    _backgroundImage = null;
+                }
+                catch { }
+
                 StaticUseBackgroundImage = false;
 
                 if (components != null)

@@ -17,7 +17,20 @@ namespace LumiShift
     {
         internal UserSettings Settings { get; }
         internal GammaController GammaController { get; }
-        internal MonitorManager MonitorManager { get; }
+
+        private MonitorManager _monitorManager;
+        internal MonitorManager MonitorManager
+        {
+            get
+            {
+                if (_monitorManager == null)
+                {
+                    _monitorManager = new MonitorManager();
+                    _monitorManager.MonitorsChanged += OnMonitorsChangedInternal;
+                }
+                return _monitorManager;
+            }
+        }
 
         private Timer _scheduleTimer;
         private string _lastScheduleMode;
@@ -36,6 +49,8 @@ namespace LumiShift
         private bool _disposed;
         private bool _exiting;
         private bool _trayMenuNeedsRebuild;
+        private bool _trayMenuOpen;
+        private bool _trayClickInProgress;
 
         internal bool IsExiting => _exiting;
         internal bool ScheduleManualOverride => _scheduleManualOverride;
@@ -51,8 +66,8 @@ namespace LumiShift
         private ToolStripMenuItem _trayRestoreItem;
         private Timer _microGcTimer;
         private int _lightweightGcTickCount;
-        private const int LightweightGcMs = 30000;
-        private const int FullCompactEveryNTicks = 10;
+        private const int LightweightGcMs = 120000;
+        private const int FullCompactEveryNTicks = 30;
 
         private struct ParsedSegment
         {
@@ -77,9 +92,7 @@ namespace LumiShift
         {
             Settings = SettingsStore.LoadSettings();
             GammaController = new GammaController();
-            MonitorManager = new MonitorManager();
 
-            MonitorManager.MonitorsChanged += OnMonitorsChangedInternal;
             SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
             _lastScheduleMode = "";
@@ -116,7 +129,7 @@ namespace LumiShift
             {
                 updateTimer.Stop();
                 updateTimer.Dispose();
-                UpdateService.CheckForUpdate(silent: true);
+                _ = UpdateService.CheckForUpdateAsync(silent: true);
             };
             updateTimer.Start();
         }
@@ -141,11 +154,13 @@ namespace LumiShift
 
         private void OnTrayMenuOpening(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            _trayMenuOpen = true;
         }
 
         private void OnTrayMenuClosed(object sender, ToolStripDropDownClosedEventArgs e)
         {
-            if (_trayMenuNeedsRebuild)
+            _trayMenuOpen = false;
+            if (_trayMenuNeedsRebuild && !_trayClickInProgress)
             {
                 _trayMenuNeedsRebuild = false;
                 RebuildTrayMenu();
@@ -154,6 +169,12 @@ namespace LumiShift
 
         internal void UpdateTrayMenu()
         {
+            if (_trayMenuOpen)
+            {
+                _trayMenuNeedsRebuild = true;
+                return;
+            }
+
             if (!Form1IsOpen())
             {
                 RefreshDynamicTraySection();
@@ -165,9 +186,27 @@ namespace LumiShift
             }
         }
 
+        private void ExecuteTrayAction(Action action)
+        {
+            _trayClickInProgress = true;
+            try
+            {
+                action();
+            }
+            finally
+            {
+                _trayClickInProgress = false;
+                if (_trayMenuNeedsRebuild && !_trayMenuOpen)
+                {
+                    _trayMenuNeedsRebuild = false;
+                    RebuildTrayMenu();
+                }
+            }
+        }
+
         private void RebuildTrayMenu()
         {
-            if (_trayMenu == null) return;
+            if (_trayMenu == null || _trayMenu.IsDisposed) return;
 
             if (_trayGammaItem == null)
             {
@@ -220,7 +259,7 @@ namespace LumiShift
             {
                 Checked = Settings.GammaEnabled
             };
-            _trayGammaItem.Click += (s, e) => GammaTrayToggle();
+            _trayGammaItem.Click += (s, e) => ExecuteTrayAction(GammaTrayToggle);
             _trayMenu.Items.Add(_trayGammaItem);
 
             _trayQuickMenu = new ToolStripMenuItem("快速切换预设");
@@ -242,13 +281,13 @@ namespace LumiShift
 
             if (Settings.ScheduleEnabled && _scheduleManualOverride)
             {
-                _trayRestoreItem = new ToolStripMenuItem("恢复定时控制", null, (s, ev) =>
+                _trayRestoreItem = new ToolStripMenuItem("恢复定时控制", null, (s, ev) => ExecuteTrayAction(() =>
                 {
                     _scheduleManualOverride = false;
                     ScheduleTimer_Tick(null, null);
                     UpdateTrayMenu();
                     ScheduleStateChanged?.Invoke();
-                });
+                }));
                 _trayMenu.Items.Add(_trayRestoreItem);
             }
 
@@ -266,7 +305,7 @@ namespace LumiShift
                 bool isActive = !anyMonitorOverride && Settings.GammaEnabled && globalPresetName == p;
                 var item = new ToolStripMenuItem(p) { Checked = isActive };
                 string cp = p;
-                item.Click += (s, ev) => QuickPreset(cp);
+                item.Click += (s, ev) => ExecuteTrayAction(() => QuickPreset(cp));
                 _trayAllMonitorsItem.DropDownItems.Add(item);
             }
             if (Settings.CustomGammaPresets.Count > 0)
@@ -277,7 +316,7 @@ namespace LumiShift
                     bool isActive = !anyMonitorOverride && Settings.GammaEnabled && globalPresetName == cp.Name;
                     var item = new ToolStripMenuItem(cp.Name) { Checked = isActive };
                     string name = cp.Name;
-                    item.Click += (s, ev) => QuickPreset(name);
+                    item.Click += (s, ev) => ExecuteTrayAction(() => QuickPreset(name));
                     _trayAllMonitorsItem.DropDownItems.Add(item);
                 }
             }
@@ -299,7 +338,7 @@ namespace LumiShift
                 var item = new ToolStripMenuItem(p) { Checked = isActive };
                 string presetName = p;
                 string monDeviceId = deviceId;
-                item.Click += (s, ev) => ApplyPresetToMonitor(presetName, monDeviceId);
+                item.Click += (s, ev) => ExecuteTrayAction(() => ApplyPresetToMonitor(presetName, monDeviceId));
                 monitorItem.DropDownItems.Add(item);
             }
 
@@ -312,7 +351,7 @@ namespace LumiShift
                     var item = new ToolStripMenuItem(cp.Name) { Checked = isActive };
                     string presetName = cp.Name;
                     string monDeviceId = deviceId;
-                    item.Click += (s, ev) => ApplyPresetToMonitor(presetName, monDeviceId);
+                    item.Click += (s, ev) => ExecuteTrayAction(() => ApplyPresetToMonitor(presetName, monDeviceId));
                     monitorItem.DropDownItems.Add(item);
                 }
             }
@@ -324,17 +363,17 @@ namespace LumiShift
         {
             _trayMenu.Items.Add(new ToolStripSeparator());
 
-            var checkUpdateItem = new ToolStripMenuItem("检查更新", null, (s, ev) => UpdateService.CheckForUpdate(silent: false));
+            var checkUpdateItem = new ToolStripMenuItem("检查更新", null, (s, ev) => ExecuteTrayAction(() => _ = UpdateService.CheckForUpdateAsync(silent: false)));
             _trayMenu.Items.Add(checkUpdateItem);
 
-            var showItem = new ToolStripMenuItem("显示主界面", null, (s, ev) => ShowMainWindow());
+            var showItem = new ToolStripMenuItem("显示主界面", null, (s, ev) => ExecuteTrayAction(ShowMainWindow));
             _trayMenu.Items.Add(showItem);
 
-            var powerItem = new ToolStripMenuItem("关闭显示器", null, (s, ev) => TurnOffMonitor());
+            var powerItem = new ToolStripMenuItem("关闭显示器", null, (s, ev) => ExecuteTrayAction(TurnOffMonitor));
             _trayMenu.Items.Add(powerItem);
 
             _trayMenu.Items.Add(new ToolStripSeparator());
-            var exitItem = new ToolStripMenuItem("退出", null, (s, ev) => ExitApplication());
+            var exitItem = new ToolStripMenuItem("退出", null, (s, ev) => ExecuteTrayAction(ExitApplication));
             _trayMenu.Items.Add(exitItem);
         }
 
@@ -355,13 +394,13 @@ namespace LumiShift
 
             if (needsRestoreItem && !hasRestoreItem)
             {
-                _trayRestoreItem = new ToolStripMenuItem("恢复定时控制", null, (s, ev) =>
+                _trayRestoreItem = new ToolStripMenuItem("恢复定时控制", null, (s, ev) => ExecuteTrayAction(() =>
                 {
                     _scheduleManualOverride = false;
                     ScheduleTimer_Tick(null, null);
                     UpdateTrayMenu();
                     ScheduleStateChanged?.Invoke();
-                });
+                }));
                 int restoreIndex = _trayMenu.Items.IndexOf(_trayQuickMenu) + 1;
                 _trayMenu.Items.Insert(restoreIndex, _trayRestoreItem);
             }
@@ -993,13 +1032,22 @@ namespace LumiShift
 
         private void HandleDisplayChange()
         {
-            var removedIds = MonitorManager.RefreshMonitors();
+            if (_monitorManager == null) return;
+
+            var removedIds = _monitorManager.RefreshMonitors();
             CleanupStaleSettings(removedIds);
             if (!Form1IsOpen())
             {
-                ClearDynamicTraySection();
-                BuildDynamicTraySection();
-                ScheduleMicroGc();
+                if (_trayMenuOpen)
+                {
+                    _trayMenuNeedsRebuild = true;
+                }
+                else
+                {
+                    ClearDynamicTraySection();
+                    BuildDynamicTraySection();
+                    ScheduleMicroGc();
+                }
             }
         }
 
@@ -1078,7 +1126,8 @@ namespace LumiShift
                 _microGcTimer?.Stop();
                 _microGcTimer?.Dispose();
                 _microGcTimer = null;
-                MonitorManager.ExitLightweightMode();
+                if (_monitorManager != null)
+                    _monitorManager.ExitLightweightMode();
                 if (_scheduleTimer != null)
                     _scheduleTimer.Interval = ScheduleTimerIntervalNormal;
                 GcHelper.CollectFull();
@@ -1102,12 +1151,11 @@ namespace LumiShift
             _lightweightMode = true;
             Controls.GdiCache.Clear();
             GammaController.TrimCache();
-            MonitorManager.EnterLightweightMode();
+            if (_monitorManager != null)
+                _monitorManager.EnterLightweightMode();
             if (_scheduleTimer != null)
                 _scheduleTimer.Interval = ScheduleTimerIntervalLightweight;
             GcHelper.CollectFull();
-            GcHelper.TrimWorkingSet();
-            GC.Collect(2, GCCollectionMode.Forced, true, true);
             GcHelper.TrimWorkingSet();
 
             _lightweightGcTickCount = 0;
@@ -1131,13 +1179,12 @@ namespace LumiShift
                     GC.Collect(2, GCCollectionMode.Forced, true, true);
                 }
                 catch { }
+                GcHelper.TrimWorkingSet();
             }
-            else
+            else if (_lightweightGcTickCount % 2 == 0)
             {
                 GC.Collect(0, GCCollectionMode.Forced);
             }
-
-            GcHelper.TrimWorkingSet();
         }
 
         private void ScheduleMicroGc()
@@ -1227,10 +1274,10 @@ namespace LumiShift
                 GammaController.Dispose();
             }
 
-            if (MonitorManager != null)
+            if (_monitorManager != null)
             {
-                MonitorManager.MonitorsChanged -= OnMonitorsChangedInternal;
-                MonitorManager.Dispose();
+                _monitorManager.MonitorsChanged -= OnMonitorsChangedInternal;
+                _monitorManager.Dispose();
             }
 
             _scheduleTimer?.Dispose();
