@@ -135,7 +135,8 @@ namespace LumiShift.Services
             WriteCustomGammaPresets(w, s.CustomGammaPresets); w.WriteComma();
             WriteBrightnessDict(w, s.BrightnessPerDisplay); w.WriteComma();
             WritePerDisplayGammaDict(w, s.GammaPerDisplay); w.WriteComma();
-            WriteProp(w, "SkipVersion", s.SkipVersion ?? "");
+            WriteProp(w, "SkipVersion", s.SkipVersion ?? ""); w.WriteComma();
+            WriteProp(w, "RestoreGammaOnExit", s.RestoreGammaOnExit);
 
             w.WriteObjectEnd();
         }
@@ -339,6 +340,8 @@ namespace LumiShift.Services
             s.BackgroundImageOpacity = GetInt(root, "BackgroundImageOpacity", 30);
             s.SkipVersion = GetString(root, "SkipVersion") ?? "";
 
+            s.RestoreGammaOnExit = GetBool(root, "RestoreGammaOnExit", true);
+
             s.ScheduleSegments = DeserializeScheduleSegments(root);
             s.CustomGammaPresets = DeserializeCustomGammaPresets(root);
             s.BrightnessPerDisplay = DeserializeBrightnessDict(root);
@@ -480,6 +483,13 @@ namespace LumiShift.Services
             if (dict.TryGetValue(key, out var val))
                 return ConvertToBool(val);
             return false;
+        }
+
+        private static bool GetBool(Dictionary<string, object> dict, string key, bool defaultValue)
+        {
+            if (dict.TryGetValue(key, out var val))
+                return ConvertToBool(val);
+            return defaultValue;
         }
 
         private static bool? GetNullableBool(Dictionary<string, object> dict, string key)

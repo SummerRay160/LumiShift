@@ -26,6 +26,7 @@ namespace LumiShift
 
         private FlowLayoutPanel _brightnessPanel;
         private readonly Dictionary<string, Panel> _brightnessRows = new Dictionary<string, Panel>();
+        private readonly Dictionary<string, EventHandler> _brightnessSliderHandlers = new Dictionary<string, EventHandler>();
         private ToggleSwitch _gammaCheckBox;
         private CheckBox _gammaSimplifiedCheckBox;
         private ComboBox _gammaModeComboBox;
@@ -52,6 +53,7 @@ namespace LumiShift
         private Button _gammaScheduleConfigButton;
         private ToggleSwitch _startWithWindowsCheckBox;
         private ToggleSwitch _startMinimizedCheckBox;
+        private ToggleSwitch _restoreGammaToggle;
         private ComboBox _themeComboBox;
 
         private ToggleSwitch _eyeProtectionToggle;
@@ -71,12 +73,16 @@ namespace LumiShift
         private Image _backgroundImage;
         private Bitmap _cachedBackground;
         private bool _isUpdatingBgImageUI;
+        private bool _formDisposed;
+
+        private Timer _resizeDebounceTimer;
 
         private bool _isUpdatingGammaSliders;
         private bool _isUpdatingBrightness;
         private bool _isPopulatingComboBox;
         private bool _isUpdatingSchedule;
         private string _currentPresetName;
+        private Timer _initTimer;
 
         private static Icon LoadAppIcon()
         {
@@ -117,14 +123,15 @@ namespace LumiShift
             SubscribeBackgroundPaintEvents();
             ClientSizeChanged += OnFormClientSizeChanged;
 
-            var updateTimer = new Timer { Interval = 100 };
-            updateTimer.Tick += (s, e) =>
+            _initTimer = new Timer { Interval = 100 };
+            _initTimer.Tick += (s, e) =>
             {
-                updateTimer.Stop();
-                updateTimer.Dispose();
-                UpdateScheduleOverrideStatus();
+                _initTimer.Stop();
+                _initTimer.Dispose();
+                _initTimer = null;
+                if (!IsDisposed) UpdateScheduleOverrideStatus();
             };
-            updateTimer.Start();
+            _initTimer.Start();
         }
 
         #region Preset Helpers
@@ -527,7 +534,7 @@ namespace LumiShift
                     tb.Location = new Point(sliderX, row.Padding.Top + 26);
                     valLabel.Location = new Point(sliderX + tb.Width + 10, row.Padding.Top + 30);
 
-                    tb.ValueChanged += (s, ev) =>
+                    EventHandler handler = (s, ev) =>
                     {
                         if (_isUpdatingBrightness) return;
                         valLabel.Text = $"{tb.Value}%";
@@ -535,6 +542,8 @@ namespace LumiShift
                         monitor.Controller?.SetBrightness(tb.Value);
                         SettingsStore.SaveSettings(Settings);
                     };
+                    tb.ValueChanged += handler;
+                    _brightnessSliderHandlers[deviceId] = handler;
 
                     row.Controls.AddRange(new Control[] { nameLabel, tb, valLabel });
                     _brightnessRows[deviceId] = row;
@@ -549,6 +558,12 @@ namespace LumiShift
             {
                 if (!activeDeviceIds.Contains(kvp.Key))
                 {
+                    if (_brightnessSliderHandlers.TryGetValue(kvp.Key, out var handler))
+                    {
+                        if (kvp.Value.Controls.Count > 1 && kvp.Value.Controls[1] is ModernSlider slider)
+                            slider.ValueChanged -= handler;
+                        _brightnessSliderHandlers.Remove(kvp.Key);
+                    }
                     _brightnessPanel.Controls.Remove(kvp.Value);
                     kvp.Value.Dispose();
                     removedIds.Add(kvp.Key);
@@ -572,6 +587,13 @@ namespace LumiShift
         {
             _startWithWindowsCheckBox.Checked = Settings.StartWithWindows;
             _startMinimizedCheckBox.Checked = Settings.StartMinimized;
+            _restoreGammaToggle.Checked = Settings.RestoreGammaOnExit;
+        }
+
+        private void RestoreGammaToggle_CheckedChanged(object sender, EventArgs e)
+        {
+            Settings.RestoreGammaOnExit = _restoreGammaToggle.Checked;
+            SettingsStore.SaveSettings(Settings);
         }
 
         private void UpdateThemeUI()
@@ -672,6 +694,7 @@ namespace LumiShift
         {
             if (_backgroundImage != null)
             {
+                StaticBackgroundImage = null;
                 _backgroundImage.Dispose();
                 _backgroundImage = null;
             }
@@ -771,12 +794,16 @@ namespace LumiShift
                         {
                             if (_backgroundImage != null)
                             {
+                                StaticBackgroundImage = null;
                                 _backgroundImage.Dispose();
                                 _backgroundImage = null;
                             }
 
                             System.IO.File.Copy(ofd.FileName, destPath, true);
                         }
+
+                        if (!string.Equals(Settings.BackgroundImageFile, fileName, StringComparison.OrdinalIgnoreCase))
+                            DeleteCurrentBackgroundFile();
 
                         Settings.BackgroundImageFile = fileName;
                         Settings.UseBackgroundImage = true;
@@ -798,17 +825,35 @@ namespace LumiShift
 
         private void BgImageClearButton_Click(object sender, EventArgs e)
         {
+            DeleteCurrentBackgroundFile();
             Settings.BackgroundImageFile = "";
             Settings.UseBackgroundImage = false;
             _bgImageToggle.Checked = false;
             if (_backgroundImage != null)
             {
+                StaticBackgroundImage = null;
                 _backgroundImage.Dispose();
                 _backgroundImage = null;
             }
             UpdateBgImageUI();
             LoadBackgroundImage();
             SettingsStore.SaveSettings(Settings);
+        }
+
+        private void DeleteCurrentBackgroundFile()
+        {
+            if (string.IsNullOrEmpty(Settings.BackgroundImageFile))
+                return;
+
+            try
+            {
+                string exeDir = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+                string bgDir = System.IO.Path.Combine(exeDir, "bg_img");
+                string filePath = System.IO.Path.Combine(bgDir, Settings.BackgroundImageFile);
+                if (System.IO.File.Exists(filePath))
+                    System.IO.File.Delete(filePath);
+            }
+            catch { }
         }
 
         private void BgImageOpacitySlider_ValueChanged(object sender, EventArgs e)
@@ -927,9 +972,11 @@ namespace LumiShift
 
         private void OnThemeChanged(object sender, EventArgs e)
         {
+            if (_formDisposed || IsDisposed) return;
             if (InvokeRequired)
             {
-                Invoke(new Action(() => ApplyTheme()));
+                try { Invoke(new Action(() => { if (!_formDisposed && !IsDisposed) ApplyTheme(); })); }
+                catch { }
             }
             else
             {
@@ -1414,6 +1461,10 @@ namespace LumiShift
                     _bgService.OnScheduleSegmentChanged();
                 }
             }
+            GC.Collect(1, GCCollectionMode.Forced, false);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(2, GCCollectionMode.Forced, true);
+            GcHelper.TrimWorkingSet();
         }
 
         private void StartWithWindowsCheckBox_CheckedChanged(object sender, EventArgs e)
@@ -1439,16 +1490,21 @@ namespace LumiShift
 
         private void OnGammaStatusChanged(object sender, string status)
         {
-            if (IsDisposed) return;
+            if (_formDisposed || IsDisposed) return;
             if (InvokeRequired)
-                Invoke(new Action(() => { if (!IsDisposed) _gammaStatusLabel.Text = status; }));
+            {
+                try { Invoke(new Action(() => { if (!_formDisposed && !IsDisposed) _gammaStatusLabel.Text = status; })); }
+                catch { }
+            }
             else
+            {
                 _gammaStatusLabel.Text = status;
+            }
         }
 
         private void OnMonitorsChanged()
         {
-            if (IsDisposed) return;
+            if (_formDisposed || IsDisposed) return;
             UpdateBrightnessUI();
             UpdateGammaUI();
             _bgService.ApplyGammaToSystem();
@@ -1456,7 +1512,7 @@ namespace LumiShift
 
         private void OnScheduleStateChanged()
         {
-            if (IsDisposed) return;
+            if (_formDisposed || IsDisposed) return;
             SyncSlidersToSettings();
             UpdateScheduleOverrideStatus();
             PopulateMonitorSelector();
@@ -1464,7 +1520,7 @@ namespace LumiShift
 
         private void RefreshAllMonitorUI()
         {
-            if (IsDisposed) return;
+            if (_formDisposed || IsDisposed) return;
             UpdateBrightnessUI();
             UpdateGammaUI();
             _bgService.ApplyGammaToSystem();
@@ -1474,17 +1530,47 @@ namespace LumiShift
         {
             if (e.CloseReason == CloseReason.UserClosing && !_bgService.IsExiting)
             {
+                _formDisposed = true;
+                _resizeDebounceTimer?.Stop();
+                _initTimer?.Stop();
+                UnsubscribeEvents();
                 _bgService.OnFormClosing(this);
                 e.Cancel = true;
                 Hide();
                 Dispose();
-                StaticBackgroundOpacity = 0.3f;
-                StaticFormClientSize = default;
                 _bgService.EnterAppLightweightMode();
                 return;
             }
+            _formDisposed = true;
+            _resizeDebounceTimer?.Stop();
+            _initTimer?.Stop();
+            UnsubscribeEvents();
             _bgService.OnFormClosing(this);
             base.OnFormClosing(e);
+        }
+
+        private void UnsubscribeEvents()
+        {
+            _bgService.GammaController.StatusChanged -= OnGammaStatusChanged;
+            _bgService.MonitorsChanged -= OnMonitorsChanged;
+            _bgService.ScheduleStateChanged -= OnScheduleStateChanged;
+            ThemeManager.ThemeChanged -= OnThemeChanged;
+            ClientSizeChanged -= OnFormClientSizeChanged;
+        }
+
+        internal static void CleanupStaticFields()
+        {
+            var oldBg = StaticBackgroundImage;
+            StaticBackgroundImage = null;
+            oldBg?.Dispose();
+
+            var oldCached = StaticCachedBackground;
+            StaticCachedBackground = null;
+            oldCached?.Dispose();
+
+            StaticBackgroundOpacity = 0.3f;
+            StaticUseBackgroundImage = false;
+            StaticFormClientSize = default;
         }
 
         internal static Bitmap CreateBackgroundBitmap(Size targetSize)
@@ -1534,13 +1620,22 @@ namespace LumiShift
 
         private void RebuildBackgroundCache()
         {
-            _cachedBackground?.Dispose();
-            _cachedBackground = null;
+            if (_formDisposed) return;
 
             if (_backgroundImage == null || !Settings.UseBackgroundImage)
             {
+                _lastRebuildCacheSize = default;
+                _lastRebuildCacheOpacity = 0;
+                _cachedBackground?.Dispose();
+                _cachedBackground = null;
+
+                var oldStaticCached = StaticCachedBackground;
                 StaticCachedBackground = null;
+                oldStaticCached?.Dispose();
+
+                var oldFormBg2 = BackgroundImage;
                 BackgroundImage = null;
+                oldFormBg2?.Dispose();
                 UpdateTabPageBackgrounds();
                 return;
             }
@@ -1550,68 +1645,114 @@ namespace LumiShift
             if (formW <= 0 || formH <= 0) return;
 
             float opacity = Settings.BackgroundImageOpacity / 100f;
+            var currentSize = new Size(formW, formH);
 
-            _cachedBackground = new Bitmap(formW, formH);
-            using (var g = Graphics.FromImage(_cachedBackground))
+            if (_cachedBackground != null
+                && _lastRebuildCacheSize == currentSize
+                && Math.Abs(_lastRebuildCacheOpacity - opacity) < 0.001f)
+                return;
+
+            _lastRebuildCacheSize = currentSize;
+            _lastRebuildCacheOpacity = opacity;
+
+            _cachedBackground?.Dispose();
+            _cachedBackground = null;
+
+            Bitmap newCached = null;
+            try
             {
-                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-
-                using (var attributes = new System.Drawing.Imaging.ImageAttributes())
+                newCached = new Bitmap(formW, formH);
+                using (var g = Graphics.FromImage(newCached))
                 {
-                    var matrix = new System.Drawing.Imaging.ColorMatrix(new float[][]
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+
+                    using (var attributes = new System.Drawing.Imaging.ImageAttributes())
                     {
-                        new float[] { 1, 0, 0, 0, 0 },
-                        new float[] { 0, 1, 0, 0, 0 },
-                        new float[] { 0, 0, 1, 0, 0 },
-                        new float[] { 0, 0, 0, opacity, 0 },
-                        new float[] { 0, 0, 0, 0, 1 }
-                    });
-                    attributes.SetColorMatrix(matrix, System.Drawing.Imaging.ColorMatrixFlag.Default, System.Drawing.Imaging.ColorAdjustType.Bitmap);
+                        var matrix = new System.Drawing.Imaging.ColorMatrix(new float[][]
+                        {
+                            new float[] { 1, 0, 0, 0, 0 },
+                            new float[] { 0, 1, 0, 0, 0 },
+                            new float[] { 0, 0, 1, 0, 0 },
+                            new float[] { 0, 0, 0, opacity, 0 },
+                            new float[] { 0, 0, 0, 0, 1 }
+                        });
+                        attributes.SetColorMatrix(matrix, System.Drawing.Imaging.ColorMatrixFlag.Default, System.Drawing.Imaging.ColorAdjustType.Bitmap);
 
-                    int imgW = _backgroundImage.Width;
-                    int imgH = _backgroundImage.Height;
+                        int imgW = _backgroundImage.Width;
+                        int imgH = _backgroundImage.Height;
 
-                    float scale = Math.Max((float)formW / imgW, (float)formH / imgH);
-                    int drawW = (int)(imgW * scale);
-                    int drawH = (int)(imgH * scale);
-                    int x = (formW - drawW) / 2;
-                    int y = (formH - drawH) / 2;
+                        float scale = Math.Max((float)formW / imgW, (float)formH / imgH);
+                        int drawW = (int)(imgW * scale);
+                        int drawH = (int)(imgH * scale);
+                        int x = (formW - drawW) / 2;
+                        int y = (formH - drawH) / 2;
 
-                    g.DrawImage(_backgroundImage, new Rectangle(x, y, drawW, drawH),
-                        0, 0, imgW, imgH, GraphicsUnit.Pixel, attributes);
+                        g.DrawImage(_backgroundImage, new Rectangle(x, y, drawW, drawH),
+                            0, 0, imgW, imgH, GraphicsUnit.Pixel, attributes);
+                    }
                 }
             }
+            catch
+            {
+                newCached?.Dispose();
+                return;
+            }
 
+            _cachedBackground = newCached;
+
+            var oldStaticCachedBg = StaticCachedBackground;
             StaticCachedBackground = _cachedBackground;
+            if (oldStaticCachedBg != null && oldStaticCachedBg != _cachedBackground)
+                oldStaticCachedBg.Dispose();
+
+            var oldFormBg = BackgroundImage;
             BackgroundImage = _cachedBackground;
+            oldFormBg?.Dispose();
             BackgroundImageLayout = ImageLayout.Center;
             UpdateTabPageBackgrounds();
         }
 
+        private Bitmap _sharedTabPageBg;
+        private float _lastTabPageBgOpacity;
+        private Size _lastTabPageBgSize;
+        private Size _lastRebuildCacheSize;
+        private float _lastRebuildCacheOpacity;
+
         private void UpdateTabPageBackgrounds()
         {
+            if (_formDisposed || _tabControl == null) return;
+            if (_cachedBackground == null || _backgroundImage == null)
+            {
+                foreach (TabPage page in _tabControl.TabPages)
+                {
+                    var oldBg = page.BackgroundImage;
+                    page.BackgroundImage = null;
+                    oldBg?.Dispose();
+                }
+                _sharedTabPageBg?.Dispose();
+                _sharedTabPageBg = null;
+                return;
+            }
+
             int tabHeaderHeight = _tabControl.ItemSize.Height + 5;
             int controlW = _tabControl.ClientSize.Width;
             int controlH = Math.Max(_tabControl.ClientSize.Height - tabHeaderHeight, 100);
 
-            foreach (TabPage page in _tabControl.TabPages)
+            float opacity = Settings.BackgroundImageOpacity / 100f;
+            Size tabPageSize = new Size(controlW, controlH);
+
+            if (_sharedTabPageBg == null ||
+                Math.Abs(_lastTabPageBgOpacity - opacity) > 0.001f ||
+                _lastTabPageBgSize != tabPageSize)
             {
-                var oldBg = page.BackgroundImage;
-                page.BackgroundImage = null;
-                oldBg?.Dispose();
+                _sharedTabPageBg?.Dispose();
+                _sharedTabPageBg = null;
 
-                if (_cachedBackground == null || _backgroundImage == null) continue;
+                int pageW = Math.Max(tabPageSize.Width, 1);
+                int pageH = Math.Max(tabPageSize.Height, 1);
 
-                int pageW = Math.Max(page.ClientSize.Width, controlW);
-                int pageH = Math.Max(page.ClientSize.Height, controlH);
-
-                if (pageW <= 0 || pageH <= 0)
-                    continue;
-
-                float opacity = Settings.BackgroundImageOpacity / 100f;
-
-                var bmp = new Bitmap(pageW, pageH);
-                using (var g = Graphics.FromImage(bmp))
+                _sharedTabPageBg = new Bitmap(pageW, pageH);
+                using (var g = Graphics.FromImage(_sharedTabPageBg))
                 {
                     g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
 
@@ -1641,7 +1782,16 @@ namespace LumiShift
                     }
                 }
 
-                page.BackgroundImage = bmp;
+                _lastTabPageBgOpacity = opacity;
+                _lastTabPageBgSize = tabPageSize;
+            }
+
+            foreach (TabPage page in _tabControl.TabPages)
+            {
+                var oldBg = page.BackgroundImage;
+                if (oldBg != null && oldBg != _sharedTabPageBg)
+                    oldBg.Dispose();
+                page.BackgroundImage = _sharedTabPageBg;
                 page.BackgroundImageLayout = ImageLayout.None;
             }
         }
@@ -1652,13 +1802,26 @@ namespace LumiShift
 
         private void OnFormClientSizeChanged(object sender, EventArgs e)
         {
-            SyncBackgroundStaticFields();
-            RebuildBackgroundCache();
-            InvalidateBackgroundDisplay();
+            if (_formDisposed) return;
+            if (_resizeDebounceTimer == null)
+            {
+                _resizeDebounceTimer = new Timer { Interval = 150 };
+                _resizeDebounceTimer.Tick += (s, ev) =>
+                {
+                    _resizeDebounceTimer.Stop();
+                    if (_formDisposed || IsDisposed) return;
+                    SyncBackgroundStaticFields();
+                    RebuildBackgroundCache();
+                    InvalidateBackgroundDisplay();
+                };
+            }
+            _resizeDebounceTimer.Stop();
+            _resizeDebounceTimer.Start();
         }
 
         private void InvalidateBackgroundDisplay()
         {
+            if (_formDisposed || IsDisposed) return;
             Invalidate();
             foreach (TabPage page in _tabControl.TabPages)
             {
@@ -1669,6 +1832,7 @@ namespace LumiShift
 
         private void SyncBackgroundStaticFields()
         {
+            if (_formDisposed) return;
             StaticBackgroundImage = _backgroundImage;
             StaticBackgroundOpacity = Settings.BackgroundImageOpacity / 100f;
             StaticUseBackgroundImage = Settings.UseBackgroundImage;
@@ -1693,21 +1857,17 @@ namespace LumiShift
 
             BeginInvoke(new Action(() =>
             {
-                if (_backgroundImage != null && Settings.UseBackgroundImage)
-                {
-                    SyncBackgroundStaticFields();
-                    RebuildBackgroundCache();
-                    InvalidateBackgroundDisplay();
+                if (IsDisposed || _backgroundImage == null || !Settings.UseBackgroundImage) return;
+                SyncBackgroundStaticFields();
+                RebuildBackgroundCache();
+                InvalidateBackgroundDisplay();
 
-                    BeginInvoke(new Action(() =>
-                    {
-                        if (_backgroundImage != null && Settings.UseBackgroundImage)
-                        {
-                            UpdateTabPageBackgrounds();
-                            InvalidateBackgroundDisplay();
-                        }
-                    }));
-                }
+                BeginInvoke(new Action(() =>
+                {
+                    if (IsDisposed || _backgroundImage == null || !Settings.UseBackgroundImage) return;
+                    UpdateTabPageBackgrounds();
+                    InvalidateBackgroundDisplay();
+                }));
             }));
         }
 

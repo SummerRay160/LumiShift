@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
 using LumiShift.Infrastructure;
+using LumiShift.Resources;
 using LumiShift.Services;
 
 namespace LumiShift
@@ -67,11 +68,20 @@ namespace LumiShift
             else
                 bgService.ScheduleLightweightModeEntry();
 
-            Application.Run(context);
-
-            _mutex.ReleaseMutex();
-            _mutex.Dispose();
-            AppIcon?.Dispose();
+            try
+            {
+                Application.Run(context);
+            }
+            finally
+            {
+                try { bgService.Dispose(); } catch { }
+                try { Controls.GdiCache.Clear(); } catch { }
+                try { Typography.Cleanup(); } catch { }
+                try { UpdateService.Shutdown(); } catch { }
+                try { _mutex.ReleaseMutex(); } catch { }
+                try { _mutex.Dispose(); } catch { }
+                try { AppIcon?.Dispose(); } catch { }
+            }
         }
     }
 }

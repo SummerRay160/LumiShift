@@ -71,5 +71,7 @@ namespace LumiShift.Models
         public Dictionary<string, PerDisplayGamma> GammaPerDisplay { get; set; } = new Dictionary<string, PerDisplayGamma>();
 
         public string SkipVersion { get; set; } = "";
+
+        public bool RestoreGammaOnExit { get; set; } = true;
     }
 }

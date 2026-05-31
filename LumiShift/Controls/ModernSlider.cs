@@ -91,6 +91,68 @@ namespace LumiShift.Controls
         private static readonly Color ShadowColor = Color.FromArgb(30, 0, 0, 0);
         private static readonly Color HighlightColor = Color.FromArgb(50, 255, 255, 255);
 
+        private GraphicsPath _trackPath;
+        private GraphicsPath _fillPath;
+        private float _lastTrackX, _lastTrackY, _lastTrackW, _lastTrackH;
+        private float _lastFillX, _lastFillY, _lastFillW, _lastFillH;
+
+        private GraphicsPath GetTrackPath(float x, float y, float w, float h, float r)
+        {
+            if (_trackPath != null &&
+                Math.Abs(_lastTrackX - x) < 0.5f &&
+                Math.Abs(_lastTrackY - y) < 0.5f &&
+                Math.Abs(_lastTrackW - w) < 0.5f &&
+                Math.Abs(_lastTrackH - h) < 0.5f)
+                return _trackPath;
+
+            _trackPath?.Dispose();
+            _trackPath = CreateRoundRect(x, y, w, h, r);
+            _lastTrackX = x;
+            _lastTrackY = y;
+            _lastTrackW = w;
+            _lastTrackH = h;
+            return _trackPath;
+        }
+
+        private GraphicsPath GetFillPath(float x, float y, float w, float h, float r)
+        {
+            if (_fillPath != null &&
+                Math.Abs(_lastFillX - x) < 0.5f &&
+                Math.Abs(_lastFillY - y) < 0.5f &&
+                Math.Abs(_lastFillW - w) < 0.5f &&
+                Math.Abs(_lastFillH - h) < 0.5f)
+                return _fillPath;
+
+            _fillPath?.Dispose();
+            _fillPath = CreateRoundRect(x, y, w, h, r);
+            _lastFillX = x;
+            _lastFillY = y;
+            _lastFillW = w;
+            _lastFillH = h;
+            return _fillPath;
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            _trackPath?.Dispose();
+            _trackPath = null;
+            _fillPath?.Dispose();
+            _fillPath = null;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _trackPath?.Dispose();
+                _trackPath = null;
+                _fillPath?.Dispose();
+                _fillPath = null;
+            }
+            base.Dispose(disposing);
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
@@ -109,18 +171,12 @@ namespace LumiShift.Controls
                 ? (_hoveredThumb ? Colors.BrandGlow : Colors.Brand)
                 : Colors.TextDisabled;
 
-            using (var trackPath = CreateRoundRect(8f, trackY, Width - 16f, trackH, trackH / 2f))
-            {
-                g.FillPath(GdiCache.GetBrush(inactiveTrack), trackPath);
-            }
+            g.FillPath(GdiCache.GetBrush(inactiveTrack), GetTrackPath(8f, trackY, Width - 16f, trackH, trackH / 2f));
 
             float filledW = thumbCenter - 8f;
             if (filledW > 0 && isActive)
             {
-                using (var fillPath = CreateRoundRect(8f, trackY, filledW, trackH, trackH / 2f))
-                {
-                    g.FillPath(GdiCache.GetBrush(activeTrack), fillPath);
-                }
+                g.FillPath(GdiCache.GetBrush(activeTrack), GetFillPath(8f, trackY, filledW, trackH, trackH / 2f));
             }
 
             float thumbX = thumbCenter - thumbSize / 2f;

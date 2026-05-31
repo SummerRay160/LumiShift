@@ -123,5 +123,11 @@ namespace LumiShift.Infrastructure
 
         public const uint DISPLAY_DEVICE_ATTACHED_TO_DESKTOP = 0x1;
         public const uint DISPLAY_DEVICE_PRIMARY_DEVICE = 0x4;
+
+        public const uint GR_GDIOBJECTS = 0;
+        public const uint GR_USEROBJECTS = 1;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern int GetGuiResources(IntPtr hProcess, uint uiFlags);
     }
 }

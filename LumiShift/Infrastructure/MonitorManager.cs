@@ -18,7 +18,7 @@ namespace LumiShift.Infrastructure
     public class MonitorManager : IDisposable
     {
         private List<MonitorInfo> _monitors;
-        private readonly List<DdcBrightnessController> _ddcControllers;
+        private readonly List<IBrightnessController> _allControllers;
 
         public IReadOnlyList<MonitorInfo> Monitors => _monitors.AsReadOnly();
 
@@ -27,7 +27,7 @@ namespace LumiShift.Infrastructure
         public MonitorManager()
         {
             _monitors = new List<MonitorInfo>();
-            _ddcControllers = new List<DdcBrightnessController>();
+            _allControllers = new List<IBrightnessController>();
             RefreshMonitors();
         }
 
@@ -35,11 +35,12 @@ namespace LumiShift.Infrastructure
         {
             var oldDeviceIds = new HashSet<string>(_monitors.Select(m => m.DeviceId));
 
-            foreach (var ddc in _ddcControllers)
+            foreach (var ctrl in _allControllers)
             {
-                ddc.Dispose();
+                try { (ctrl as IDisposable)?.Dispose(); }
+                catch { }
             }
-            _ddcControllers.Clear();
+            _allControllers.Clear();
             _monitors.Clear();
 
             var wmiMonitors = GetWmiMonitorDetails();
@@ -80,9 +81,10 @@ namespace LumiShift.Infrastructure
                 if (controller == null)
                 {
                     var ddcController = new DdcBrightnessController(screen, deviceId ?? screen.DeviceName, displayName);
-                    _ddcControllers.Add(ddcController);
                     controller = ddcController;
                 }
+
+                _allControllers.Add(controller);
 
                 _monitors.Add(new MonitorInfo
                 {
@@ -341,40 +343,46 @@ namespace LumiShift.Infrastructure
 
             var wmiMonitors = new List<(string instanceName, string deviceId, bool isBuiltIn, string monitorName, string manufacturerCode)>();
 
+            ManagementObjectCollection collection = null;
             try
             {
                 using (var searcher = new ManagementObjectSearcher("root\\WMI",
                     "SELECT * FROM WmiMonitorBasicDisplayParams"))
+                using (collection = searcher.Get())
                 {
-                    using (var collection = searcher.Get())
+                    foreach (ManagementObject mo in collection)
                     {
-                        foreach (ManagementObject mo in collection)
+                        try
                         {
-                            using (mo)
+                            string instanceName = mo["InstanceName"]?.ToString();
+                            if (string.IsNullOrEmpty(instanceName))
+                                continue;
+
+                            string deviceId = instanceName;
+                            if (instanceName.Contains("\\"))
+                                deviceId = instanceName.Substring(0, instanceName.IndexOf('\\'));
+
+                            string edidDeviceId = null;
+                            string monitorName = null;
+                            string manufacturerCode = null;
+
+                            var edidInfo = GetEdidDetails(instanceName);
+                            if (edidInfo != null)
                             {
-                                string instanceName = mo["InstanceName"]?.ToString();
-                                if (string.IsNullOrEmpty(instanceName))
-                                    continue;
-
-                                string deviceId = instanceName;
-                                if (instanceName.Contains("\\"))
-                                    deviceId = instanceName.Substring(0, instanceName.IndexOf('\\'));
-
-                                string edidDeviceId = null;
-                                string monitorName = null;
-                                string manufacturerCode = null;
-
-                                var edidInfo = GetEdidDetails(instanceName);
-                                if (edidInfo != null)
-                                {
-                                    edidDeviceId = edidInfo.Value.deviceId;
-                                    monitorName = edidInfo.Value.monitorName;
-                                    manufacturerCode = edidInfo.Value.manufacturerCode;
-                                }
-
-                                bool isBuiltIn = IsBuiltInDisplay(instanceName, connectionParams);
-                                wmiMonitors.Add((instanceName, edidDeviceId ?? deviceId, isBuiltIn, monitorName, manufacturerCode));
+                                edidDeviceId = edidInfo.Value.deviceId;
+                                monitorName = edidInfo.Value.monitorName;
+                                manufacturerCode = edidInfo.Value.manufacturerCode;
                             }
+
+                            bool isBuiltIn = IsBuiltInDisplay(instanceName, connectionParams);
+                            wmiMonitors.Add((instanceName, edidDeviceId ?? deviceId, isBuiltIn, monitorName, manufacturerCode));
+                        }
+                        catch
+                        {
+                        }
+                        finally
+                        {
+                            mo?.Dispose();
                         }
                     }
                 }
@@ -449,12 +457,12 @@ namespace LumiShift.Infrastructure
                     using (var searcher = new ManagementObjectSearcher(
                         "SELECT * FROM Win32_DesktopMonitor"))
                     {
-                        using (var collection = searcher.Get())
+                        using (var desktopCollection = searcher.Get())
                         {
                             var desktopMonitors = new List<(string pnpId, bool isBuiltIn)>();
-                            foreach (ManagementObject mo in collection)
+                            foreach (ManagementObject mo in desktopCollection)
                             {
-                                using (mo)
+                                try
                                 {
                                     string pnpId = mo["PNPDeviceID"]?.ToString();
                                     if (!string.IsNullOrEmpty(pnpId))
@@ -462,6 +470,13 @@ namespace LumiShift.Infrastructure
                                         bool isBuiltIn = IsBuiltInDeviceId(pnpId);
                                         desktopMonitors.Add((pnpId, isBuiltIn));
                                     }
+                                }
+                                catch
+                                {
+                                }
+                                finally
+                                {
+                                    mo.Dispose();
                                 }
                             }
 
@@ -511,7 +526,7 @@ namespace LumiShift.Infrastructure
                     {
                         foreach (ManagementObject mo in collection)
                         {
-                            using (mo)
+                            try
                             {
                                 byte[] edidData = mo["EDID"] as byte[];
                                 if (edidData != null && edidData.Length >= 128)
@@ -523,6 +538,10 @@ namespace LumiShift.Infrastructure
 
                                     return (deviceId, monitorName, manufacturerCode);
                                 }
+                            }
+                            finally
+                            {
+                                mo.Dispose();
                             }
                         }
                     }
@@ -541,18 +560,23 @@ namespace LumiShift.Infrastructure
             {
                 using (var searcher = new ManagementObjectSearcher("root\\WMI",
                     "SELECT * FROM WmiMonitorConnectionParams"))
+                using (var collection = searcher.Get())
                 {
-                    using (var collection = searcher.Get())
+                    foreach (ManagementObject mo in collection)
                     {
-                        foreach (ManagementObject mo in collection)
+                        try
                         {
-                            using (mo)
-                            {
-                                string instanceName = mo["InstanceName"]?.ToString();
-                                if (string.IsNullOrEmpty(instanceName)) continue;
-                                uint videoTech = (uint)mo["VideoOutputTechnology"];
-                                result[instanceName] = videoTech;
-                            }
+                            string instanceName = mo["InstanceName"]?.ToString();
+                            if (string.IsNullOrEmpty(instanceName)) continue;
+                            uint videoTech = (uint)mo["VideoOutputTechnology"];
+                            result[instanceName] = videoTech;
+                        }
+                        catch
+                        {
+                        }
+                        finally
+                        {
+                            mo.Dispose();
                         }
                     }
                 }
@@ -597,10 +621,14 @@ namespace LumiShift.Infrastructure
                     {
                         foreach (ManagementObject mo in collection)
                         {
-                            using (mo)
+                            try
                             {
                                 string monitorType = mo["MonitorType"]?.ToString() ?? "";
                                 return monitorType.Contains("LCD") || monitorType.Contains("Internal");
+                            }
+                            finally
+                            {
+                                mo.Dispose();
                             }
                         }
                     }
@@ -623,13 +651,17 @@ namespace LumiShift.Infrastructure
                     {
                         foreach (ManagementObject mo in collection)
                         {
-                            using (mo)
+                            try
                             {
                                 string instanceName = mo["InstanceName"]?.ToString();
                                 if (!string.IsNullOrEmpty(instanceName) && instanceName.StartsWith(deviceId))
                                 {
                                     return instanceName;
                                 }
+                            }
+                            finally
+                            {
+                                mo.Dispose();
                             }
                         }
                     }
@@ -676,11 +708,12 @@ namespace LumiShift.Infrastructure
 
         public void EnterLightweightMode()
         {
-            foreach (var ddc in _ddcControllers)
+            foreach (var ctrl in _allControllers)
             {
-                ddc.Dispose();
+                try { (ctrl as IDisposable)?.Dispose(); }
+                catch { }
             }
-            _ddcControllers.Clear();
+            _allControllers.Clear();
             _monitors.Clear();
         }
 
@@ -691,11 +724,14 @@ namespace LumiShift.Infrastructure
 
         public void Dispose()
         {
-            foreach (var ddc in _ddcControllers)
+            foreach (var ctrl in _allControllers)
             {
-                ddc.Dispose();
+                try { (ctrl as IDisposable)?.Dispose(); }
+                catch { }
             }
-            _ddcControllers.Clear();
+            _allControllers.Clear();
+            _monitors.Clear();
+            MonitorsChanged = null;
         }
     }
 }

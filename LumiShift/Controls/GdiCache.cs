@@ -119,5 +119,31 @@ namespace LumiShift.Controls
                 _pens.Clear();
             }
         }
+
+        public static void Trim(int keepBrushCount = 16, int keepPenCount = 16)
+        {
+            lock (_cacheLock)
+            {
+                if (_brushes.Count > keepBrushCount)
+                {
+                    var sorted = _brushes.OrderByDescending(kvp => kvp.Value.LastAccess).ToList();
+                    for (int i = keepBrushCount; i < sorted.Count; i++)
+                    {
+                        sorted[i].Value.Brush.Dispose();
+                        _brushes.Remove(sorted[i].Key);
+                    }
+                }
+
+                if (_pens.Count > keepPenCount)
+                {
+                    var sorted = _pens.OrderByDescending(kvp => kvp.Value.LastAccess).ToList();
+                    for (int i = keepPenCount; i < sorted.Count; i++)
+                    {
+                        sorted[i].Value.Pen.Dispose();
+                        _pens.Remove(sorted[i].Key);
+                    }
+                }
+            }
+        }
     }
 }

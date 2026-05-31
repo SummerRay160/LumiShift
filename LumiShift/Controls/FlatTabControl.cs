@@ -21,7 +21,7 @@ namespace LumiShift.Controls
             Appearance = TabAppearance.Normal;
         }
 
-        private static readonly StringFormat CenteredStringFormat = new StringFormat
+        private readonly StringFormat _centeredStringFormat = new StringFormat
         {
             Alignment = StringAlignment.Center,
             LineAlignment = StringAlignment.Center
@@ -46,7 +46,7 @@ namespace LumiShift.Controls
             }
 
             string text = TabPages[e.Index].Text;
-            g.DrawString(text, Font, GdiCache.GetBrush(selected ? Colors.TextPrimary : Colors.TextSecondary), tabBounds, CenteredStringFormat);
+            g.DrawString(text, Font, GdiCache.GetBrush(selected ? Colors.TextPrimary : Colors.TextSecondary), tabBounds, _centeredStringFormat);
 
             if (e.Index == TabCount - 1)
             {
@@ -58,7 +58,7 @@ namespace LumiShift.Controls
         {
             if (disposing)
             {
-                CenteredStringFormat?.Dispose();
+                _centeredStringFormat?.Dispose();
             }
             base.Dispose(disposing);
         }

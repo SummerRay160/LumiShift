@@ -70,49 +70,6 @@ namespace LumiShift.Controls
         private static readonly Color ThumbEdgeColor = Color.FromArgb(30, 0, 0, 0);
         private static readonly Color GlowColorStatic = Color.FromArgb(40, 0, 0, 0);
 
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            var g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-
-            float h = Height;
-            float w = Width;
-            float trackH = 12f;
-            float trackY = (h - trackH) / 2f;
-            float trackX = 2f;
-            float trackW = w - 4f;
-
-            float thumbSize = 18f;
-            float thumbY = (h - thumbSize) / 2f;
-            float thumbMin = 2f;
-            float thumbMax = w - thumbSize - 2f;
-            float thumbX = thumbMin + (thumbMax - thumbMin) * _animProgress;
-
-            Color trackColor = _checked ? Colors.Green : Colors.BorderLight;
-
-            using (var trackPath = CreateRoundRect(trackX, trackY, trackW, trackH, trackH / 2f))
-            {
-                g.FillPath(GdiCache.GetBrush(trackColor), trackPath);
-            }
-
-            if (_checked)
-            {
-                using (var glowPath = CreateRoundRect(trackX, trackY, trackW, trackH, trackH / 2f))
-                {
-                    g.FillPath(GdiCache.GetBrush(Color.FromArgb(40, Colors.Green)), glowPath);
-                    var big = new RectangleF(trackX - 2, trackY - 2, trackW + 4, trackH + 4);
-                    using (var gp = CreateRoundRect(big.X, big.Y, big.Width, big.Height, big.Height / 2f))
-                    {
-                        g.FillPath(GdiCache.GetBrush(Color.FromArgb(40, Colors.Green)), gp);
-                    }
-                }
-            }
-
-            g.FillEllipse(GdiCache.GetBrush(_hovered ? Colors.BrandHover : Color.White), thumbX, thumbY, thumbSize, thumbSize);
-
-            g.DrawEllipse(GdiCache.GetPen(ThumbEdgeColor), thumbX, thumbY, thumbSize, thumbSize);
-        }
-
         protected override void OnMouseClick(MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Left)
@@ -134,14 +91,94 @@ namespace LumiShift.Controls
             base.OnMouseLeave(e);
         }
 
+        private GraphicsPath _trackPathCache;
+        private GraphicsPath _glowPathCache;
+        private GraphicsPath _bigGlowPathCache;
+        private float _lastTrackX, _lastTrackY, _lastTrackW, _lastTrackH;
+
+        private GraphicsPath GetTrackPath(float x, float y, float w, float h, float r)
+        {
+            if (_trackPathCache != null &&
+                Math.Abs(_lastTrackX - x) < 0.5f &&
+                Math.Abs(_lastTrackY - y) < 0.5f &&
+                Math.Abs(_lastTrackW - w) < 0.5f &&
+                Math.Abs(_lastTrackH - h) < 0.5f)
+                return _trackPathCache;
+
+            _trackPathCache?.Dispose();
+            _glowPathCache?.Dispose();
+            _bigGlowPathCache?.Dispose();
+            _trackPathCache = CreateRoundRect(x, y, w, h, r);
+            _glowPathCache = CreateRoundRect(x, y, w, h, r);
+            var big = new RectangleF(x - 2, y - 2, w + 4, h + 4);
+            _bigGlowPathCache = CreateRoundRect(big.X, big.Y, big.Width, big.Height, big.Height / 2f);
+            _lastTrackX = x;
+            _lastTrackY = y;
+            _lastTrackW = w;
+            _lastTrackH = h;
+            return _trackPathCache;
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            _trackPathCache?.Dispose();
+            _trackPathCache = null;
+            _glowPathCache?.Dispose();
+            _glowPathCache = null;
+            _bigGlowPathCache?.Dispose();
+            _bigGlowPathCache = null;
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
+                _animTimer?.Stop();
                 _animTimer?.Dispose();
                 _animTimer = null;
+                _trackPathCache?.Dispose();
+                _trackPathCache = null;
+                _glowPathCache?.Dispose();
+                _glowPathCache = null;
+                _bigGlowPathCache?.Dispose();
+                _bigGlowPathCache = null;
             }
             base.Dispose(disposing);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            float h = Height;
+            float w = Width;
+            float trackH = 12f;
+            float trackY = (h - trackH) / 2f;
+            float trackX = 2f;
+            float trackW = w - 4f;
+
+            float thumbSize = 18f;
+            float thumbY = (h - thumbSize) / 2f;
+            float thumbMin = 2f;
+            float thumbMax = w - thumbSize - 2f;
+            float thumbX = thumbMin + (thumbMax - thumbMin) * _animProgress;
+
+            Color trackColor = _checked ? Colors.Green : Colors.BorderLight;
+
+            var trackPath = GetTrackPath(trackX, trackY, trackW, trackH, trackH / 2f);
+            g.FillPath(GdiCache.GetBrush(trackColor), trackPath);
+
+            if (_checked)
+            {
+                g.FillPath(GdiCache.GetBrush(Color.FromArgb(40, Colors.Green)), _glowPathCache);
+                g.FillPath(GdiCache.GetBrush(Color.FromArgb(40, Colors.Green)), _bigGlowPathCache);
+            }
+
+            g.FillEllipse(GdiCache.GetBrush(_hovered ? Colors.BrandHover : Color.White), thumbX, thumbY, thumbSize, thumbSize);
+
+            g.DrawEllipse(GdiCache.GetPen(ThumbEdgeColor), thumbX, thumbY, thumbSize, thumbSize);
         }
 
         private static GraphicsPath CreateRoundRect(float x, float y, float w, float h, float r)

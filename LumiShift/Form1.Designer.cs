@@ -17,95 +17,139 @@ namespace LumiShift
         private TabPage _brightnessTab;
         private TabPage _settingsTab;
         private TabPage _eyeProtectionTab;
+        private bool _designerDisposed;
 
         protected override void Dispose(bool disposing)
         {
+            if (_designerDisposed) return;
+            _designerDisposed = true;
+            GC.SuppressFinalize(this);
             if (disposing)
             {
-                ThemeManager.ThemeChanged -= OnThemeChanged;
-
-                if (_bgService != null)
+                try
                 {
-                    _bgService.GammaController.StatusChanged -= OnGammaStatusChanged;
-                    _bgService.MonitorsChanged -= OnMonitorsChanged;
-                    _bgService.ScheduleStateChanged -= OnScheduleStateChanged;
-                }
+                    _initTimer?.Stop();
+                    _initTimer?.Dispose();
+                    _initTimer = null;
 
-                // Unsubscribe form-level events that may keep the form alive via queued delegates
-                try { ClientSizeChanged -= OnFormClientSizeChanged; } catch { }
+                    _resizeDebounceTimer?.Stop();
+                    _resizeDebounceTimer?.Dispose();
+                    _resizeDebounceTimer = null;
 
-                if (_brightnessPanel != null)
-                {
-                    foreach (Control c in _brightnessPanel.Controls)
-                        c.Dispose();
-                    _brightnessPanel.Controls.Clear();
-                }
+                    ThemeManager.ThemeChanged -= OnThemeChanged;
+                    ClientSizeChanged -= OnFormClientSizeChanged;
 
-                _brightnessRows?.Clear();
-
-                if (_tabControl != null)
-                {
-                    foreach (TabPage page in _tabControl.TabPages)
+                    if (_bgService != null)
                     {
-                        foreach (Control c in page.Controls)
+                        _bgService.GammaController.StatusChanged -= OnGammaStatusChanged;
+                        _bgService.MonitorsChanged -= OnMonitorsChanged;
+                        _bgService.ScheduleStateChanged -= OnScheduleStateChanged;
+                    }
+
+                    if (_tabControl != null)
+                        _tabControl.TabSelected -= OnTabSelected;
+
+                    if (_brightnessPanel != null)
+                    {
+                        foreach (Control c in _brightnessPanel.Controls)
                         {
-                            if (c is Panel panel)
+                            if (c is Panel row && row.Tag is string deviceId)
                             {
-                                foreach (Control child in panel.Controls)
+                                if (_brightnessSliderHandlers.TryGetValue(deviceId, out var handler))
+                                {
+                                    if (row.Controls.Count > 1 && row.Controls[1] is ModernSlider slider)
+                                        slider.ValueChanged -= handler;
+                                    _brightnessSliderHandlers.Remove(deviceId);
+                                }
+                            }
+                            if (c is Panel row2)
+                            {
+                                foreach (Control child in row2.Controls)
                                     child.Dispose();
-                                panel.Controls.Clear();
+                                row2.Controls.Clear();
                             }
                             c.Dispose();
                         }
-                        page.Controls.Clear();
-
-                        var pageBg = page.BackgroundImage;
-                        page.BackgroundImage = null;
-                        pageBg?.Dispose();
+                        _brightnessPanel.Controls.Clear();
                     }
-                }
 
-                BackgroundImage = null;
+                    _brightnessSliderHandlers?.Clear();
+                    _brightnessRows?.Clear();
 
-                // Dispose any static cached bitmaps (clear strong references that could prevent GC)
-                try
-                {
-                    if (StaticCachedBackground != null)
+                    if (_tabControl != null)
                     {
-                        StaticCachedBackground.Dispose();
-                        StaticCachedBackground = null;
+                        foreach (TabPage page in _tabControl.TabPages)
+                        {
+                            var pageBg = page.BackgroundImage;
+                            page.BackgroundImage = null;
+                            if (pageBg != null && pageBg != _sharedTabPageBg)
+                                pageBg.Dispose();
+
+                            foreach (Control c in page.Controls)
+                            {
+                                if (c is Panel panel)
+                                {
+                                    foreach (Control child in panel.Controls)
+                                        child.Dispose();
+                                    panel.Controls.Clear();
+                                }
+                                else if (c is FlowLayoutPanel flowPanel)
+                                {
+                                    foreach (Control child in flowPanel.Controls)
+                                    {
+                                        if (child is Panel flowRow)
+                                        {
+                                            foreach (Control grandChild in flowRow.Controls)
+                                                grandChild.Dispose();
+                                            flowRow.Controls.Clear();
+                                        }
+                                        child.Dispose();
+                                    }
+                                    flowPanel.Controls.Clear();
+                                }
+                                c.Dispose();
+                            }
+                            page.Controls.Clear();
+                        }
                     }
-                }
-                catch { }
 
-                try
-                {
-                    _cachedBackground?.Dispose();
-                    _cachedBackground = null;
-                }
-                catch { }
+                    _sharedTabPageBg?.Dispose();
+                    _sharedTabPageBg = null;
 
-                try
-                {
-                    if (StaticBackgroundImage != null)
+                    var oldFormBg = BackgroundImage;
+                    BackgroundImage = null;
+                    oldFormBg?.Dispose();
+
+                    CleanupStaticFields();
+
+                    if (_cachedBackground != null)
                     {
-                        StaticBackgroundImage.Dispose();
-                        StaticBackgroundImage = null;
+                        if (!ReferenceEquals(_cachedBackground, StaticCachedBackground))
+                            _cachedBackground.Dispose();
+                        _cachedBackground = null;
                     }
-                }
-                catch { }
 
-                try
+                    if (_backgroundImage != null)
+                    {
+                        if (!ReferenceEquals(_backgroundImage, StaticBackgroundImage))
+                            _backgroundImage.Dispose();
+                        _backgroundImage = null;
+                    }
+
+                    if (components != null)
+                        components.Dispose();
+                }
+                catch
                 {
                     _backgroundImage?.Dispose();
                     _backgroundImage = null;
+                    _cachedBackground?.Dispose();
+                    _cachedBackground = null;
+                    _sharedTabPageBg?.Dispose();
+                    _sharedTabPageBg = null;
+                    StaticBackgroundImage = null;
+                    StaticCachedBackground = null;
                 }
-                catch { }
-
-                StaticUseBackgroundImage = false;
-
-                if (components != null)
-                    components.Dispose();
             }
             base.Dispose(disposing);
         }
@@ -689,6 +733,30 @@ namespace LumiShift
 
             sy += 34;
 
+            var restoreGammaSep = new Label
+            {
+                Location = new Point(Spacing.LG, sy),
+                Width = 340,
+                Height = 1,
+                Font = Typography.Caption
+            };
+            SetLabelTheme(restoreGammaSep, 'b');
+            sy += 10;
+
+            _restoreGammaToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = true };
+            _restoreGammaToggle.CheckedChanged += RestoreGammaToggle_CheckedChanged;
+
+            var restoreGammaLbl = new Label
+            {
+                Text = "退出时还原系统Gamma",
+                Location = new Point(Spacing.LG + 48, sy + 1),
+                AutoSize = true,
+                Font = Typography.Body
+            };
+            SetLabelTheme(restoreGammaLbl, 'p');
+
+            sy += 34;
+
             var sepLine4 = new Label
             {
                 Location = new Point(Spacing.LG, sy),
@@ -733,6 +801,7 @@ namespace LumiShift
                 sepLine3,
                 _startWithWindowsCheckBox, startupLbl,
                 _startMinimizedCheckBox, minimizedLbl,
+                restoreGammaSep, _restoreGammaToggle, restoreGammaLbl,
                 sepLine4,
                 versionLabel,
                 githubLink

@@ -28,6 +28,7 @@ namespace LumiShift
         private Timer _addDebounceTimer;
         private Bitmap _formBackground;
         private readonly List<ToolTip> _activeToolTips = new List<ToolTip>();
+        private bool _cleanedUp;
 
         public List<ScheduleSegment> ResultSegments { get; private set; }
 
@@ -67,17 +68,40 @@ namespace LumiShift
 
         private void OnFormClosed(object sender, FormClosedEventArgs e)
         {
+            CleanupResources();
+        }
+
+        private void CleanupResources()
+        {
+            if (_cleanedUp) return;
+            _cleanedUp = true;
+
             ThemeManager.ThemeChanged -= OnThemeChanged;
+            _addDebounceTimer?.Stop();
             _addDebounceTimer?.Dispose();
             _addDebounceTimer = null;
 
             foreach (var tip in _activeToolTips)
+            {
+                tip.RemoveAll();
                 tip.Dispose();
+            }
             _activeToolTips.Clear();
 
-            foreach (Control c in _segmentPanel.Controls)
-                c.Dispose();
-            _segmentPanel.Controls.Clear();
+            if (_segmentPanel != null)
+            {
+                foreach (Control c in _segmentPanel.Controls)
+                {
+                    if (c is Panel row)
+                    {
+                        foreach (Control child in row.Controls)
+                            child.Dispose();
+                        row.Controls.Clear();
+                    }
+                    c.Dispose();
+                }
+                _segmentPanel.Controls.Clear();
+            }
 
             foreach (Control c in Controls)
             {
@@ -86,8 +110,23 @@ namespace LumiShift
             }
             Controls.Clear();
 
+            _segmentPanel?.Dispose();
+            _segmentPanel = null;
+
             _formBackground?.Dispose();
             _formBackground = null;
+
+            _segments?.Clear();
+            _segments = null;
+            _customPresets = null;
+            ResultSegments = null;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                CleanupResources();
+            base.Dispose(disposing);
         }
 
         private void ApplyBackgroundImage()
@@ -115,10 +154,19 @@ namespace LumiShift
 
         private void OnThemeChanged(object sender, EventArgs e)
         {
-            BackColor = Colors.Background;
-            ApplyBackgroundImage();
-            Invalidate(true);
-            RebuildSegmentPanel();
+            if (IsDisposed) return;
+            if (InvokeRequired)
+            {
+                try { Invoke(new Action(() => { if (!IsDisposed) { BackColor = Colors.Background; ApplyBackgroundImage(); Invalidate(true); RebuildSegmentPanel(); } })); }
+                catch { }
+            }
+            else
+            {
+                BackColor = Colors.Background;
+                ApplyBackgroundImage();
+                Invalidate(true);
+                RebuildSegmentPanel();
+            }
         }
 
         private void BuildUI()
@@ -345,12 +393,16 @@ namespace LumiShift
         private void RebuildSegmentPanel()
         {
             foreach (var tip in _activeToolTips)
+                tip.RemoveAll();
+            foreach (var tip in _activeToolTips)
                 tip.Dispose();
             _activeToolTips.Clear();
 
             _segmentPanel.SuspendLayout();
             foreach (Control c in _segmentPanel.Controls)
-                c.Dispose();
+            {
+                DisposeControlTree(c);
+            }
             _segmentPanel.Controls.Clear();
 
             for (int i = 0; i < _segments.Count; i++)
@@ -366,7 +418,7 @@ namespace LumiShift
             _segmentPanel.SuspendLayout();
             var oldRow = _segmentPanel.Controls[index];
             _segmentPanel.Controls.RemoveAt(index);
-            oldRow.Dispose();
+            DisposeControlTree(oldRow);
             _segmentPanel.Controls.Add(CreateSegmentRow(index));
             _segmentPanel.Controls.SetChildIndex(_segmentPanel.Controls[_segmentPanel.Controls.Count - 1], index);
             _segmentPanel.ResumeLayout(true);
@@ -544,12 +596,12 @@ namespace LumiShift
                         _segmentPanel.SuspendLayout();
                         var oldRow = _segmentPanel.Controls[idx];
                         _segmentPanel.Controls.RemoveAt(idx);
-                        oldRow.Dispose();
+                        DisposeControlTree(oldRow);
                         for (int j = idx; j < _segments.Count; j++)
                         {
                             var existingRow = _segmentPanel.Controls[j];
                             _segmentPanel.Controls.RemoveAt(j);
-                            existingRow.Dispose();
+                            DisposeControlTree(existingRow);
                             _segmentPanel.Controls.Add(CreateSegmentRow(j));
                             _segmentPanel.Controls.SetChildIndex(_segmentPanel.Controls[_segmentPanel.Controls.Count - 1], j);
                         }
@@ -597,12 +649,12 @@ namespace LumiShift
                         _segmentPanel.SuspendLayout();
                         var oldRow = _segmentPanel.Controls[idx];
                         _segmentPanel.Controls.RemoveAt(idx);
-                        oldRow.Dispose();
+                        DisposeControlTree(oldRow);
                         for (int j = idx; j < _segments.Count; j++)
                         {
                             var existingRow = _segmentPanel.Controls[j];
                             _segmentPanel.Controls.RemoveAt(j);
-                            existingRow.Dispose();
+                            DisposeControlTree(existingRow);
                             _segmentPanel.Controls.Add(CreateSegmentRow(j));
                             _segmentPanel.Controls.SetChildIndex(_segmentPanel.Controls[_segmentPanel.Controls.Count - 1], j);
                         }
@@ -701,6 +753,17 @@ namespace LumiShift
                 cb.SelectedItem = selected;
             else
                 cb.SelectedIndex = 0;
+        }
+
+        private static void DisposeControlTree(Control control)
+        {
+            if (control is Panel panel)
+            {
+                foreach (Control child in panel.Controls)
+                    DisposeControlTree(child);
+                panel.Controls.Clear();
+            }
+            control.Dispose();
         }
     }
 }

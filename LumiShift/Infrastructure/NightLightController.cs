@@ -12,9 +12,10 @@ namespace LumiShift.Infrastructure
             @"default$windows.data.bluelightreduction.bluelightreductionstate\" +
             @"windows.data.bluelightreduction.bluelightreductionstate";
 
-        private System.Threading.Timer _debounceTimer;
+        private volatile System.Threading.Timer _debounceTimer;
         private int _pendingStrength = -1;
         private readonly object _strengthLock = new object();
+        private readonly object _timerLock = new object();
         private bool _disposed;
 
         public event EventHandler<string> StatusChanged;
@@ -219,12 +220,13 @@ namespace LumiShift.Infrastructure
                 _pendingStrength = strength;
             }
 
-            if (_debounceTimer == null)
+            lock (_timerLock)
             {
-                _debounceTimer = new System.Threading.Timer(OnDebounceTimerElapsed);
-            }
+                if (_debounceTimer == null)
+                    _debounceTimer = new System.Threading.Timer(OnDebounceTimerElapsed);
 
-            _debounceTimer.Change(300, Timeout.Infinite);
+                _debounceTimer.Change(300, Timeout.Infinite);
+            }
         }
 
         public static void OpenNightLightSettings()
@@ -240,6 +242,7 @@ namespace LumiShift.Infrastructure
 
         private void OnDebounceTimerElapsed(object state)
         {
+            if (_disposed) return;
             try
             {
                 int strength;
@@ -583,13 +586,24 @@ namespace LumiShift.Infrastructure
         {
             if (_disposed) return;
             _disposed = true;
+            GC.SuppressFinalize(this);
 
-            if (_debounceTimer != null)
+            lock (_strengthLock)
             {
-                _debounceTimer.Change(Timeout.Infinite, Timeout.Infinite);
-                _debounceTimer.Dispose();
-                _debounceTimer = null;
+                _pendingStrength = -1;
             }
+
+            lock (_timerLock)
+            {
+                if (_debounceTimer != null)
+                {
+                    _debounceTimer.Change(Timeout.Infinite, Timeout.Infinite);
+                    _debounceTimer.Dispose();
+                    _debounceTimer = null;
+                }
+            }
+
+            StatusChanged = null;
         }
     }
 }

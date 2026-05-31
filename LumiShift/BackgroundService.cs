@@ -4,12 +4,14 @@ using System.Drawing;
 using System.Linq;
 using System.Reflection;
 using System.Runtime;
+using System.Threading;
 using System.Windows.Forms;
 using LumiShift.Infrastructure;
 using LumiShift.Models;
 using LumiShift.Resources;
 using LumiShift.Services;
 using Microsoft.Win32;
+using Timer = System.Windows.Forms.Timer;
 
 namespace LumiShift
 {
@@ -43,7 +45,7 @@ namespace LumiShift
         private int _preScheduleMasterBrightness;
         private NotifyIcon _trayIcon;
         private ContextMenuStrip _trayMenu;
-        private Form1 _mainForm;
+        private WeakReference<Form1> _mainFormRef;
         private MessageWindow _messageWindow;
         private System.ComponentModel.IContainer _components;
         private bool _disposed;
@@ -51,11 +53,36 @@ namespace LumiShift
         private bool _trayMenuNeedsRebuild;
         private bool _trayMenuOpen;
         private bool _trayClickInProgress;
+        private System.Threading.CancellationTokenSource _updateCheckCts;
+        private Timer _updateCheckTimer;
+        private Timer _lightweightEntryTimer;
+        private Timer _healthCheckTimer;
 
         internal bool IsExiting => _exiting;
         internal bool ScheduleManualOverride => _scheduleManualOverride;
         private bool _lightweightMode;
         private Timer _lightweightGcTimer;
+
+        private Form1 MainForm
+        {
+            get
+            {
+                if (_mainFormRef == null) return null;
+                if (!_mainFormRef.TryGetTarget(out var form) || form == null || form.IsDisposed)
+                {
+                    _mainFormRef = null;
+                    return null;
+                }
+                return form;
+            }
+            set
+            {
+                if (value == null)
+                    _mainFormRef = null;
+                else
+                    _mainFormRef = new WeakReference<Form1>(value);
+            }
+        }
 
         private const int ScheduleTimerIntervalNormal = 30000;
         private const int ScheduleTimerIntervalLightweight = 120000;
@@ -65,9 +92,11 @@ namespace LumiShift
         private ToolStripMenuItem _trayAllMonitorsItem;
         private ToolStripMenuItem _trayRestoreItem;
         private Timer _microGcTimer;
+        private Timer _menuCleanupTimer;
         private int _lightweightGcTickCount;
-        private const int LightweightGcMs = 120000;
-        private const int FullCompactEveryNTicks = 30;
+        private const int LightweightGcMs = 30000;
+        private const int FullCompactEveryNTicks = 20;
+        private const int Gen1CollectEveryNTicks = 5;
 
         private struct ParsedSegment
         {
@@ -124,14 +153,19 @@ namespace LumiShift
 
             _messageWindow = new MessageWindow(this);
 
-            var updateTimer = new Timer { Interval = 3000 };
-            updateTimer.Tick += (s, e) =>
+            _updateCheckTimer = new Timer { Interval = 3000 };
+            _updateCheckTimer.Tick += (s, e) =>
             {
-                updateTimer.Stop();
-                updateTimer.Dispose();
-                _ = UpdateService.CheckForUpdateAsync(silent: true);
+                _updateCheckTimer.Stop();
+                _updateCheckTimer.Dispose();
+                _updateCheckTimer = null;
+                RunUpdateCheck(silent: true);
             };
-            updateTimer.Start();
+            _updateCheckTimer.Start();
+
+            _healthCheckTimer = new Timer { Interval = 5 * 60 * 1000 };
+            _healthCheckTimer.Tick += HealthCheckTimer_Tick;
+            _healthCheckTimer.Start();
         }
 
         #region Tray Icon
@@ -149,7 +183,7 @@ namespace LumiShift
             _trayMenu.Opening += OnTrayMenuOpening;
             _trayMenu.Closed += OnTrayMenuClosed;
             _trayIcon.ContextMenuStrip = _trayMenu;
-            _trayIcon.DoubleClick += (s, e) => ShowMainWindow();
+            _trayIcon.DoubleClick += OnTrayIconDoubleClick;
         }
 
         private void OnTrayMenuOpening(object sender, System.ComponentModel.CancelEventArgs e)
@@ -165,6 +199,12 @@ namespace LumiShift
                 _trayMenuNeedsRebuild = false;
                 RebuildTrayMenu();
             }
+            ScheduleMenuCleanupGc();
+        }
+
+        private void OnTrayIconDoubleClick(object sender, EventArgs e)
+        {
+            ShowMainWindow();
         }
 
         internal void UpdateTrayMenu()
@@ -225,6 +265,8 @@ namespace LumiShift
                 ClearDynamicTraySection();
                 BuildDynamicTraySection();
             }
+
+            ScheduleMenuCleanupGc();
         }
 
         private void ClearDynamicTraySection()
@@ -245,7 +287,7 @@ namespace LumiShift
             if (_trayGammaItem != null)
             {
                 _trayMenu.Items.Remove(_trayGammaItem);
-                _trayGammaItem.Dispose();
+                RecursiveDispose(_trayGammaItem);
                 _trayGammaItem = null;
             }
         }
@@ -363,7 +405,7 @@ namespace LumiShift
         {
             _trayMenu.Items.Add(new ToolStripSeparator());
 
-            var checkUpdateItem = new ToolStripMenuItem("检查更新", null, (s, ev) => ExecuteTrayAction(() => _ = UpdateService.CheckForUpdateAsync(silent: false)));
+            var checkUpdateItem = new ToolStripMenuItem("检查更新", null, (s, ev) => ExecuteTrayAction(() => RunUpdateCheck()));
             _trayMenu.Items.Add(checkUpdateItem);
 
             var showItem = new ToolStripMenuItem("显示主界面", null, (s, ev) => ExecuteTrayAction(ShowMainWindow));
@@ -407,7 +449,7 @@ namespace LumiShift
             else if (!needsRestoreItem && hasRestoreItem)
             {
                 _trayMenu.Items.Remove(_trayRestoreItem);
-                _trayRestoreItem.Dispose();
+                RecursiveDispose(_trayRestoreItem);
                 _trayRestoreItem = null;
             }
 
@@ -443,6 +485,7 @@ namespace LumiShift
                     RecursiveDispose(subItem);
                 }
             }
+
             item.Dispose();
         }
 
@@ -793,6 +836,12 @@ namespace LumiShift
                 }
 
                 ApplyGammaToSystem();
+                if (_lightweightMode)
+                {
+                    _lastScheduleMode = targetMode;
+                    ApplyScheduleMonitorPresets(targetSegment);
+                    return;
+                }
                 SettingsStore.SaveSettings(Settings);
                 UpdateTrayMenu();
                 _lastScheduleMode = targetMode;
@@ -957,7 +1006,8 @@ namespace LumiShift
         internal void SetScheduleEnabled(bool enabled)
         {
             Settings.ScheduleEnabled = enabled;
-            _scheduleTimer.Enabled = enabled;
+            if (_scheduleTimer != null)
+                _scheduleTimer.Enabled = enabled;
             if (enabled)
             {
                 _preScheduleGammaEnabled = Settings.GammaEnabled;
@@ -1006,10 +1056,19 @@ namespace LumiShift
 
         private void OnDisplaySettingsChanged(object sender, EventArgs e)
         {
-            if (Form1IsOpen() && _mainForm.InvokeRequired)
+            if (_exiting) return;
+            var form = MainForm;
+            if (form != null && !form.IsDisposed)
             {
-                try { _mainForm.Invoke(new Action(() => HandleDisplayChange())); }
-                catch { HandleDisplayChange(); }
+                if (form.InvokeRequired)
+                {
+                    try { form.Invoke(new Action(() => { if (!_exiting && !form.IsDisposed) HandleDisplayChange(); })); }
+                    catch { HandleDisplayChange(); }
+                }
+                else
+                {
+                    HandleDisplayChange();
+                }
             }
             else
             {
@@ -1019,10 +1078,19 @@ namespace LumiShift
 
         private void OnMonitorsChangedInternal()
         {
-            if (Form1IsOpen() && _mainForm.InvokeRequired)
+            if (_exiting) return;
+            var form = MainForm;
+            if (form != null && !form.IsDisposed)
             {
-                try { _mainForm.Invoke(new Action(() => MonitorsChanged?.Invoke())); }
-                catch { MonitorsChanged?.Invoke(); }
+                if (form.InvokeRequired)
+                {
+                    try { form.Invoke(new Action(() => { if (!_exiting && !form.IsDisposed) MonitorsChanged?.Invoke(); })); }
+                    catch { MonitorsChanged?.Invoke(); }
+                }
+                else
+                {
+                    MonitorsChanged?.Invoke();
+                }
             }
             else
             {
@@ -1036,6 +1104,11 @@ namespace LumiShift
 
             var removedIds = _monitorManager.RefreshMonitors();
             CleanupStaleSettings(removedIds);
+            if (_lightweightMode)
+            {
+                _trayMenuNeedsRebuild = true;
+                return;
+            }
             if (!Form1IsOpen())
             {
                 if (_trayMenuOpen)
@@ -1103,19 +1176,24 @@ namespace LumiShift
 
         private bool Form1IsOpen()
         {
-            return _mainForm != null && !_mainForm.IsDisposed;
+            return MainForm != null;
         }
 
         public void ShowMainWindow()
         {
             if (Form1IsOpen())
             {
-                if (_mainForm.InvokeRequired)
-                    _mainForm.Invoke(new Action(() => ActivateExistingForm()));
+                var form = MainForm;
+                if (form.InvokeRequired)
+                    form.Invoke(new Action(() => ActivateExistingForm()));
                 else
                     ActivateExistingForm();
                 return;
             }
+
+            _lightweightEntryTimer?.Stop();
+            _lightweightEntryTimer?.Dispose();
+            _lightweightEntryTimer = null;
 
             if (_lightweightMode)
             {
@@ -1130,18 +1208,20 @@ namespace LumiShift
                     _monitorManager.ExitLightweightMode();
                 if (_scheduleTimer != null)
                     _scheduleTimer.Interval = ScheduleTimerIntervalNormal;
+                if (_messageWindow == null)
+                    _messageWindow = new MessageWindow(this);
                 GcHelper.CollectFull();
             }
 
-            _mainForm = new Form1(this);
-            _mainForm.Show();
+            MainForm = new Form1(this);
+            MainForm.Show();
         }
 
         internal void OnFormClosing(Form1 form)
         {
-            if (_mainForm == form)
+            if (MainForm == form)
             {
-                _mainForm = null;
+                MainForm = null;
             }
         }
 
@@ -1149,13 +1229,24 @@ namespace LumiShift
         {
             if (_lightweightMode) return;
             _lightweightMode = true;
+            Form1.CleanupStaticFields();
             Controls.GdiCache.Clear();
             GammaController.TrimCache();
+            _parsedSegments = null;
+            _parsedSegmentsHash = 0;
+            _messageWindow?.Dispose();
+            _messageWindow = null;
             if (_monitorManager != null)
                 _monitorManager.EnterLightweightMode();
             if (_scheduleTimer != null)
                 _scheduleTimer.Interval = ScheduleTimerIntervalLightweight;
             GcHelper.CollectFull();
+            try
+            {
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(2, GCCollectionMode.Forced, true, true);
+            }
+            catch { }
             GcHelper.TrimWorkingSet();
 
             _lightweightGcTickCount = 0;
@@ -1170,21 +1261,42 @@ namespace LumiShift
 
             if (_lightweightGcTickCount % FullCompactEveryNTicks == 0)
             {
-                GC.Collect(1, GCCollectionMode.Forced, false);
-                GC.WaitForPendingFinalizers();
-                GC.Collect(2, GCCollectionMode.Forced, true);
-                try
-                {
-                    GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-                    GC.Collect(2, GCCollectionMode.Forced, true, true);
-                }
-                catch { }
+                GcHelper.CollectFull();
                 GcHelper.TrimWorkingSet();
             }
-            else if (_lightweightGcTickCount % 2 == 0)
+            else if (_lightweightGcTickCount % Gen1CollectEveryNTicks == 0)
+            {
+                GC.Collect(1, GCCollectionMode.Forced, false);
+                GC.WaitForPendingFinalizers();
+                GcHelper.TrimWorkingSet();
+            }
+            else
             {
                 GC.Collect(0, GCCollectionMode.Forced);
             }
+
+            if (_lightweightGcTickCount % 3 == 0)
+            {
+                GcHelper.RecordSampleAndCheck();
+            }
+        }
+
+        private void HealthCheckTimer_Tick(object sender, EventArgs e)
+        {
+            if (_exiting || _lightweightMode) return;
+
+            try
+            {
+                GcHelper.RecordSampleAndCheck();
+
+                if (GcHelper.DetectLeakSuspect())
+                {
+                    GcHelper.CollectFull();
+                    GcHelper.TrimWorkingSet();
+                    GcHelper.LogDiagnosticReport();
+                }
+            }
+            catch { }
         }
 
         private void ScheduleMicroGc()
@@ -1203,29 +1315,105 @@ namespace LumiShift
             _microGcTimer.Start();
         }
 
+        private void ScheduleMenuCleanupGc()
+        {
+            if (_menuCleanupTimer != null) return;
+
+            _menuCleanupTimer = new Timer { Interval = 1500 };
+            _menuCleanupTimer.Tick += (s, e) =>
+            {
+                _menuCleanupTimer?.Stop();
+                _menuCleanupTimer?.Dispose();
+                _menuCleanupTimer = null;
+                GcHelper.CollectFull();
+                GcHelper.TrimWorkingSet();
+            };
+            _menuCleanupTimer.Start();
+        }
+
         internal void ScheduleLightweightModeEntry()
         {
-            var delayTimer = new Timer { Interval = 5000 };
-            delayTimer.Tick += (s, e) =>
+            if (_lightweightEntryTimer != null)
             {
-                delayTimer.Stop();
-                delayTimer.Dispose();
+                _lightweightEntryTimer.Stop();
+                _lightweightEntryTimer.Dispose();
+            }
+            _lightweightEntryTimer = new Timer { Interval = 5000 };
+            _lightweightEntryTimer.Tick += (s, e) =>
+            {
+                _lightweightEntryTimer.Stop();
+                _lightweightEntryTimer.Dispose();
+                _lightweightEntryTimer = null;
                 EnterAppLightweightMode();
             };
-            delayTimer.Start();
+            _lightweightEntryTimer.Start();
         }
 
         private void ActivateExistingForm()
         {
-            _mainForm.Show();
-            _mainForm.WindowState = FormWindowState.Normal;
-            _mainForm.ShowInTaskbar = true;
-            _mainForm.Activate();
+            try
+            {
+                var form = MainForm;
+                if (form == null)
+                {
+                    ShowMainWindow();
+                    return;
+                }
+                form.Show();
+                form.WindowState = FormWindowState.Normal;
+                form.ShowInTaskbar = true;
+                form.Activate();
+            }
+            catch
+            {
+                MainForm = null;
+                ShowMainWindow();
+            }
         }
 
         #endregion
 
         #region Other
+
+        private async void RunUpdateCheck(bool silent = false)
+        {
+            CancelUpdateCheck();
+            var cts = new System.Threading.CancellationTokenSource();
+            var oldCts = Interlocked.Exchange(ref _updateCheckCts, cts);
+            if (oldCts != null)
+            {
+                try { oldCts.Cancel(); } catch { }
+                oldCts.Dispose();
+            }
+            var token = cts.Token;
+            try
+            {
+                await UpdateService.CheckForUpdateAsync(silent, token);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception)
+            {
+            }
+            finally
+            {
+                if (Interlocked.CompareExchange(ref _updateCheckCts, null, cts) == cts)
+                {
+                    cts.Dispose();
+                }
+            }
+        }
+
+        private void CancelUpdateCheck()
+        {
+            var cts = Interlocked.Exchange(ref _updateCheckCts, null);
+            if (cts != null)
+            {
+                try { cts.Cancel(); } catch { }
+                cts.Dispose();
+            }
+        }
 
         internal void UpdateStartupRegistry()
         {
@@ -1265,56 +1453,160 @@ namespace LumiShift
             if (_exiting) return;
             _exiting = true;
 
-            ThemeManager.StopWatchingSystemTheme();
-            SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+            CancelUpdateCheck();
+
+            try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
+            try { ThemeManager.StopWatchingSystemTheme(); } catch { }
+
+            try { _updateCheckTimer?.Stop(); _updateCheckTimer?.Dispose(); _updateCheckTimer = null; } catch { }
+
+            try { _lightweightEntryTimer?.Stop(); _lightweightEntryTimer?.Dispose(); _lightweightEntryTimer = null; } catch { }
+
+            try { _healthCheckTimer?.Stop(); _healthCheckTimer?.Dispose(); _healthCheckTimer = null; } catch { }
+
+            if (Form1IsOpen())
+            {
+                var form = MainForm;
+                try { form.Close(); }
+                catch { try { form.Dispose(); } catch { } }
+                MainForm = null;
+            }
 
             if (GammaController != null)
             {
-                GammaController.ResetGamma(Screen.AllScreens);
-                GammaController.Dispose();
+                try
+                {
+                    if (Settings.RestoreGammaOnExit)
+                    {
+                        GammaController.ResetGamma(Screen.AllScreens);
+                    }
+                }
+                catch { }
+                try { GammaController.Dispose(); } catch { }
             }
 
             if (_monitorManager != null)
             {
-                _monitorManager.MonitorsChanged -= OnMonitorsChangedInternal;
-                _monitorManager.Dispose();
+                try { _monitorManager.MonitorsChanged -= OnMonitorsChangedInternal; } catch { }
+                try { _monitorManager.Dispose(); } catch { }
             }
 
-            _scheduleTimer?.Dispose();
+            try { _scheduleTimer?.Stop(); _scheduleTimer?.Dispose(); _scheduleTimer = null; } catch { }
 
-            _lightweightGcTimer?.Stop();
-            _lightweightGcTimer?.Dispose();
-            _lightweightGcTimer = null;
+            try { _lightweightGcTimer?.Stop(); _lightweightGcTimer?.Dispose(); _lightweightGcTimer = null; } catch { }
 
-            _microGcTimer?.Stop();
-            _microGcTimer?.Dispose();
-            _microGcTimer = null;
+            try { _microGcTimer?.Stop(); _microGcTimer?.Dispose(); _microGcTimer = null; } catch { }
 
-            Controls.GdiCache.Clear();
+            try { _menuCleanupTimer?.Stop(); _menuCleanupTimer?.Dispose(); _menuCleanupTimer = null; } catch { }
 
-            if (Form1IsOpen())
-            {
-                try { _mainForm.Close(); }
-                catch { }
-                _mainForm = null;
-            }
+            _parsedSegments = null;
+            _parsedSegmentsHash = 0;
+            MonitorsChanged = null;
+            ScheduleStateChanged = null;
 
-            _messageWindow?.DestroyHandle();
-            _messageWindow = null;
+            try { Controls.GdiCache.Clear(); } catch { }
+
+            try { Form1.CleanupStaticFields(); } catch { }
+
+            try { _messageWindow?.Dispose(); _messageWindow = null; } catch { }
 
             if (_trayMenu != null)
             {
-                var items = new ToolStripItem[_trayMenu.Items.Count];
-                _trayMenu.Items.CopyTo(items, 0);
-                foreach (ToolStripItem item in items)
-                    item.Dispose();
-                _trayMenu.Items.Clear();
+                try
+                {
+                    var items = new ToolStripItem[_trayMenu.Items.Count];
+                    _trayMenu.Items.CopyTo(items, 0);
+                    foreach (ToolStripItem item in items)
+                        RecursiveDispose(item);
+                    _trayMenu.Items.Clear();
+                    _trayMenu.Opening -= OnTrayMenuOpening;
+                    _trayMenu.Closed -= OnTrayMenuClosed;
+                    _trayMenu.Dispose();
+                    _trayMenu = null;
+                }
+                catch
+                {
+                    try { _trayMenu?.Dispose(); } catch { }
+                }
             }
 
-            _trayIcon?.Dispose();
-            _components?.Dispose();
+            if (_trayIcon != null)
+            {
+                try
+                {
+                    _trayIcon.DoubleClick -= OnTrayIconDoubleClick;
+                    _trayIcon.Icon = null;
+                    _trayIcon.Visible = false;
+                    _trayIcon.Dispose();
+                }
+                catch { }
+            }
+
+            try { _components?.Dispose(); } catch { }
+            try { GcHelper.DisposeCachedProcess(); } catch { }
 
             Application.Exit();
+        }
+
+        private void PerformEmergencyCleanup()
+        {
+            try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
+            try { ThemeManager.StopWatchingSystemTheme(); } catch { }
+
+            CancelUpdateCheck();
+
+            try { _updateCheckTimer?.Stop(); _updateCheckTimer?.Dispose(); } catch { }
+            try { _lightweightEntryTimer?.Stop(); _lightweightEntryTimer?.Dispose(); } catch { }
+            try { _healthCheckTimer?.Stop(); _healthCheckTimer?.Dispose(); } catch { }
+
+            if (GammaController != null)
+            {
+                try { GammaController.Dispose(); } catch { }
+            }
+
+            if (_monitorManager != null)
+            {
+                try { _monitorManager.MonitorsChanged -= OnMonitorsChangedInternal; } catch { }
+                try { _monitorManager.Dispose(); } catch { }
+            }
+
+            try { _scheduleTimer?.Stop(); _scheduleTimer?.Dispose(); } catch { }
+            try { _lightweightGcTimer?.Stop(); _lightweightGcTimer?.Dispose(); } catch { }
+            try { _microGcTimer?.Stop(); _microGcTimer?.Dispose(); } catch { }
+            try { _menuCleanupTimer?.Stop(); _menuCleanupTimer?.Dispose(); } catch { }
+
+            _parsedSegments = null;
+            _parsedSegmentsHash = 0;
+            MonitorsChanged = null;
+            ScheduleStateChanged = null;
+
+            try { Controls.GdiCache.Clear(); } catch { }
+            try { Form1.CleanupStaticFields(); } catch { }
+            try { _messageWindow?.Dispose(); } catch { }
+
+            if (_trayMenu != null)
+            {
+                try
+                {
+                    _trayMenu.Opening -= OnTrayMenuOpening;
+                    _trayMenu.Closed -= OnTrayMenuClosed;
+                    _trayMenu.Dispose();
+                }
+                catch { }
+            }
+
+            if (_trayIcon != null)
+            {
+                try
+                {
+                    _trayIcon.DoubleClick -= OnTrayIconDoubleClick;
+                    _trayIcon.Dispose();
+                }
+                catch { }
+            }
+
+            try { _components?.Dispose(); } catch { }
+            try { GcHelper.DisposeCachedProcess(); } catch { }
         }
 
         #endregion
@@ -1323,11 +1615,11 @@ namespace LumiShift
 
         private class MessageWindow : NativeWindow
         {
-            private readonly BackgroundService _service;
+            private readonly WeakReference<BackgroundService> _serviceRef;
 
             public MessageWindow(BackgroundService service)
             {
-                _service = service;
+                _serviceRef = new WeakReference<BackgroundService>(service);
                 CreateHandle(new CreateParams
                 {
                     Caption = "LumiShiftMessageWindow",
@@ -1335,11 +1627,18 @@ namespace LumiShift
                 });
             }
 
+            public void Dispose()
+            {
+                if (Handle != IntPtr.Zero)
+                    DestroyHandle();
+            }
+
             protected override void WndProc(ref Message m)
             {
                 if (m.Msg == NativeMethods.WM_SHOW_LUMISHIFT)
                 {
-                    _service.ShowMainWindow();
+                    if (_serviceRef.TryGetTarget(out var service) && !service._exiting)
+                        service.ShowMainWindow();
                     return;
                 }
                 base.WndProc(ref m);
@@ -1352,7 +1651,12 @@ namespace LumiShift
         {
             if (_disposed) return;
             _disposed = true;
-            ExitApplication();
+            GC.SuppressFinalize(this);
+            try { ExitApplication(); }
+            catch
+            {
+                PerformEmergencyCleanup();
+            }
         }
     }
 }
