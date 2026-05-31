@@ -4,13 +4,6 @@ using System.Drawing;
 
 namespace LumiShift.Resources
 {
-    public enum ThemeMode
-    {
-        Dark,
-        Light,
-        Auto
-    }
-
     public class ThemeColors
     {
         public Color Background { get; set; }
@@ -33,154 +26,14 @@ namespace LumiShift.Resources
 
     public static class ThemeManager
     {
-        private static ThemeMode _currentMode = ThemeMode.Auto;
         private static ThemeColors _active;
-        private static bool _watching;
-        private static bool _lastSystemDark;
-        private static readonly List<WeakReference> _changedHandlers = new List<WeakReference>();
 
-        public static event EventHandler ThemeChanged
-        {
-            add
-            {
-                if (value == null) return;
-                lock (_changedHandlers)
-                {
-                    _changedHandlers.RemoveAll(wr => !wr.IsAlive);
-                    _changedHandlers.Add(new WeakReference(value));
-                }
-            }
-            remove
-            {
-                if (value == null) return;
-                lock (_changedHandlers)
-                {
-                    _changedHandlers.RemoveAll(wr => !wr.IsAlive || (object)wr.Target == (object)value);
-                }
-            }
-        }
-
-        private static void RaiseThemeChanged()
-        {
-            List<EventHandler> handlers;
-            lock (_changedHandlers)
-            {
-                handlers = new List<EventHandler>(_changedHandlers.Count);
-                var dead = new List<int>();
-                for (int i = 0; i < _changedHandlers.Count; i++)
-                {
-                    if (_changedHandlers[i].Target is EventHandler h && _changedHandlers[i].IsAlive)
-                        handlers.Add(h);
-                    else
-                        dead.Add(i);
-                }
-                for (int i = dead.Count - 1; i >= 0; i--)
-                    _changedHandlers.RemoveAt(dead[i]);
-            }
-            foreach (var h in handlers)
-            {
-                try { h(null, EventArgs.Empty); }
-                catch { }
-            }
-        }
-
-        public static ThemeMode CurrentMode
-        {
-            get => _currentMode;
-            set
-            {
-                if (_currentMode != value)
-                {
-                    _currentMode = value;
-                    UpdateActiveTheme();
-                    RaiseThemeChanged();
-                }
-            }
-        }
-
-        public static ThemeColors Active => _active ?? (_active = GetDarkTheme());
-
-        public static bool IsSystemDarkMode()
-        {
-            try
-            {
-                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                    @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
-                {
-                    if (key != null)
-                    {
-                        object val = key.GetValue("AppsUseLightTheme");
-                        if (val is int i)
-                            return i == 0;
-                    }
-                }
-            }
-            catch { }
-            return true;
-        }
-
-        public static void StartWatchingSystemTheme()
-        {
-            if (_watching) return;
-            _watching = true;
-            _lastSystemDark = IsSystemDarkMode();
-            Microsoft.Win32.SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
-        }
-
-        public static void StopWatchingSystemTheme()
-        {
-            if (!_watching) return;
-            _watching = false;
-            Microsoft.Win32.SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
-        }
-
-        private static void OnUserPreferenceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
-        {
-            if (_currentMode != ThemeMode.Auto) return;
-            if (e.Category != Microsoft.Win32.UserPreferenceCategory.General) return;
-
-            bool isDark = IsSystemDarkMode();
-            if (isDark == _lastSystemDark) return;
-            _lastSystemDark = isDark;
-
-            UpdateActiveTheme();
-            RaiseThemeChanged();
-        }
+        public static ThemeColors Active => _active ?? (_active = GetLightTheme());
 
         public static void UpdateActiveTheme()
         {
-            bool useDark;
-            if (_currentMode == ThemeMode.Dark)
-                useDark = true;
-            else if (_currentMode == ThemeMode.Light)
-                useDark = false;
-            else
-                useDark = IsSystemDarkMode();
-            _active = useDark ? GetDarkTheme() : GetLightTheme();
+            _active = GetLightTheme();
             Controls.GdiCache.Clear();
-        }
-
-        public static ThemeColors GetDarkTheme()
-        {
-            return new ThemeColors
-            {
-                Background = Color.FromArgb(0x12, 0x13, 0x1E),
-                BackgroundSecondary = Color.FromArgb(0x1A, 0x1B, 0x2E),
-                Surface = Color.FromArgb(0x23, 0x25, 0x40),
-                SurfaceLight = Color.FromArgb(0x2A, 0x2B, 0x3E),
-                Border = Color.FromArgb(0x2D, 0x2F, 0x4A),
-                BorderLight = Color.FromArgb(0x3A, 0x3B, 0x55),
-                Brand = Color.FromArgb(0x6C, 0x63, 0xFF),
-                BrandHover = Color.FromArgb(0x7B, 0x73, 0xFF),
-                BrandGlow = Color.FromArgb(0x8B, 0x83, 0xFF),
-                Green = Color.FromArgb(0x00, 0xD9, 0xA6),
-                Red = Color.FromArgb(0xFF, 0x6B, 0x6B),
-                Yellow = Color.FromArgb(0xFF, 0xD9, 0x3D),
-                TextPrimary = Color.FromArgb(0xF0, 0xF0, 0xF5),
-                TextSecondary = Color.FromArgb(0xD0, 0xD0, 0xE0),
-                TextDisabled = Color.FromArgb(0x5A, 0x5A, 0x72),
-                TabInactive = Color.FromArgb(0x1E, 0x1F, 0x2E)
-            };
         }
 
         public static ThemeColors GetLightTheme()

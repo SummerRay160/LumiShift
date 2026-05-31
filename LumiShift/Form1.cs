@@ -54,7 +54,6 @@ namespace LumiShift
         private ToggleSwitch _startWithWindowsCheckBox;
         private ToggleSwitch _startMinimizedCheckBox;
         private ToggleSwitch _restoreGammaToggle;
-        private ComboBox _themeComboBox;
 
         private ToggleSwitch _eyeProtectionToggle;
         private Button _eyeProtectionPreset1Button;
@@ -107,15 +106,12 @@ namespace LumiShift
             _bgService.MonitorsChanged += OnMonitorsChanged;
             _bgService.ScheduleStateChanged += OnScheduleStateChanged;
 
-            ThemeManager.ThemeChanged += OnThemeChanged;
-
             PopulatePresetComboBox();
             UpdateGammaUI();
             _bgService.ApplyGammaToSystem();
             UpdateBrightnessUI();
             UpdateScheduleUI();
             UpdateStartupUI();
-            UpdateThemeUI();
             UpdateEyeProtectionUI();
             UpdateBgImageUI();
             LoadBackgroundImage();
@@ -596,11 +592,6 @@ namespace LumiShift
             SettingsStore.SaveSettings(Settings);
         }
 
-        private void UpdateThemeUI()
-        {
-            _themeComboBox.SelectedIndex = Settings.ThemeMode;
-        }
-
         private void UpdateEyeProtectionUI()
         {
             _eyeProtectionToggle.Checked = Settings.EyeProtectionEnabled;
@@ -967,20 +958,6 @@ namespace LumiShift
 
                 if (c.HasChildren)
                     RefreshControlTreeTheme(c);
-            }
-        }
-
-        private void OnThemeChanged(object sender, EventArgs e)
-        {
-            if (_formDisposed || IsDisposed) return;
-            if (InvokeRequired)
-            {
-                try { Invoke(new Action(() => { if (!_formDisposed && !IsDisposed) ApplyTheme(); })); }
-                catch { }
-            }
-            else
-            {
-                ApplyTheme();
             }
         }
 
@@ -1480,14 +1457,6 @@ namespace LumiShift
             SettingsStore.SaveSettings(Settings);
         }
 
-        private void ThemeComboBox_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (_themeComboBox.SelectedIndex < 0) return;
-            Settings.ThemeMode = _themeComboBox.SelectedIndex;
-            ThemeManager.CurrentMode = (ThemeMode)_themeComboBox.SelectedIndex;
-            SettingsStore.SaveSettings(Settings);
-        }
-
         private void OnGammaStatusChanged(object sender, string status)
         {
             if (_formDisposed || IsDisposed) return;
@@ -1554,7 +1523,6 @@ namespace LumiShift
             _bgService.GammaController.StatusChanged -= OnGammaStatusChanged;
             _bgService.MonitorsChanged -= OnMonitorsChanged;
             _bgService.ScheduleStateChanged -= OnScheduleStateChanged;
-            ThemeManager.ThemeChanged -= OnThemeChanged;
             ClientSizeChanged -= OnFormClientSizeChanged;
         }
 

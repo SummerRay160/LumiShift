@@ -147,9 +147,7 @@ namespace LumiShift
                     Settings.EyeProtectionBlue);
             }
 
-            ThemeManager.CurrentMode = (ThemeMode)Settings.ThemeMode;
             ThemeManager.UpdateActiveTheme();
-            ThemeManager.StartWatchingSystemTheme();
 
             _messageWindow = new MessageWindow(this);
 
@@ -1456,7 +1454,6 @@ namespace LumiShift
             CancelUpdateCheck();
 
             try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
-            try { ThemeManager.StopWatchingSystemTheme(); } catch { }
 
             try { _updateCheckTimer?.Stop(); _updateCheckTimer?.Dispose(); _updateCheckTimer = null; } catch { }
 
@@ -1551,7 +1548,6 @@ namespace LumiShift
         private void PerformEmergencyCleanup()
         {
             try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
-            try { ThemeManager.StopWatchingSystemTheme(); } catch { }
 
             CancelUpdateCheck();
 

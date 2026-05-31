@@ -36,7 +36,6 @@ namespace LumiShift
                     _resizeDebounceTimer?.Dispose();
                     _resizeDebounceTimer = null;
 
-                    ThemeManager.ThemeChanged -= OnThemeChanged;
                     ClientSizeChanged -= OnFormClientSizeChanged;
 
                     if (_bgService != null)
@@ -580,41 +579,6 @@ namespace LumiShift
             SetLabelTheme(sepLine1, 'b');
             sy += 10;
 
-            var themeLabel = new Label
-            {
-                Text = "主题模式",
-                Location = new Point(Spacing.LG, sy + 1),
-                AutoSize = true,
-                Font = Typography.BodyBold
-            };
-            SetLabelTheme(themeLabel, 'p');
-
-            _themeComboBox = new ComboBox
-            {
-                Location = new Point(160, sy),
-                Width = 160,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Colors.Surface,
-                ForeColor = Colors.TextPrimary,
-                Font = Typography.Body
-            };
-            _themeComboBox.Items.AddRange(new object[] { "深色模式", "浅色模式", "跟随系统" });
-            _themeComboBox.SelectedIndex = 2;
-            _themeComboBox.SelectedIndexChanged += ThemeComboBox_SelectedIndexChanged;
-
-            sy += 30;
-
-            var sepLine2 = new Label
-            {
-                Location = new Point(Spacing.LG, sy),
-                Width = 340,
-                Height = 1,
-                Font = Typography.Caption
-            };
-            SetLabelTheme(sepLine2, 'b');
-            sy += 10;
-
             _bgImageToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = false };
             _bgImageToggle.CheckedChanged += BgImageToggle_CheckedChanged;
 
@@ -793,8 +757,6 @@ namespace LumiShift
                 _scheduleEnabledCheckBox, scheduleLabel2,
                 _scheduleConfigButton, scheduleHint,
                 sepLine1,
-                themeLabel, _themeComboBox,
-                sepLine2,
                 _bgImageToggle, bgImageLabel,
                 _bgImageSelectButton, _bgImageClearButton, opacityLbl, _bgImageOpacitySlider, _bgImageOpacityLabel,
                 _bgImageStatusLabel,
