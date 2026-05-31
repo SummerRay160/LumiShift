@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 
 namespace LumiShift.Resources
@@ -36,8 +37,52 @@ namespace LumiShift.Resources
         private static ThemeColors _active;
         private static bool _watching;
         private static bool _lastSystemDark;
+        private static readonly List<WeakReference> _changedHandlers = new List<WeakReference>();
 
-        public static event EventHandler ThemeChanged;
+        public static event EventHandler ThemeChanged
+        {
+            add
+            {
+                if (value == null) return;
+                lock (_changedHandlers)
+                {
+                    _changedHandlers.RemoveAll(wr => !wr.IsAlive);
+                    _changedHandlers.Add(new WeakReference(value));
+                }
+            }
+            remove
+            {
+                if (value == null) return;
+                lock (_changedHandlers)
+                {
+                    _changedHandlers.RemoveAll(wr => !wr.IsAlive || (object)wr.Target == (object)value);
+                }
+            }
+        }
+
+        private static void RaiseThemeChanged()
+        {
+            List<EventHandler> handlers;
+            lock (_changedHandlers)
+            {
+                handlers = new List<EventHandler>(_changedHandlers.Count);
+                var dead = new List<int>();
+                for (int i = 0; i < _changedHandlers.Count; i++)
+                {
+                    if (_changedHandlers[i].Target is EventHandler h && _changedHandlers[i].IsAlive)
+                        handlers.Add(h);
+                    else
+                        dead.Add(i);
+                }
+                for (int i = dead.Count - 1; i >= 0; i--)
+                    _changedHandlers.RemoveAt(dead[i]);
+            }
+            foreach (var h in handlers)
+            {
+                try { h(null, EventArgs.Empty); }
+                catch { }
+            }
+        }
 
         public static ThemeMode CurrentMode
         {
@@ -48,7 +93,7 @@ namespace LumiShift.Resources
                 {
                     _currentMode = value;
                     UpdateActiveTheme();
-                    ThemeChanged?.Invoke(null, EventArgs.Empty);
+                    RaiseThemeChanged();
                 }
             }
         }
@@ -99,7 +144,7 @@ namespace LumiShift.Resources
             _lastSystemDark = isDark;
 
             UpdateActiveTheme();
-            ThemeChanged?.Invoke(null, EventArgs.Empty);
+            RaiseThemeChanged();
         }
 
         public static void UpdateActiveTheme()
@@ -203,8 +248,34 @@ namespace LumiShift.Resources
 
     public static class Typography
     {
-        private static readonly FontFamily FontFamily = new FontFamily("Segoe UI");
-        private static readonly FontFamily MonoFontFamily = new FontFamily("Consolas");
+        private static FontFamily _fontFamily = new FontFamily("Segoe UI");
+        private static FontFamily _monoFontFamily = new FontFamily("Consolas");
+        private static Font _h1;
+        private static Font _body;
+        private static Font _bodyBold;
+        private static Font _caption;
+        private static Font _mono;
+        private static readonly object _lock = new object();
+
+        private static FontFamily FontFamily
+        {
+            get
+            {
+                if (_fontFamily == null)
+                    _fontFamily = new FontFamily("Segoe UI");
+                return _fontFamily;
+            }
+        }
+
+        private static FontFamily MonoFontFamily
+        {
+            get
+            {
+                if (_monoFontFamily == null)
+                    _monoFontFamily = new FontFamily("Consolas");
+                return _monoFontFamily;
+            }
+        }
 
         public static Font GetFont(float size, FontStyle style = FontStyle.Regular)
         {
@@ -216,10 +287,70 @@ namespace LumiShift.Resources
             return new Font(MonoFontFamily, size, style);
         }
 
-        public static readonly Font H1 = GetFont(12f, FontStyle.Bold);
-        public static readonly Font Body = GetFont(9f);
-        public static readonly Font BodyBold = GetFont(9f, FontStyle.Bold);
-        public static readonly Font Caption = GetFont(8f);
-        public static readonly Font Mono = GetMonoFont(8.5f);
+        public static Font H1
+        {
+            get
+            {
+                if (_h1 == null) _h1 = GetFont(12f, FontStyle.Bold);
+                return _h1;
+            }
+        }
+
+        public static Font Body
+        {
+            get
+            {
+                if (_body == null) _body = GetFont(9f);
+                return _body;
+            }
+        }
+
+        public static Font BodyBold
+        {
+            get
+            {
+                if (_bodyBold == null) _bodyBold = GetFont(9f, FontStyle.Bold);
+                return _bodyBold;
+            }
+        }
+
+        public static Font Caption
+        {
+            get
+            {
+                if (_caption == null) _caption = GetFont(8f);
+                return _caption;
+            }
+        }
+
+        public static Font Mono
+        {
+            get
+            {
+                if (_mono == null) _mono = GetMonoFont(8.5f);
+                return _mono;
+            }
+        }
+
+        public static void Cleanup()
+        {
+            lock (_lock)
+            {
+                _h1?.Dispose();
+                _h1 = null;
+                _body?.Dispose();
+                _body = null;
+                _bodyBold?.Dispose();
+                _bodyBold = null;
+                _caption?.Dispose();
+                _caption = null;
+                _mono?.Dispose();
+                _mono = null;
+                _fontFamily?.Dispose();
+                _fontFamily = null;
+                _monoFontFamily?.Dispose();
+                _monoFontFamily = null;
+            }
+        }
     }
 }

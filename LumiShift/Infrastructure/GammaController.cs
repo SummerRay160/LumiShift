@@ -104,8 +104,8 @@ namespace LumiShift.Infrastructure
                         ReleaseDC(IntPtr.Zero, hdc);
                         return true;
                     }
-                    DeleteDC(hdc);
-                    return true;
+                    try { return true; }
+                    finally { DeleteDC(hdc); }
                 }
                 catch
                 {
@@ -130,26 +130,28 @@ namespace LumiShift.Infrastructure
 
                 foreach (var screen in screens)
                 {
+                    IntPtr hdc = CreateDC("DISPLAY", screen.DeviceName, null, IntPtr.Zero);
+                    if (hdc == IntPtr.Zero)
+                    {
+                        allSucceeded = false;
+                        continue;
+                    }
+
                     try
                     {
-                        IntPtr hdc = CreateDC("DISPLAY", screen.DeviceName, null, IntPtr.Zero);
-                        if (hdc == IntPtr.Zero)
-                        {
-                            allSucceeded = false;
-                            continue;
-                        }
-
                         bool result = SetDeviceGammaRamp(hdc, ref ramp);
                         if (!result)
                         {
                             allSucceeded = false;
                         }
-
-                        DeleteDC(hdc);
                     }
                     catch
                     {
                         allSucceeded = false;
+                    }
+                    finally
+                    {
+                        DeleteDC(hdc);
                     }
                 }
 
@@ -180,25 +182,27 @@ namespace LumiShift.Infrastructure
 
                 foreach (var screen in screens)
                 {
+                    IntPtr hdc = CreateDC("DISPLAY", screen.DeviceName, null, IntPtr.Zero);
+                    if (hdc == IntPtr.Zero)
+                    {
+                        allSucceeded = false;
+                        continue;
+                    }
+
                     try
                     {
-                        IntPtr hdc = CreateDC("DISPLAY", screen.DeviceName, null, IntPtr.Zero);
-                        if (hdc == IntPtr.Zero)
-                        {
-                            allSucceeded = false;
-                            continue;
-                        }
-
                         if (!SetDeviceGammaRamp(hdc, ref ramp))
                         {
                             allSucceeded = false;
                         }
-
-                        DeleteDC(hdc);
                     }
                     catch
                     {
                         allSucceeded = false;
+                    }
+                    finally
+                    {
+                        DeleteDC(hdc);
                     }
                 }
 
@@ -219,15 +223,15 @@ namespace LumiShift.Infrastructure
 
                 foreach (var screen in Screen.AllScreens)
                 {
+                    IntPtr hdc = CreateDC("DISPLAY", screen.DeviceName, null, IntPtr.Zero);
+                    if (hdc == IntPtr.Zero)
+                    {
+                        allSucceeded = false;
+                        continue;
+                    }
+
                     try
                     {
-                        IntPtr hdc = CreateDC("DISPLAY", screen.DeviceName, null, IntPtr.Zero);
-                        if (hdc == IntPtr.Zero)
-                        {
-                            allSucceeded = false;
-                            continue;
-                        }
-
                         if (perScreenParams.TryGetValue(screen.DeviceName, out var parameters))
                         {
                             double master = 0.15 + parameters.MasterBrightness / 100.0 * 0.85;
@@ -244,12 +248,14 @@ namespace LumiShift.Infrastructure
                             if (!SetDeviceGammaRamp(hdc, ref defaultRamp))
                                 allSucceeded = false;
                         }
-
-                        DeleteDC(hdc);
                     }
                     catch
                     {
                         allSucceeded = false;
+                    }
+                    finally
+                    {
+                        DeleteDC(hdc);
                     }
                 }
 
@@ -338,6 +344,7 @@ namespace LumiShift.Infrastructure
             {
                 _disposed = true;
                 TrimCache();
+                StatusChanged = null;
             }
         }
 

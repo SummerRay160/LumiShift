@@ -5,17 +5,18 @@ using LumiShift.Models;
 
 namespace LumiShift.Infrastructure
 {
-    public class WmiBrightnessController : IBrightnessController
+    public class WmiBrightnessController : IBrightnessController, IDisposable
     {
         private readonly string _instanceName;
         private readonly string _deviceId;
         private readonly string _displayName;
         private int _cachedBrightness = -1;
+        private bool _disposed;
 
         public string DeviceId => _deviceId;
         public string DisplayName => _displayName;
         public bool IsDDC => false;
-        public bool IsSupported => true;
+        public bool IsSupported => !_disposed;
 
         public WmiBrightnessController(string instanceName, string deviceId, string displayName)
         {
@@ -26,6 +27,7 @@ namespace LumiShift.Infrastructure
 
         public int GetBrightness()
         {
+            if (_disposed) return _cachedBrightness >= 0 ? _cachedBrightness : 50;
             try
             {
                 using (var searcher = new ManagementObjectSearcher("root/WMI",
@@ -53,6 +55,7 @@ namespace LumiShift.Infrastructure
 
         public void SetBrightness(int percent)
         {
+            if (_disposed) return;
             percent = Math.Max(0, Math.Min(100, percent));
             if (_cachedBrightness == percent) return;
 
@@ -72,13 +75,19 @@ namespace LumiShift.Infrastructure
             {
             }
         }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            GC.SuppressFinalize(this);
+        }
     }
 
     public class DdcBrightnessController : IBrightnessController, IDisposable
     {
         private readonly string _deviceId;
         private readonly string _displayName;
-        private readonly Screen _screen;
         private IntPtr _physicalMonitor;
         private bool _disposed;
         private int _cachedBrightness = -1;
@@ -90,22 +99,21 @@ namespace LumiShift.Infrastructure
 
         public DdcBrightnessController(Screen screen, string deviceId, string displayName)
         {
-            _screen = screen;
             _deviceId = deviceId;
             _displayName = displayName;
             _physicalMonitor = IntPtr.Zero;
 
-            IsSupported = InitializePhysicalMonitor();
+            IsSupported = InitializePhysicalMonitor(screen);
         }
 
-        private bool InitializePhysicalMonitor()
+        private bool InitializePhysicalMonitor(Screen screen)
         {
             try
             {
                 var pt = new NativeMethods.POINT
                 {
-                    X = _screen.Bounds.Left + 1,
-                    Y = _screen.Bounds.Top + 1
+                    X = screen.Bounds.Left + 1,
+                    Y = screen.Bounds.Top + 1
                 };
                 IntPtr hMonitor = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
                 if (hMonitor == IntPtr.Zero)
@@ -196,12 +204,13 @@ namespace LumiShift.Infrastructure
 
         private void Dispose(bool disposing)
         {
-            if (!_disposed && _physicalMonitor != IntPtr.Zero)
+            if (_disposed) return;
+            if (_physicalMonitor != IntPtr.Zero)
             {
                 NativeMethods.DestroyPhysicalMonitor(_physicalMonitor);
                 _physicalMonitor = IntPtr.Zero;
-                _disposed = true;
             }
+            _disposed = true;
         }
     }
 }

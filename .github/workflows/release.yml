@@ -72,12 +72,30 @@ jobs:
             echo "No existing release found for tag $TAG"
           fi
 
+      - name: Extract changelog for release
+        id: changelog
+        shell: pwsh
+        run: |
+          $changelog = Get-Content -Raw CHANGELOG.md
+          # Extract the content between "## [1.2.0]" and the next "## [" or "---"
+          $pattern = "## \[1\.2\.0\][\s\S]*?(?=\n## \[|\n---)"
+          $match = [regex]::Match($changelog, $pattern)
+          if ($match.Success) {
+            $body = $match.Value.Trim()
+            # Set the body as a multi-line output
+            $body | Set-Content -Path changelog_body.txt -Encoding UTF8
+            Write-Host "Extracted changelog for v1.2.0"
+          } else {
+            Write-Error "Changelog for v1.2.0 not found!"
+            exit 1
+          }
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: LumiShift ${{ steps.version.outputs.tag }}
           draft: false
-          generate_release_notes: true
+          body_path: changelog_body.txt
           files: |
             staging/LumiShift.exe

@@ -1,304 +1,266 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 
 namespace LumiShift.Services
 {
-    public class UpdateService
+    internal static class UpdateService
     {
-        private const string RepoApiUrl = "https://api.github.com/repos/SummerRay160/LumiShift/releases/latest";
-        private const string RepoReleaseUrl = "https://github.com/SummerRay160/LumiShift/releases/latest";
+        private const string ApiUrl = "https://api.github.com/repos/SummerRay160/LumiShift/releases/latest";
 
-        public static Version CurrentVersion
-        {
-            get
-            {
-                var v = Assembly.GetExecutingAssembly().GetName().Version;
-                return new Version(v.Major, v.Minor, v.Build);
-            }
-        }
+        private static readonly HttpClient _httpClient;
 
-        public static void CheckForUpdate(bool silent = false)
+        private static readonly Regex RxImageRef = new Regex(@"!\[([^\]]*)\]\([^)]*\)", RegexOptions.Compiled);
+        private static readonly Regex RxLinkRef = new Regex(@"\[([^\]]*)\]\([^)]*\)", RegexOptions.Compiled);
+        private static readonly Regex RxHeading = new Regex(@"^#{1,6}\s+", RegexOptions.Compiled | RegexOptions.Multiline);
+        private static readonly Regex RxBold3 = new Regex(@"\*{3}(.+?)\*{3}", RegexOptions.Compiled);
+        private static readonly Regex RxBold2 = new Regex(@"\*{2}(.+?)\*{2}", RegexOptions.Compiled);
+        private static readonly Regex RxBold1 = new Regex(@"\*{1}(.+?)\*{1}", RegexOptions.Compiled);
+        private static readonly Regex RxUnder3 = new Regex(@"_{3}(.+?)_{3}", RegexOptions.Compiled);
+        private static readonly Regex RxUnder2 = new Regex(@"_{2}(.+?)_{2}", RegexOptions.Compiled);
+        private static readonly Regex RxUnder1 = new Regex(@"_{1}(.+?)_{1}", RegexOptions.Compiled);
+        private static readonly Regex RxStrike = new Regex(@"~~(.+?)~~", RegexOptions.Compiled);
+        private static readonly Regex RxCodeBlock = new Regex(@"`{3}[\s\S]*?`{3}", RegexOptions.Compiled);
+        private static readonly Regex RxInlineCode = new Regex(@"`([^`]+)`", RegexOptions.Compiled);
+        private static readonly Regex RxListItem = new Regex(@"^\s*[-*+]\s+", RegexOptions.Compiled | RegexOptions.Multiline);
+        private static readonly Regex RxBlockquote = new Regex(@"^\s*>\s+", RegexOptions.Compiled | RegexOptions.Multiline);
+        private static readonly Regex RxHr = new Regex(@"^[-*_]{3,}\s*$", RegexOptions.Compiled | RegexOptions.Multiline);
+        private static readonly Regex RxHtml = new Regex(@"<[^>]+>", RegexOptions.Compiled);
+        private static readonly Regex RxMultiNewline = new Regex(@"\n{3,}", RegexOptions.Compiled);
+
+        static UpdateService()
         {
-            var bw = new System.ComponentModel.BackgroundWorker();
-            bw.DoWork += (s, e) =>
+            var handler = new HttpClientHandler
             {
-                e.Result = FetchLatestReleaseAsync().GetAwaiter().GetResult();
+                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate,
+                MaxConnectionsPerServer = 2
             };
-            bw.RunWorkerCompleted += (s, e) =>
+            _httpClient = new HttpClient(handler);
+            _httpClient.DefaultRequestHeaders.UserAgent.TryParseAdd("LumiShift");
+            _httpClient.DefaultRequestHeaders.Accept.TryParseAdd("application/vnd.github.v3+json");
+            _httpClient.Timeout = TimeSpan.FromSeconds(10);
+
+            try
             {
-                try
-                {
-                    if (e.Error != null)
-                    {
-                        if (!silent)
-                            MessageBox.Show($"检查更新失败: {e.Error.Message}", "更新检查",
-                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return;
-                    }
-
-                    var result = e.Result as FetchResult;
-                    if (result == null || result.Release == null)
-                    {
-                        if (!silent)
-                        {
-                            if (result?.IsApiError == true)
-                                MessageBox.Show($"无法获取更新信息，请检查网络连接。\n{result.ErrorMessage}", "更新检查",
-                                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                            else
-                                MessageBox.Show("当前已是最新版本。", "更新检查",
-                                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        }
-                        return;
-                    }
-
-                    var release = result.Release;
-                    var latestVersion = ParseVersion(release.tag_name);
-                    if (latestVersion == null)
-                    {
-                        if (!silent)
-                            MessageBox.Show("无法解析远程版本号。", "更新检查",
-                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return;
-                    }
-
-                    if (latestVersion <= CurrentVersion)
-                    {
-                        if (!silent)
-                            MessageBox.Show($"当前已是最新版本 ({CurrentVersion})。", "更新检查",
-                                MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        return;
-                    }
-
-                    var settings = SettingsStore.LoadSettings();
-                    if (silent && settings.SkipVersion == latestVersion.ToString())
-                        return;
-
-                    ShowUpdateDialog(release, latestVersion);
-                }
-                finally
-                {
-                    bw.Dispose();
-                }
-            };
-            bw.RunWorkerAsync();
-        }
-
-        private static async Task<FetchResult> FetchLatestReleaseAsync()
-        {
-            using (var client = new HttpClient())
-            {
-                client.DefaultRequestHeaders.Add("User-Agent", "LumiShift-UpdateCheck");
-                client.Timeout = TimeSpan.FromSeconds(10);
-
-                HttpResponseMessage response;
-                try
-                {
-                    response = await client.GetAsync(RepoApiUrl);
-                }
-                catch (Exception ex)
-                {
-                    return new FetchResult { IsApiError = true, ErrorMessage = ex.Message };
-                }
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var reason = response.ReasonPhrase ?? response.StatusCode.ToString();
-                    return new FetchResult
-                    {
-                        IsApiError = true,
-                        ErrorMessage = $"服务器返回错误: {(int)response.StatusCode} {reason}"
-                    };
-                }
-
-                var json = await response.Content.ReadAsStringAsync();
-                var release = SettingsStore.Serializer.Deserialize<GitHubRelease>(json);
-                if (release == null)
-                    return new FetchResult { IsApiError = true, ErrorMessage = "无法解析服务器响应" };
-
-                if (release.draft || release.prerelease)
-                    return new FetchResult { Release = null };
-
-                return new FetchResult { Release = release };
+                System.Net.ServicePointManager.FindServicePoint(new Uri(ApiUrl)).ConnectionLeaseTimeout = 60000;
             }
+            catch { }
         }
 
-        private static Version ParseVersion(string tag)
+        public static async Task CheckForUpdateAsync(bool silent, CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrEmpty(tag)) return null;
-            var match = Regex.Match(tag, @"v?(\d+\.\d+\.\d+)");
-            if (match.Success)
-                return new Version(match.Groups[1].Value);
-            return null;
-        }
-
-        private static void ShowUpdateDialog(GitHubRelease release, Version latestVersion)
-        {
-            using (var dialog = new UpdateDialog())
+            try
             {
-                dialog.SetUpdateInfo(CurrentVersion.ToString(), latestVersion.ToString(),
-                    release.body ?? release.tag_name,
-                    release.assets?.Select(a => a.browser_download_url).FirstOrDefault() ?? RepoReleaseUrl);
+                string response = await _httpClient.GetStringAsync(ApiUrl);
+                cancellationToken.ThrowIfCancellationRequested();
 
-                var result = dialog.ShowDialog();
-                if (result == DialogResult.OK)
+                var result = ParseGitHubRelease(response);
+
+                if (string.IsNullOrEmpty(result.version))
+                {
+                    if (!silent)
+                        System.Windows.Forms.MessageBox.Show("当前已是最新版本。", "LumiShift",
+                            System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
+                    return;
+                }
+
+                var currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
+                if (!Version.TryParse(result.version, out var remoteVersion))
+                {
+                    if (!silent)
+                        System.Windows.Forms.MessageBox.Show("当前已是最新版本。", "LumiShift",
+                            System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
+                    return;
+                }
+
+                if (remoteVersion <= currentVersion)
+                {
+                    if (!silent)
+                        System.Windows.Forms.MessageBox.Show("当前已是最新版本。", "LumiShift",
+                            System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
+                    return;
+                }
+
+                string cleanBody = StripMarkdown(result.body ?? "");
+                string message = $"发现新版本 {remoteVersion}\n\n{result.name}\n\n{cleanBody}";
+                var dialogResult = System.Windows.Forms.MessageBox.Show(
+                    message, "LumiShift 更新",
+                    System.Windows.Forms.MessageBoxButtons.YesNo,
+                    System.Windows.Forms.MessageBoxIcon.Information);
+
+                if (dialogResult == System.Windows.Forms.DialogResult.Yes)
                 {
                     try
                     {
-                        Process.Start(new ProcessStartInfo(dialog.DownloadUrl) { UseShellExecute = true });
+                        System.Diagnostics.Process.Start(result.downloadUrl);
                     }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"无法打开下载链接: {ex.Message}", "错误",
-                            MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
+                    catch { }
                 }
-                else if (result == DialogResult.Ignore)
+            }
+            catch (TaskCanceledException)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    throw;
+                if (!silent)
+                    System.Windows.Forms.MessageBox.Show(
+                        "检查更新超时，请检查网络连接后重试。",
+                        "LumiShift",
+                        System.Windows.Forms.MessageBoxButtons.OK,
+                        System.Windows.Forms.MessageBoxIcon.Warning);
+            }
+            catch (HttpRequestException ex)
+            {
+                if (!silent)
                 {
-                    var settings = SettingsStore.LoadSettings();
-                    settings.SkipVersion = latestVersion.ToString();
-                    SettingsStore.SaveSettings(settings);
+                    string errorMsg = GetHttpErrorMessage(ex);
+                    System.Windows.Forms.MessageBox.Show(
+                        errorMsg,
+                        "LumiShift",
+                        System.Windows.Forms.MessageBoxButtons.OK,
+                        System.Windows.Forms.MessageBoxIcon.Warning);
                 }
             }
-        }
-
-        private class FetchResult
-        {
-            public GitHubRelease Release { get; set; }
-            public bool IsApiError { get; set; }
-            public string ErrorMessage { get; set; }
-        }
-
-        private class GitHubRelease
-        {
-            public string tag_name { get; set; }
-            public string name { get; set; }
-            public string body { get; set; }
-            public List<GitHubAsset> assets { get; set; }
-            public bool prerelease { get; set; }
-            public bool draft { get; set; }
-        }
-
-        private class GitHubAsset
-        {
-            public string name { get; set; }
-            public string browser_download_url { get; set; }
-            public long size { get; set; }
-        }
-    }
-
-    public class UpdateDialog : Form
-    {
-        private Label _titleLabel;
-        private Label _versionLabel;
-        private TextBox _changelogBox;
-        private Button _downloadButton;
-        private Button _skipButton;
-        private Button _laterButton;
-
-        public string DownloadUrl { get; private set; }
-
-        public UpdateDialog()
-        {
-            InitializeComponents();
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
+            catch (Exception)
             {
-                _titleLabel?.Dispose();
-                _versionLabel?.Dispose();
-                _changelogBox?.Dispose();
-                _downloadButton?.Dispose();
-                _skipButton?.Dispose();
-                _laterButton?.Dispose();
+                if (!silent)
+                    System.Windows.Forms.MessageBox.Show(
+                        "检查更新失败，请稍后重试。",
+                        "LumiShift",
+                        System.Windows.Forms.MessageBoxButtons.OK,
+                        System.Windows.Forms.MessageBoxIcon.Warning);
             }
-            base.Dispose(disposing);
         }
 
-        private void InitializeComponents()
+        public static void Shutdown()
         {
-            Text = "LumiShift 更新";
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new System.Drawing.Size(460, 340);
-            MaximizeBox = false;
-            MinimizeBox = false;
-
-            _titleLabel = new Label
+            try
             {
-                Text = "发现新版本",
-                Font = new System.Drawing.Font("Microsoft YaHei UI", 14F, System.Drawing.FontStyle.Bold),
-                AutoSize = true,
-                Location = new System.Drawing.Point(20, 16)
-            };
-
-            _versionLabel = new Label
-            {
-                Text = "",
-                Font = new System.Drawing.Font("Microsoft YaHei UI", 9F),
-                AutoSize = true,
-                Location = new System.Drawing.Point(20, 50),
-                ForeColor = System.Drawing.Color.Gray
-            };
-
-            _changelogBox = new TextBox
-            {
-                Location = new System.Drawing.Point(20, 78),
-                Size = new System.Drawing.Size(420, 190),
-                Multiline = true,
-                ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
-                Font = new System.Drawing.Font("Microsoft YaHei UI", 9F),
-                BackColor = System.Drawing.Color.White
-            };
-
-            _downloadButton = new Button
-            {
-                Text = "立即下载",
-                Size = new System.Drawing.Size(100, 32),
-                Location = new System.Drawing.Point(148, 286),
-                DialogResult = DialogResult.OK,
-                Font = new System.Drawing.Font("Microsoft YaHei UI", 9F)
-            };
-
-            _skipButton = new Button
-            {
-                Text = "跳过此版本",
-                Size = new System.Drawing.Size(100, 32),
-                Location = new System.Drawing.Point(254, 286),
-                DialogResult = DialogResult.Ignore,
-                Font = new System.Drawing.Font("Microsoft YaHei UI", 9F)
-            };
-
-            _laterButton = new Button
-            {
-                Text = "稍后提醒",
-                Size = new System.Drawing.Size(100, 32),
-                Location = new System.Drawing.Point(360, 286),
-                DialogResult = DialogResult.Cancel,
-                Font = new System.Drawing.Font("Microsoft YaHei UI", 9F)
-            };
-
-            AcceptButton = _downloadButton;
-            CancelButton = _laterButton;
-
-            Controls.AddRange(new Control[] { _titleLabel, _versionLabel, _changelogBox, _downloadButton, _skipButton, _laterButton });
+                _httpClient?.CancelPendingRequests();
+                _httpClient?.Dispose();
+            }
+            catch { }
         }
 
-        public void SetUpdateInfo(string currentVersion, string latestVersion, string changelog, string downloadUrl)
+        private static string GetHttpErrorMessage(HttpRequestException ex)
         {
-            _versionLabel.Text = $"当前版本: {currentVersion}  →  最新版本: {latestVersion}";
-            _changelogBox.Text = string.IsNullOrEmpty(changelog) ? "暂无更新说明" : changelog;
-            DownloadUrl = downloadUrl;
+            string baseMessage = "检查更新失败";
+
+            string msg = ex.Message ?? "";
+            if (ex.InnerException != null)
+                msg += " " + (ex.InnerException.Message ?? "");
+
+            if (msg.Contains("403"))
+                return $"{baseMessage}：API 访问频率限制，请稍后重试。";
+            if (msg.Contains("404"))
+                return $"{baseMessage}：未找到更新信息。";
+            if (msg.Contains("500") || msg.Contains("502") || msg.Contains("503"))
+                return $"{baseMessage}：GitHub 服务器暂时不可用，请稍后重试。";
+            if (msg.Contains("401"))
+                return $"{baseMessage}：API 认证失败。";
+
+            string lowerMsg = msg.ToLowerInvariant();
+            if (lowerMsg.Contains("dns") || lowerMsg.Contains("resolve") || lowerMsg.Contains("name"))
+                return $"{baseMessage}：无法解析服务器地址，请检查网络连接。";
+            if (lowerMsg.Contains("refused") || lowerMsg.Contains("unreachable"))
+                return $"{baseMessage}：无法连接到服务器，请检查网络连接。";
+            if (lowerMsg.Contains("tls") || lowerMsg.Contains("ssl") || lowerMsg.Contains("secure"))
+                return $"{baseMessage}：安全连接失败，请检查系统时间或网络环境。";
+            if (lowerMsg.Contains("timeout") || lowerMsg.Contains("timed out"))
+                return $"{baseMessage}：连接超时，请检查网络连接后重试。";
+
+            return $"{baseMessage}：网络请求失败，请检查网络连接后重试。";
+        }
+
+        private static string StripMarkdown(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            text = RxImageRef.Replace(text, "$1");
+            text = RxLinkRef.Replace(text, "$1");
+            text = RxHeading.Replace(text, "");
+            text = RxBold3.Replace(text, "$1");
+            text = RxBold2.Replace(text, "$1");
+            text = RxBold1.Replace(text, "$1");
+            text = RxUnder3.Replace(text, "$1");
+            text = RxUnder2.Replace(text, "$1");
+            text = RxUnder1.Replace(text, "$1");
+            text = RxStrike.Replace(text, "$1");
+            text = RxCodeBlock.Replace(text, "");
+            text = RxInlineCode.Replace(text, "$1");
+            text = RxListItem.Replace(text, "  • ");
+            text = RxBlockquote.Replace(text, "");
+            text = RxHr.Replace(text, "");
+            text = RxHtml.Replace(text, "");
+            text = RxMultiNewline.Replace(text, "\n\n");
+
+            return text.Trim();
+        }
+
+        private static (string version, string name, string body, string downloadUrl) ParseGitHubRelease(string json)
+        {
+            using (var reader = new LumiShift.Infrastructure.LightweightJsonReader(json))
+            {
+                var root = reader.ReadObject();
+                if (root == null) return (null, null, null, null);
+
+                string tagName = GetString(root, "tag_name")?.TrimStart('v');
+                string name = GetString(root, "name");
+                string body = GetString(root, "body");
+                bool prerelease = GetBool(root, "prerelease");
+                bool draft = GetBool(root, "draft");
+
+                if (draft || prerelease || string.IsNullOrEmpty(tagName))
+                    return (null, null, null, null);
+
+                string downloadUrl = null;
+
+                if (root.TryGetValue("assets", out var assetsObj) && assetsObj is List<object>)
+                {
+                    var assets = (List<object>)assetsObj;
+                    foreach (var assetObj in assets)
+                    {
+                        if (assetObj is Dictionary<string, object> asset)
+                        {
+                            string assetNameStr = GetString(asset, "name");
+                            if (assetNameStr != null && assetNameStr.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                            {
+                                downloadUrl = GetString(asset, "browser_download_url");
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (downloadUrl == null)
+                    return (null, null, null, null);
+
+                return (tagName, name, body, downloadUrl);
+            }
+        }
+
+        private static string GetString(Dictionary<string, object> dict, string key)
+        {
+            if (dict.TryGetValue(key, out var val))
+            {
+                if (val is string s) return s;
+                return val?.ToString();
+            }
+            return null;
+        }
+
+        private static bool GetBool(Dictionary<string, object> dict, string key)
+        {
+            if (dict.TryGetValue(key, out var val))
+            {
+                if (val is bool b) return b;
+                if (val is string s && bool.TryParse(s, out var sb)) return sb;
+            }
+            return false;
         }
     }
 }
