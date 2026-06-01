@@ -1524,6 +1524,8 @@ namespace LumiShift
             _bgService.MonitorsChanged -= OnMonitorsChanged;
             _bgService.ScheduleStateChanged -= OnScheduleStateChanged;
             ClientSizeChanged -= OnFormClientSizeChanged;
+            if (_tabControl != null)
+                _tabControl.TabSelected -= OnTabSelected;
         }
 
         internal static void CleanupStaticFields()
