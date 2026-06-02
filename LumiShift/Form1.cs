@@ -81,6 +81,7 @@ namespace LumiShift
         private bool _isPopulatingComboBox;
         private bool _isUpdatingSchedule;
         private string _currentPresetName;
+        private int _previousMonitorSelectedIndex;
         private Timer _initTimer;
 
         private static Icon LoadAppIcon()
@@ -1094,7 +1095,7 @@ namespace LumiShift
 
             UpdateGammaLabels();
             UpdateColorTempLabel();
-            _gammaCheckBox.Checked = true;
+            SyncSlidersToSelectedMonitor();
 
             string current = GetCurrentPresetName();
             _currentPresetName = current;
@@ -1332,6 +1333,9 @@ namespace LumiShift
         {
             if (_isUpdatingGammaSliders) return;
 
+            int prevIndex = _previousMonitorSelectedIndex;
+            _previousMonitorSelectedIndex = _monitorSelectorComboBox.SelectedIndex;
+
             if (IsGlobalMonitorSelected() && Settings.GammaPerDisplay.Count > 0)
             {
                 bool hasManual = Settings.GammaPerDisplay.Any(kvp => kvp.Value.Source == "manual");
@@ -1346,7 +1350,7 @@ namespace LumiShift
                     if (MessageBox.Show(msg, "同步确认", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                     {
                         _isUpdatingGammaSliders = true;
-                        _monitorSelectorComboBox.SelectedIndex = 1;
+                        _monitorSelectorComboBox.SelectedIndex = prevIndex;
                         _isUpdatingGammaSliders = false;
                         return;
                     }
@@ -1506,8 +1510,11 @@ namespace LumiShift
                 _bgService.OnFormClosing(this);
                 e.Cancel = true;
                 Hide();
-                Dispose();
-                _bgService.EnterAppLightweightMode();
+                BeginInvoke(new Action(() =>
+                {
+                    _bgService.EnterAppLightweightMode();
+                    if (!IsDisposed) Dispose();
+                }));
                 return;
             }
             _formDisposed = true;

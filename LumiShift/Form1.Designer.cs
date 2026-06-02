@@ -119,8 +119,6 @@ namespace LumiShift
                     BackgroundImage = null;
                     oldFormBg?.Dispose();
 
-                    CleanupStaticFields();
-
                     if (_cachedBackground != null)
                     {
                         if (!ReferenceEquals(_cachedBackground, StaticCachedBackground))
@@ -134,6 +132,8 @@ namespace LumiShift
                             _backgroundImage.Dispose();
                         _backgroundImage = null;
                     }
+
+                    CleanupStaticFields();
 
                     if (components != null)
                         components.Dispose();

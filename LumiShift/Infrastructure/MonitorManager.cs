@@ -714,7 +714,10 @@ namespace LumiShift.Infrastructure
                 catch { }
             }
             _allControllers.Clear();
-            _monitors.Clear();
+            foreach (var monitor in _monitors)
+            {
+                monitor.Controller = null;
+            }
         }
 
         public void ExitLightweightMode()

@@ -61,6 +61,8 @@ namespace LumiShift
         internal bool IsExiting => _exiting;
         internal bool ScheduleManualOverride => _scheduleManualOverride;
         private bool _lightweightMode;
+        private bool _displayChangedInLightweight;
+        private bool _scheduleChangedInLightweight;
         private Timer _lightweightGcTimer;
 
         private Form1 MainForm
@@ -132,6 +134,12 @@ namespace LumiShift
             {
                 _scheduleTimer.Start();
                 ScheduleTimer_Tick(null, null);
+                _preScheduleGammaEnabled = Settings.GammaEnabled;
+                _preScheduleGammaRScale = Settings.GammaRScale;
+                _preScheduleGammaGScale = Settings.GammaGScale;
+                _preScheduleGammaBScale = Settings.GammaBScale;
+                _preScheduleGammaValue = Settings.GammaValue;
+                _preScheduleMasterBrightness = Settings.MasterBrightness;
             }
 
             ApplyGammaToSystem();
@@ -833,13 +841,14 @@ namespace LumiShift
                     return;
                 }
 
-                ApplyGammaToSystem();
                 if (_lightweightMode)
                 {
                     _lastScheduleMode = targetMode;
+                    _scheduleChangedInLightweight = true;
                     ApplyScheduleMonitorPresets(targetSegment);
                     return;
                 }
+
                 SettingsStore.SaveSettings(Settings);
                 UpdateTrayMenu();
                 _lastScheduleMode = targetMode;
@@ -1100,13 +1109,15 @@ namespace LumiShift
         {
             if (_monitorManager == null) return;
 
-            var removedIds = _monitorManager.RefreshMonitors();
-            CleanupStaleSettings(removedIds);
             if (_lightweightMode)
             {
+                _displayChangedInLightweight = true;
                 _trayMenuNeedsRebuild = true;
                 return;
             }
+
+            var removedIds = _monitorManager.RefreshMonitors();
+            CleanupStaleSettings(removedIds);
             if (!Form1IsOpen())
             {
                 if (_trayMenuOpen)
@@ -1196,6 +1207,8 @@ namespace LumiShift
             if (_lightweightMode)
             {
                 _lightweightMode = false;
+                var displayChanged = _displayChangedInLightweight;
+                _displayChangedInLightweight = false;
                 _lightweightGcTimer?.Stop();
                 _lightweightGcTimer?.Dispose();
                 _lightweightGcTimer = null;
@@ -1203,12 +1216,23 @@ namespace LumiShift
                 _microGcTimer?.Dispose();
                 _microGcTimer = null;
                 if (_monitorManager != null)
-                    _monitorManager.ExitLightweightMode();
+                {
+                    if (displayChanged)
+                        _monitorManager.RefreshMonitors();
+                    else
+                        _monitorManager.ExitLightweightMode();
+                }
                 if (_scheduleTimer != null)
                     _scheduleTimer.Interval = ScheduleTimerIntervalNormal;
                 if (_messageWindow == null)
                     _messageWindow = new MessageWindow(this);
+                _healthCheckTimer?.Start();
                 GcHelper.CollectFull();
+                if (_scheduleChangedInLightweight)
+                {
+                    _scheduleChangedInLightweight = false;
+                    ScheduleStateChanged?.Invoke();
+                }
             }
 
             MainForm = new Form1(this);
@@ -1227,6 +1251,7 @@ namespace LumiShift
         {
             if (_lightweightMode) return;
             _lightweightMode = true;
+            _scheduleChangedInLightweight = false;
             Form1.CleanupStaticFields();
             Controls.GdiCache.Clear();
             GammaController.TrimCache();
@@ -1234,6 +1259,7 @@ namespace LumiShift
             _parsedSegmentsHash = 0;
             _messageWindow?.Dispose();
             _messageWindow = null;
+            _healthCheckTimer?.Stop();
             if (_monitorManager != null)
                 _monitorManager.EnterLightweightMode();
             if (_scheduleTimer != null)
