@@ -62,7 +62,6 @@ namespace LumiShift
             EnablePanelDoubleBuffered();
             RebuildSegmentPanel();
 
-            ThemeManager.ThemeChanged += OnThemeChanged;
             FormClosed += OnFormClosed;
         }
 
@@ -76,7 +75,6 @@ namespace LumiShift
             if (_cleanedUp) return;
             _cleanedUp = true;
 
-            ThemeManager.ThemeChanged -= OnThemeChanged;
             _addDebounceTimer?.Stop();
             _addDebounceTimer?.Dispose();
             _addDebounceTimer = null;
@@ -150,23 +148,6 @@ namespace LumiShift
         {
             typeof(Control).GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)
                 ?.SetValue(_segmentPanel, true);
-        }
-
-        private void OnThemeChanged(object sender, EventArgs e)
-        {
-            if (IsDisposed) return;
-            if (InvokeRequired)
-            {
-                try { Invoke(new Action(() => { if (!IsDisposed) { BackColor = Colors.Background; ApplyBackgroundImage(); Invalidate(true); RebuildSegmentPanel(); } })); }
-                catch { }
-            }
-            else
-            {
-                BackColor = Colors.Background;
-                ApplyBackgroundImage();
-                Invalidate(true);
-                RebuildSegmentPanel();
-            }
         }
 
         private void BuildUI()

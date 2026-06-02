@@ -54,7 +54,6 @@ namespace LumiShift
         private ToggleSwitch _startWithWindowsCheckBox;
         private ToggleSwitch _startMinimizedCheckBox;
         private ToggleSwitch _restoreGammaToggle;
-        private ComboBox _themeComboBox;
 
         private ToggleSwitch _eyeProtectionToggle;
         private Button _eyeProtectionPreset1Button;
@@ -82,6 +81,7 @@ namespace LumiShift
         private bool _isPopulatingComboBox;
         private bool _isUpdatingSchedule;
         private string _currentPresetName;
+        private int _previousMonitorSelectedIndex;
         private Timer _initTimer;
 
         private static Icon LoadAppIcon()
@@ -107,15 +107,12 @@ namespace LumiShift
             _bgService.MonitorsChanged += OnMonitorsChanged;
             _bgService.ScheduleStateChanged += OnScheduleStateChanged;
 
-            ThemeManager.ThemeChanged += OnThemeChanged;
-
             PopulatePresetComboBox();
             UpdateGammaUI();
             _bgService.ApplyGammaToSystem();
             UpdateBrightnessUI();
             UpdateScheduleUI();
             UpdateStartupUI();
-            UpdateThemeUI();
             UpdateEyeProtectionUI();
             UpdateBgImageUI();
             LoadBackgroundImage();
@@ -596,11 +593,6 @@ namespace LumiShift
             SettingsStore.SaveSettings(Settings);
         }
 
-        private void UpdateThemeUI()
-        {
-            _themeComboBox.SelectedIndex = Settings.ThemeMode;
-        }
-
         private void UpdateEyeProtectionUI()
         {
             _eyeProtectionToggle.Checked = Settings.EyeProtectionEnabled;
@@ -970,20 +962,6 @@ namespace LumiShift
             }
         }
 
-        private void OnThemeChanged(object sender, EventArgs e)
-        {
-            if (_formDisposed || IsDisposed) return;
-            if (InvokeRequired)
-            {
-                try { Invoke(new Action(() => { if (!_formDisposed && !IsDisposed) ApplyTheme(); })); }
-                catch { }
-            }
-            else
-            {
-                ApplyTheme();
-            }
-        }
-
         private void SyncSlidersToSettings()
         {
             _isUpdatingGammaSliders = true;
@@ -1117,7 +1095,7 @@ namespace LumiShift
 
             UpdateGammaLabels();
             UpdateColorTempLabel();
-            _gammaCheckBox.Checked = true;
+            SyncSlidersToSelectedMonitor();
 
             string current = GetCurrentPresetName();
             _currentPresetName = current;
@@ -1355,6 +1333,9 @@ namespace LumiShift
         {
             if (_isUpdatingGammaSliders) return;
 
+            int prevIndex = _previousMonitorSelectedIndex;
+            _previousMonitorSelectedIndex = _monitorSelectorComboBox.SelectedIndex;
+
             if (IsGlobalMonitorSelected() && Settings.GammaPerDisplay.Count > 0)
             {
                 bool hasManual = Settings.GammaPerDisplay.Any(kvp => kvp.Value.Source == "manual");
@@ -1369,7 +1350,7 @@ namespace LumiShift
                     if (MessageBox.Show(msg, "同步确认", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                     {
                         _isUpdatingGammaSliders = true;
-                        _monitorSelectorComboBox.SelectedIndex = 1;
+                        _monitorSelectorComboBox.SelectedIndex = prevIndex;
                         _isUpdatingGammaSliders = false;
                         return;
                     }
@@ -1480,14 +1461,6 @@ namespace LumiShift
             SettingsStore.SaveSettings(Settings);
         }
 
-        private void ThemeComboBox_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (_themeComboBox.SelectedIndex < 0) return;
-            Settings.ThemeMode = _themeComboBox.SelectedIndex;
-            ThemeManager.CurrentMode = (ThemeMode)_themeComboBox.SelectedIndex;
-            SettingsStore.SaveSettings(Settings);
-        }
-
         private void OnGammaStatusChanged(object sender, string status)
         {
             if (_formDisposed || IsDisposed) return;
@@ -1537,8 +1510,11 @@ namespace LumiShift
                 _bgService.OnFormClosing(this);
                 e.Cancel = true;
                 Hide();
-                Dispose();
-                _bgService.EnterAppLightweightMode();
+                BeginInvoke(new Action(() =>
+                {
+                    _bgService.EnterAppLightweightMode();
+                    if (!IsDisposed) Dispose();
+                }));
                 return;
             }
             _formDisposed = true;
@@ -1554,8 +1530,9 @@ namespace LumiShift
             _bgService.GammaController.StatusChanged -= OnGammaStatusChanged;
             _bgService.MonitorsChanged -= OnMonitorsChanged;
             _bgService.ScheduleStateChanged -= OnScheduleStateChanged;
-            ThemeManager.ThemeChanged -= OnThemeChanged;
             ClientSizeChanged -= OnFormClientSizeChanged;
+            if (_tabControl != null)
+                _tabControl.TabSelected -= OnTabSelected;
         }
 
         internal static void CleanupStaticFields()

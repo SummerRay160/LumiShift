@@ -99,8 +99,7 @@ namespace LumiShift.Services
                 GammaValue = 1.0,
                 GammaRScale = 1.0,
                 GammaGScale = 1.0,
-                GammaBScale = 1.0,
-                ThemeMode = 2
+                GammaBScale = 1.0
             };
         }
 
@@ -128,7 +127,6 @@ namespace LumiShift.Services
             WriteProp(w, "GammaBScale", s.GammaBScale); w.WriteComma();
             WriteProp(w, "GammaValue", s.GammaValue); w.WriteComma();
             WriteProp(w, "MasterBrightness", s.MasterBrightness); w.WriteComma();
-            WriteProp(w, "ThemeMode", s.ThemeMode); w.WriteComma();
             WriteProp(w, "UseBackgroundImage", s.UseBackgroundImage); w.WriteComma();
             WriteProp(w, "BackgroundImageFile", s.BackgroundImageFile ?? ""); w.WriteComma();
             WriteProp(w, "BackgroundImageOpacity", s.BackgroundImageOpacity); w.WriteComma();
@@ -334,7 +332,6 @@ namespace LumiShift.Services
             s.GammaBScale = GetDouble(root, "GammaBScale", 1.0);
             s.GammaValue = GetDouble(root, "GammaValue", 1.0);
             s.MasterBrightness = GetInt(root, "MasterBrightness", 100);
-            s.ThemeMode = GetInt(root, "ThemeMode", 2);
             s.UseBackgroundImage = GetBool(root, "UseBackgroundImage");
             s.BackgroundImageFile = GetString(root, "BackgroundImageFile") ?? "";
             s.BackgroundImageOpacity = GetInt(root, "BackgroundImageOpacity", 30);

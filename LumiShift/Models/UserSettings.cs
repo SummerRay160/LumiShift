@@ -59,8 +59,6 @@ namespace LumiShift.Models
         public double GammaValue { get; set; } = 1.0;
         public int MasterBrightness { get; set; } = 100;
 
-        public int ThemeMode { get; set; } = 2;
-
         public bool UseBackgroundImage { get; set; }
         public string BackgroundImageFile { get; set; } = "";
         public int BackgroundImageOpacity { get; set; } = 30;
