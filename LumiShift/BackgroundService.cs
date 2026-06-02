@@ -1412,7 +1412,12 @@ namespace LumiShift
             var token = cts.Token;
             try
             {
-                await UpdateService.CheckForUpdateAsync(silent, token);
+                string skippedVersion = await UpdateService.CheckForUpdateAsync(silent, Settings.SkipVersion, token);
+                if (skippedVersion != null)
+                {
+                    Settings.SkipVersion = skippedVersion;
+                    SettingsStore.SaveSettings(Settings);
+                }
             }
             catch (OperationCanceledException)
             {
