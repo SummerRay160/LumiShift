@@ -54,10 +54,10 @@
 ![设置](.github/Screenshot/Screenshot_Setting.png)
 
 - **定时切换**：可启用定时切换功能（点击"配置定时..."进行详细的时间段与预设方案配置）
-- **主题模式**：支持多种主题模式选择（如浅色模式），实时同步界面外观
 - **自定义背景**：可选择本地图片作为界面壁纸，支持透明度调节
 - **开机自启**：可选开机自动启动
 - **启动时最小化到托盘**：启动后自动最小化到系统托盘
+- **退出时还原 Gamma**：可选关闭程序时自动恢复所有显示器的 Gamma 值为系统原始状态
 - 单实例运行，重复启动时激活已有窗口
 
 #### ⏰ 定时调度配置
@@ -133,6 +133,7 @@ LumiShift/
 │   ├── MonitorManager.cs           # 显示器管理 (EDID/热插拔/位置推断)
 │   ├── NativeMethods.cs            # Win32 API 声明
 │   ├── WeakEvent.cs                # 弱事件模式实现
+│   ├── LightweightJson.cs          # 轻量级 JSON 解析器
 │   └── IBrightnessController.cs    # 亮度控制接口
 ├── Models/
 │   ├── PresetDefinitions.cs        # 预设定义
@@ -143,7 +144,8 @@ LumiShift/
 │   └── DesignConstants.cs          # 主题与设计常量
 ├── Services/
 │   ├── SettingsStore.cs            # 设置持久化
-│   └── UpdateService.cs            # 自动更新服务
+│   ├── UpdateService.cs            # 自动更新服务
+│   └── UpdateDialog.cs             # 更新提示对话框
 ├── Form1.cs                        # 主窗体逻辑
 ├── Form1.Designer.cs               # 主窗体设计器
 ├── ScheduleConfigForm.cs           # 定时调度配置窗体
@@ -232,10 +234,10 @@ LumiShift is an open-source screen adjustment tool for Windows that combines mul
 ![Settings](.github/Screenshot/Screenshot_Setting.png)
 
 - **Scheduled switching**: enable scheduled switching (click "配置定时..." for detailed time slot and preset configuration)
-- **Theme mode**: support for multiple theme modes (e.g., Light mode), real-time UI sync
 - **Custom background**: choose local image as interface wallpaper with adjustable opacity
 - **Auto-start**: optional startup with Windows
 - **Minimize to tray on launch**: automatically minimize to system tray on startup
+- **Restore Gamma on exit**: optionally restore all monitors' Gamma values to system defaults when closing
 - Single instance: re-launching activates the existing window
 
 #### ⏰ Schedule Configuration
@@ -311,6 +313,7 @@ LumiShift/
 │   ├── MonitorManager.cs           # Monitor management (EDID/hot-plug/position)
 │   ├── NativeMethods.cs            # Win32 API declarations
 │   ├── WeakEvent.cs                # Weak event pattern implementation
+│   ├── LightweightJson.cs          # Lightweight JSON parser
 │   └── IBrightnessController.cs    # Brightness control interface
 ├── Models/
 │   ├── PresetDefinitions.cs        # Preset definitions
@@ -321,7 +324,8 @@ LumiShift/
 │   └── DesignConstants.cs          # Theme & design constants
 ├── Services/
 │   ├── SettingsStore.cs            # Settings persistence
-│   └── UpdateService.cs            # Auto-update service
+│   ├── UpdateService.cs            # Auto-update service
+│   └── UpdateDialog.cs             # Update notification dialog
 ├── Form1.cs                        # Main form logic
 ├── Form1.Designer.cs               # Main form designer
 ├── ScheduleConfigForm.cs           # Schedule configuration form
