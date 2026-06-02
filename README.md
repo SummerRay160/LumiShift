@@ -49,6 +49,101 @@
 - **定时联动**：可为每台显示器指定不同时段的定时调度方案，手动/定时来源自动标识
 - 基于 GDI32 `SetDeviceGammaRamp`，支持按显示器独立应用 Gamma
 
+#### 📖 使用指南 — 多显示器操作
+
+> 以下内容针对 **两台及以上显示器** 的用户，帮助你理解多屏场景下的操作逻辑与常见误区。
+
+##### Gamma 校正界面（多显示器）
+
+![Gamma 校正](.github/Screenshot/Screenshot_Gamma.png)
+
+**1. 显示器下拉选择框**
+
+界面顶部有一个显示器下拉框，包含「**所有显示器**」选项和每个已连接显示器的名称：
+
+| 选择项 | 行为 | 适用场景 |
+|:---:|:---|:---|
+| **所有显示器** | 调整的参数会**同步应用到所有屏幕**（全局模式） | 希望所有屏幕效果一致时 |
+| **某台具体显示器** | 调整**仅影响该屏幕**，自动进入独立配置模式（独立模式） | 需要为不同屏幕设置不同参数时 |
+
+**2. 全局模式 ⇄ 独立模式的切换**
+
+- **从「所有显示器」切换到某台显示器**：滑块值会切换为该显示器的独立配置。如果该显示器之前没有独立配置，则继承当前全局参数作为初始值。
+- **从某台显示器切回「所有显示器」**：系统会弹出**确认对话框**，提示你"切换将同步所有显示器参数，各显示器的独立配置将被清除"。这是因为：
+  - 切回全局模式意味着"统一管理"，之前的独立差异化配置会被丢弃
+  - 如果当时开启了**定时调度**，提示还会额外说明"定时调度的独立配置也将被清除"
+
+> 💡 **易混淆点**：切回「所有显示器」不是"合并"各屏幕的独立参数，而是以**主显示器**的参数作为新的全局参数，其他屏幕的独立配置直接清除。
+
+**3. Gamma 开关的行为差异**
+
+| 当前模式 | Gamma 开关的作用范围 |
+|:---:|:---|
+| **所有显示器（全局）** | 控制**所有显示器**的 Gamma 开/关 |
+| **某台显示器（独立）** | 仅控制**当前选中显示器**的 Gamma 开/关 |
+
+在独立模式下开关 Gamma 时，该显示器会被标记为**手动来源（manual）**；如果此时定时调度正在运行，调度器会知道该显示器已被手动覆盖，不会在下次时段切换时覆盖你的手动调整。
+
+**4. 一键重置的影响范围**
+
+点击「重置」按钮**只影响当前下拉框选中的显示器**：
+- 选中「所有显示器」→ 重置所有显示器到系统默认值
+- 选中某台显示器 → 仅重置该台显示器
+
+如果该显示器的配置是由**定时调度**生成的（来源标记为 `schedule`），重置时会额外提示："此配置由定时调度生成，重置后将在下次时段切换时恢复。"
+
+**5. 手动调整与定时调度的交互**
+
+当**定时调度功能开启**时，你在 Gamma 界面的任何手动调整（拖动滑块、切换预设、开关 Gamma）都会触发**手动覆盖标记**：
+- 调度器暂停对该显示器的自动切换
+- 界面底部会显示来源标识变化
+- **等到下一个时间段变更时**，调度器会自动恢复定时控制，应用新时段的预设方案
+
+这意味着：你可以放心地在白天临时调整某台屏幕的参数，到了晚上定时切换时间点，它会自动回到夜间预设。
+
+**6. 预设应用的目标**
+
+- 在「所有显示器」模式下应用预设 → **所有显示器**都会切换到该预设
+- 在独立模式下（选中某台显示器）应用预设 → **仅该显示器**切换
+- 通过**托盘菜单**的快速切换 → 可选择"全部显示器"或指定某一台显示器
+
+##### 时间调度配置界面（多显示器）
+
+![定时调度配置](.github/Screenshot/Screenshot_Setting_Time_Scheduling.png)
+
+**1. 统一模式 vs 独立模式**
+
+每个时段行的右侧有一个 **「多屏」开关控件**：
+
+| 模式 | 开关状态 | 说明 |
+|:---:|:---:|:---|
+| **统一模式** | 关闭（默认） | 该时段内**所有显示器**使用同一个预设 |
+| **独立模式** | 开启 | 可以为该时段内的**每台显示器分别指定不同的预设** |
+
+**2. 如何使用独立模式**
+
+1. 点击时段行右侧的 **Toggle 开关**，将其切换到开启状态
+2. 该行会展开为**每台显示器一个独立的预设下拉框**
+3. 为每台显示器单独选择所需的预设（如：主显示器用「护眼模式」，副显示器用「标准」）
+4. 保存即可生效
+
+> ⚠️ **注意**：从独立模式切回统一模式时，如果各显示器之前设置了不同的预设，系统会弹出确认提示："切换到统一模式将清除各显示器的独立预设配置"，因为统一模式下只能保留一个公共预设。
+
+**3. 典型场景示例**
+
+假设你有两台显示器（主屏 + 副屏），可以这样配置：
+
+| 时段 | 主显示器预设 | 副显示器预设 | 配置方式 |
+|:---|:---|:---|:---|
+| 06:00 – 18:00 | 标准 | 标准 | 统一模式（关闭多屏开关） |
+| 18:00 – 06:00 | 护眼模式 | 防蓝光 | 独立模式（开启多屏开关，分别选择） |
+
+这样白天两屏一致，晚上根据使用场景给不同屏幕设置不同的护眼强度。
+
+**4. 跨午夜时段**
+
+支持配置跨越午夜的时间段（如 `22:00 – 06:00`），无需拆分为两个时段。
+
 #### ⚙️ 设置
 
 ![设置](.github/Screenshot/Screenshot_Setting.png)
@@ -228,6 +323,101 @@ LumiShift is an open-source screen adjustment tool for Windows that combines mul
 - **Preset management**: built-in Standard, Anti-Blue, Eye Care, Gaming presets; save and delete custom presets
 - **Schedule integration**: assign time-based schedules per monitor, manual/schedule source auto-labeled
 - Based on GDI32 `SetDeviceGammaRamp`, supports per-display independent Gamma application
+
+#### 📖 Usage Guide — Multi-Monitor Operation
+
+> The following guide is for users with **two or more monitors**, explaining multi-monitor operation logic and common points of confusion.
+
+##### Gamma Correction Interface (Multi-Monitor)
+
+![Gamma Correction](.github/Screenshot/Screenshot_Gamma.png)
+
+**1. Monitor Selector Dropdown**
+
+At the top of the Gamma panel is a monitor selector dropdown containing an **"All Monitors"** option plus each connected monitor's name:
+
+| Selection | Behavior | Use Case |
+|:---:|:---|:---|
+| **All Monitors** | Adjustments are **synced to all screens** (Global mode) | When you want all screens to look identical |
+| **A specific monitor** | Adjustments affect **only that screen**; enters independent config mode (Per-Display mode) | When you need different settings per screen |
+
+**2. Global Mode ⇄ Per-Display Mode Switching**
+
+- **Switching from "All Monitors" to a specific monitor**: Slider values switch to that monitor's independent config. If no independent config exists yet, it inherits current global parameters as starting values.
+- **Switching from a specific monitor back to "All Monitors"**: A **confirmation dialog** appears, stating "Switching will sync all monitor parameters; independent configs for each monitor will be cleared." This happens because:
+  - Returning to Global mode means "unified management" — previous independent per-monitor configs are discarded
+  - If **schedule** is enabled, the dialog additionally warns that "independent schedule configs will also be cleared"
+
+> 💡 **Common confusion**: Switching back to "All Monitors" does **not merge** each screen's independent parameters. Instead, it uses the **primary monitor's** parameters as the new global values and directly clears all other monitors' independent configs.
+
+**3. Gamma Toggle Behavior Differences**
+
+| Current Mode | Gamma Toggle Affects |
+|:---:|:---|
+| **All Monitors (Global)** | **All monitors'** Gamma on/off |
+| **A specific monitor (Per-Display)** | **Only the selected monitor's** Gamma on/off |
+
+When toggling Gamma in Per-Display mode, that monitor is tagged with **manual source (`manual`)**. If a schedule is running, the scheduler knows this monitor has been manually overridden and won't overwrite your changes at the next time slot transition.
+
+**4. Reset Button Scope**
+
+Clicking **Reset** only affects the **currently selected monitor** in the dropdown:
+- "All Monitors" selected → Resets **all monitors** to system defaults
+- A specific monitor selected → Resets **only that monitor**
+
+If that monitor's config was generated by **scheduled task** (source tagged as `schedule`), an additional prompt appears: "This config was generated by schedule; it will restore at next time slot change after reset."
+
+**5. Manual Adjustment & Schedule Interaction**
+
+When **schedule is enabled**, any manual adjustment you make in the Gamma interface (dragging sliders, switching presets, toggling Gamma) triggers a **manual override flag**:
+- The scheduler pauses automatic switching for that monitor
+- The source indicator at the bottom of the interface changes accordingly
+- At the **next time slot boundary**, the scheduler automatically resumes scheduled control and applies the new time slot's preset
+
+This means you can freely adjust a screen's parameters temporarily during the day, and when the evening scheduled time arrives, it will automatically revert to the night preset.
+
+**6. Preset Application Target**
+
+- Apply preset in "All Monitors" mode → **All monitors** switch to that preset
+- Apply preset in Per-Display mode (specific monitor selected) → **Only that monitor** switches
+- Quick-switch via **tray menu** → Choose "All Monitors" or a specific monitor
+
+##### Schedule Configuration Interface (Multi-Monitor)
+
+![Schedule Configuration](.github/Screenshot/Screenshot_Setting_Time_Scheduling.png)
+
+**1. Unified Mode vs. Independent Mode**
+
+Each time slot row has a **"Multi-Screen" toggle** on the right side:
+
+| Mode | Toggle State | Description |
+|:---:|:---:|:---|
+| **Unified Mode** | Off (default) | **All monitors** use the same preset for this time slot |
+| **Independent Mode** | On | You can assign **different presets per monitor** for this time slot |
+
+**2. How to Use Independent Mode**
+
+1. Click the **Toggle switch** on the right side of a time slot row to turn it **On**
+2. The row expands to show **one independent preset dropdown per connected monitor**
+3. Select the desired preset for each monitor individually (e.g., Primary → "Eye Care", Secondary → "Standard")
+4. Save to apply
+
+> ⚠️ **Note**: When switching from Independent mode back to Unified mode, if monitors had different presets configured, a confirmation dialog appears: "Switching to unified mode will clear independent preset configs for each monitor," because Unified mode only retains one shared preset.
+
+**3. Typical Scenario Example**
+
+With two monitors (Primary + Secondary), you could configure:
+
+| Time Slot | Primary Preset | Secondary Preset | Config Method |
+|:---|:---|:---|:---|
+| 06:00 – 18:00 | Standard | Standard | Unified mode (toggle off) |
+| 18:00 – 06:00 | Eye Care | Anti-Blue | Independent mode (toggle on, select per monitor) |
+
+This way both screens are identical during daytime, while at night each screen gets eye-protection tuned to its usage context.
+
+**4. Overnight Time Slots**
+
+Time slots crossing midnight (e.g., `22:00 – 06:00`) are supported — no need to split into two separate slots.
 
 #### ⚙️ Settings
 
