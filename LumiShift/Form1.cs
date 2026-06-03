@@ -481,6 +481,8 @@ namespace LumiShift
                     var nameLabel = (Label)row.Controls[0];
 
                     nameLabel.Text = monitor.DisplayName;
+                    if (!(monitor.Controller?.IsSupported ?? true))
+                        nameLabel.Text = monitor.DisplayName + " (不支持硬件亮度调节)";
                     nameLabel.Width = _brightnessPanel.Width - row.Padding.Horizontal;
                     slider.Maximum = 100;
                     slider.Minimum = 0;
@@ -506,6 +508,8 @@ namespace LumiShift
                         Font = Typography.Body,
                         ForeColor = Colors.TextSecondary
                     };
+                    if (!(monitor.Controller?.IsSupported ?? true))
+                        nameLabel.Text = monitor.DisplayName + " (不支持硬件亮度调节)";
                     nameLabel.Location = new Point((row.Width - row.Padding.Horizontal - nameLabel.Width) / 2, row.Padding.Top);
 
                     var tb = new ModernSlider
@@ -1603,6 +1607,7 @@ namespace LumiShift
             {
                 _lastRebuildCacheSize = default;
                 _lastRebuildCacheOpacity = 0;
+                _lastCachedBackgroundImage = null;
                 _cachedBackground?.Dispose();
                 _cachedBackground = null;
 
@@ -1626,11 +1631,13 @@ namespace LumiShift
 
             if (_cachedBackground != null
                 && _lastRebuildCacheSize == currentSize
-                && Math.Abs(_lastRebuildCacheOpacity - opacity) < 0.001f)
+                && Math.Abs(_lastRebuildCacheOpacity - opacity) < 0.001f
+                && _lastCachedBackgroundImage == _backgroundImage)
                 return;
 
             _lastRebuildCacheSize = currentSize;
             _lastRebuildCacheOpacity = opacity;
+            _lastCachedBackgroundImage = _backgroundImage;
 
             _cachedBackground?.Dispose();
             _cachedBackground = null;
@@ -1694,6 +1701,8 @@ namespace LumiShift
         private Size _lastTabPageBgSize;
         private Size _lastRebuildCacheSize;
         private float _lastRebuildCacheOpacity;
+        private Image _lastCachedBackgroundImage;
+        private Image _lastTabPageBackgroundImage;
 
         private void UpdateTabPageBackgrounds()
         {
@@ -1708,6 +1717,7 @@ namespace LumiShift
                 }
                 _sharedTabPageBg?.Dispose();
                 _sharedTabPageBg = null;
+                _lastTabPageBackgroundImage = null;
                 return;
             }
 
@@ -1720,7 +1730,8 @@ namespace LumiShift
 
             if (_sharedTabPageBg == null ||
                 Math.Abs(_lastTabPageBgOpacity - opacity) > 0.001f ||
-                _lastTabPageBgSize != tabPageSize)
+                _lastTabPageBgSize != tabPageSize ||
+                _lastTabPageBackgroundImage != _backgroundImage)
             {
                 _sharedTabPageBg?.Dispose();
                 _sharedTabPageBg = null;
@@ -1761,6 +1772,7 @@ namespace LumiShift
 
                 _lastTabPageBgOpacity = opacity;
                 _lastTabPageBgSize = tabPageSize;
+                _lastTabPageBackgroundImage = _backgroundImage;
             }
 
             foreach (TabPage page in _tabControl.TabPages)

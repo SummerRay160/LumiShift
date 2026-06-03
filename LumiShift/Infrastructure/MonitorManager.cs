@@ -428,6 +428,11 @@ namespace LumiShift.Infrastructure
                     }
                 }
 
+                if (matchIdx < 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MonitorManager] WMI 显示器匹配失败: screen={screenName}, pnpPath={pnpPath}");
+                }
+
                 if (matchIdx >= 0)
                 {
                     var wm = wmiMonitors[matchIdx];
@@ -491,7 +496,8 @@ namespace LumiShift.Infrastructure
                                 }
                                 else
                                 {
-                                    result[screen.DeviceName] = (screen.DeviceName, screen.Primary, null, null);
+                                    System.Diagnostics.Debug.WriteLine($"[MonitorManager] Win32_DesktopMonitor fallback: {screen.DeviceName} 未匹配到 PnP ID，标记为外接显示器 (isBuiltIn=false)");
+                                    result[screen.DeviceName] = (screen.DeviceName, false, null, null);
                                 }
                             }
                         }
@@ -504,9 +510,10 @@ namespace LumiShift.Infrastructure
 
             if (result.Count == 0)
             {
+                System.Diagnostics.Debug.WriteLine("[MonitorManager] WMI 查询完全失败，所有显示器标记为外接显示器 (isBuiltIn=false)");
                 foreach (Screen screen in Screen.AllScreens)
                 {
-                    result[screen.DeviceName] = (screen.DeviceName, screen.Primary, null, null);
+                    result[screen.DeviceName] = (screen.DeviceName, false, null, null);
                 }
             }
 
