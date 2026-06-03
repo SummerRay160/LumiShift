@@ -89,6 +89,8 @@ namespace LumiShift.Infrastructure
         private readonly string _deviceId;
         private readonly string _displayName;
         private IntPtr _physicalMonitor;
+        private NativeMethods.PHYSICAL_MONITOR[] _allPhysicalMonitors;
+        private uint _physicalMonitorCount;
         private bool _disposed;
         private int _cachedBrightness = -1;
 
@@ -102,6 +104,8 @@ namespace LumiShift.Infrastructure
             _deviceId = deviceId;
             _displayName = displayName;
             _physicalMonitor = IntPtr.Zero;
+            _allPhysicalMonitors = null;
+            _physicalMonitorCount = 0;
 
             IsSupported = InitializePhysicalMonitor(screen);
         }
@@ -110,35 +114,105 @@ namespace LumiShift.Infrastructure
         {
             try
             {
-                var pt = new NativeMethods.POINT
+                // 使用屏幕完整边界矩形定位显示器，比单点定位更可靠
+                var screenRect = new NativeMethods.RECT
                 {
-                    X = screen.Bounds.Left + 1,
-                    Y = screen.Bounds.Top + 1
+                    Left = screen.Bounds.Left,
+                    Top = screen.Bounds.Top,
+                    Right = screen.Bounds.Right,
+                    Bottom = screen.Bounds.Bottom
                 };
-                IntPtr hMonitor = NativeMethods.MonitorFromPoint(pt, NativeMethods.MONITOR_DEFAULTTONEAREST);
+
+                // MONITOR_DEFAULTTONULL: 如果矩形不在任何显示器上，返回 IntPtr.Zero 而非默认值
+                IntPtr hMonitor = NativeMethods.MonitorFromRect(ref screenRect, NativeMethods.MONITOR_DEFAULTTONULL);
                 if (hMonitor == IntPtr.Zero)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DdcBrightness] MonitorFromRect 返回 null (screen={screen.DeviceName})");
                     return false;
+                }
+
+                // 验证获取到的 HMONITOR 是否对应预期的屏幕
+                var monitorInfo = new NativeMethods.MONITORINFO();
+                monitorInfo.cbSize = System.Runtime.InteropServices.Marshal.SizeOf(monitorInfo);
+                if (!NativeMethods.GetMonitorInfo(hMonitor, ref monitorInfo))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DdcBrightness] GetMonitorInfo 失败 (screen={screen.DeviceName})");
+                    return false;
+                }
+
+                // 验证显示器边界是否匹配
+                if (monitorInfo.rcMonitor.Left != screen.Bounds.Left ||
+                    monitorInfo.rcMonitor.Top != screen.Bounds.Top ||
+                    monitorInfo.rcMonitor.Right != screen.Bounds.Right ||
+                    monitorInfo.rcMonitor.Bottom != screen.Bounds.Bottom)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DdcBrightness] 显示器不匹配: 期望={screen.Bounds}, 实际=({monitorInfo.rcMonitor.Left},{monitorInfo.rcMonitor.Top},{monitorInfo.rcMonitor.Right},{monitorInfo.rcMonitor.Bottom}) (screen={screen.DeviceName})");
+                    // 改用中心点重试
+                    var centerPt = new NativeMethods.POINT
+                    {
+                        X = screen.Bounds.Left + screen.Bounds.Width / 2,
+                        Y = screen.Bounds.Top + screen.Bounds.Height / 2
+                    };
+                    hMonitor = NativeMethods.MonitorFromPoint(centerPt, NativeMethods.MONITOR_DEFAULTTONULL);
+                    if (hMonitor == IntPtr.Zero)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[DdcBrightness] 重试 MonitorFromPoint 也失败 (screen={screen.DeviceName})");
+                        return false;
+                    }
+
+                    monitorInfo = new NativeMethods.MONITORINFO();
+                    monitorInfo.cbSize = System.Runtime.InteropServices.Marshal.SizeOf(monitorInfo);
+                    if (!NativeMethods.GetMonitorInfo(hMonitor, ref monitorInfo))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[DdcBrightness] 重试 GetMonitorInfo 失败 (screen={screen.DeviceName})");
+                        return false;
+                    }
+                }
 
                 if (!NativeMethods.GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, out uint count))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DdcBrightness] GetNumberOfPhysicalMonitorsFromHMONITOR 失败 (screen={screen.DeviceName})");
                     return false;
+                }
 
                 if (count <= 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DdcBrightness] 无物理显示器 (screen={screen.DeviceName})");
                     return false;
+                }
 
                 var monitors = new NativeMethods.PHYSICAL_MONITOR[count];
                 if (!NativeMethods.GetPhysicalMonitorsFromHMONITOR(hMonitor, count, monitors))
+                {
+                    // 如果获取失败，确保数组中的句柄不被泄露（此时数组可能未填充）
                     return false;
+                }
 
+                // 保存所有物理显示器句柄，确保在 Dispose 时全部销毁
+                _allPhysicalMonitors = monitors;
+                _physicalMonitorCount = count;
                 _physicalMonitor = monitors[0].hPhysicalMonitor;
 
+                // 检查亮度能力
                 if (!NativeMethods.GetMonitorCapabilities(_physicalMonitor,
                     out uint caps, out uint _))
+                {
+                    // 如果能力检查失败，不保存句柄（Dispose 时仍会销毁所有已分配的句柄）
                     return false;
+                }
 
-                return (caps & NativeMethods.MC_CAPS_BRIGHTNESS) != 0;
+                bool supportsBrightness = (caps & NativeMethods.MC_CAPS_BRIGHTNESS) != 0;
+
+                if (!supportsBrightness)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DdcBrightness] 不支持 DDC/CI 亮度控制 (screen={screen.DeviceName})");
+                }
+
+                return supportsBrightness;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[DdcBrightness] 初始化异常: {ex.Message} (screen={screen?.DeviceName})");
                 return false;
             }
         }
@@ -205,11 +279,22 @@ namespace LumiShift.Infrastructure
         private void Dispose(bool disposing)
         {
             if (_disposed) return;
-            if (_physicalMonitor != IntPtr.Zero)
+
+            if (_allPhysicalMonitors != null && _physicalMonitorCount > 0)
             {
+                // 使用 DestroyPhysicalMonitors 销毁所有物理显示器句柄
+                NativeMethods.DestroyPhysicalMonitors(_physicalMonitorCount, _allPhysicalMonitors);
+                _allPhysicalMonitors = null;
+                _physicalMonitor = IntPtr.Zero;
+                _physicalMonitorCount = 0;
+            }
+            else if (_physicalMonitor != IntPtr.Zero)
+            {
+                // 回退：如果没有完整数组就销毁单个句柄
                 NativeMethods.DestroyPhysicalMonitor(_physicalMonitor);
                 _physicalMonitor = IntPtr.Zero;
             }
+
             _disposed = true;
         }
     }

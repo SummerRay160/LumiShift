@@ -481,6 +481,8 @@ namespace LumiShift
                     var nameLabel = (Label)row.Controls[0];
 
                     nameLabel.Text = monitor.DisplayName;
+                    if (!(monitor.Controller?.IsSupported ?? true))
+                        nameLabel.Text = monitor.DisplayName + " (不支持硬件亮度调节)";
                     nameLabel.Width = _brightnessPanel.Width - row.Padding.Horizontal;
                     slider.Maximum = 100;
                     slider.Minimum = 0;
@@ -506,6 +508,8 @@ namespace LumiShift
                         Font = Typography.Body,
                         ForeColor = Colors.TextSecondary
                     };
+                    if (!(monitor.Controller?.IsSupported ?? true))
+                        nameLabel.Text = monitor.DisplayName + " (不支持硬件亮度调节)";
                     nameLabel.Location = new Point((row.Width - row.Padding.Horizontal - nameLabel.Width) / 2, row.Padding.Top);
 
                     var tb = new ModernSlider

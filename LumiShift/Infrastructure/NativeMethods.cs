@@ -55,6 +55,11 @@ namespace LumiShift.Infrastructure
 
         [DllImport("dxva2.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool DestroyPhysicalMonitors(uint dwPhysicalMonitorArraySize,
+            [In] PHYSICAL_MONITOR[] pPhysicalMonitorArray);
+
+        [DllImport("dxva2.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetMonitorCapabilities(IntPtr hMonitor, out uint pdwMonitorCapabilities,
             out uint pdwSupportedColorTemperatures);
 
@@ -63,9 +68,35 @@ namespace LumiShift.Infrastructure
         [DllImport("user32.dll")]
         public static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
 
+        [DllImport("user32.dll")]
+        public static extern IntPtr MonitorFromRect(ref RECT lprc, uint dwFlags);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
         public const uint MONITOR_DEFAULTTONULL = 0;
         public const uint MONITOR_DEFAULTTOPRIMARY = 1;
         public const uint MONITOR_DEFAULTTONEAREST = 2;
+        public const uint MONITORINFOF_PRIMARY = 1;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        public struct MONITORINFO
+        {
+            public int cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT
