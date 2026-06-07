@@ -41,6 +41,7 @@ _ReSharper*/
 
 .vscode/
 .idea/
+.trae/
 
 Thumbs.db
 ehthumbs.db
