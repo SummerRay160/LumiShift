@@ -1039,13 +1039,18 @@ namespace LumiShift
                 foreach (var key in scheduleKeys)
                     Settings.GammaPerDisplay.Remove(key);
 
-                Settings.GammaEnabled = _preScheduleGammaEnabled;
-                Settings.GammaRScale = _preScheduleGammaRScale;
-                Settings.GammaGScale = _preScheduleGammaGScale;
-                Settings.GammaBScale = _preScheduleGammaBScale;
-                Settings.GammaValue = _preScheduleGammaValue;
-                Settings.MasterBrightness = _preScheduleMasterBrightness;
+                // 仅在用户未手动覆盖时恢复定时前的 Gamma 参数
+                if (!_scheduleManualOverride)
+                {
+                    Settings.GammaEnabled = _preScheduleGammaEnabled;
+                    Settings.GammaRScale = _preScheduleGammaRScale;
+                    Settings.GammaGScale = _preScheduleGammaGScale;
+                    Settings.GammaBScale = _preScheduleGammaBScale;
+                    Settings.GammaValue = _preScheduleGammaValue;
+                    Settings.MasterBrightness = _preScheduleMasterBrightness;
+                }
 
+                _scheduleManualOverride = false;
                 ApplyGammaToSystem();
                 ScheduleStateChanged?.Invoke();
             }

@@ -84,6 +84,28 @@ namespace LumiShift
         private int _previousMonitorSelectedIndex;
         private Timer _initTimer;
 
+        // 防抖机制
+        private Timer _debounceTimer;
+        private Action _pendingDebounceAction;
+
+        private void DebounceAction(Action action)
+        {
+            _pendingDebounceAction = action;
+            if (_debounceTimer == null)
+            {
+                _debounceTimer = new Timer { Interval = 30 };
+                _debounceTimer.Tick += (s, e) =>
+                {
+                    _debounceTimer.Stop();
+                    var actionToRun = _pendingDebounceAction;
+                    _pendingDebounceAction = null;
+                    actionToRun?.Invoke();
+                };
+            }
+            _debounceTimer.Stop();
+            _debounceTimer.Start();
+        }
+
         private static Icon LoadAppIcon()
         {
             return Program.AppIcon;
@@ -594,7 +616,7 @@ namespace LumiShift
         private void RestoreGammaToggle_CheckedChanged(object sender, EventArgs e)
         {
             Settings.RestoreGammaOnExit = _restoreGammaToggle.Checked;
-            SettingsStore.SaveSettings(Settings);
+            DebounceAction(() => SettingsStore.SaveSettings(Settings));
         }
 
         private void UpdateEyeProtectionUI()
@@ -613,16 +635,15 @@ namespace LumiShift
         private void EyeProtectionToggle_CheckedChanged(object sender, EventArgs e)
         {
             Settings.EyeProtectionEnabled = _eyeProtectionToggle.Checked;
-            if (Settings.EyeProtectionEnabled)
-            {
-                EyeProtectionService.ApplyColor(Settings.EyeProtectionRed, Settings.EyeProtectionGreen, Settings.EyeProtectionBlue);
-            }
-            else
-            {
-                EyeProtectionService.RestoreDefault();
-            }
             UpdateEyeProtectionUI();
-            SettingsStore.SaveSettings(Settings);
+            DebounceAction(() =>
+            {
+                if (Settings.EyeProtectionEnabled)
+                    EyeProtectionService.ApplyColor(Settings.EyeProtectionRed, Settings.EyeProtectionGreen, Settings.EyeProtectionBlue);
+                else
+                    EyeProtectionService.RestoreDefault();
+                SettingsStore.SaveSettings(Settings);
+            });
         }
 
         private void EyeProtectionPresetButton_Click(object sender, EventArgs e)
@@ -756,8 +777,11 @@ namespace LumiShift
         {
             if (_isUpdatingBgImageUI) return;
             Settings.UseBackgroundImage = _bgImageToggle.Checked;
-            LoadBackgroundImage();
-            SettingsStore.SaveSettings(Settings);
+            DebounceAction(() =>
+            {
+                LoadBackgroundImage();
+                SettingsStore.SaveSettings(Settings);
+            });
         }
 
         private void BgImageSelectButton_Click(object sender, EventArgs e)
@@ -1028,10 +1052,13 @@ namespace LumiShift
                 _bgService.SetScheduleManualOverride(true);
 
             RefreshSliderVisibility();
-            _bgService.ApplyGammaToSystem();
-            SettingsStore.SaveSettings(Settings);
-            _bgService.UpdateTrayMenu();
-            UpdateScheduleOverrideStatus();
+            DebounceAction(() =>
+            {
+                _bgService.ApplyGammaToSystem();
+                SettingsStore.SaveSettings(Settings);
+                _bgService.UpdateTrayMenu();
+                UpdateScheduleOverrideStatus();
+            });
         }
 
         private void GammaSimplifiedCheckBox_CheckedChanged(object sender, EventArgs e)
@@ -1423,17 +1450,23 @@ namespace LumiShift
         private void GammaScheduleToggle_CheckedChanged(object sender, EventArgs e)
         {
             if (_isUpdatingSchedule) return;
-            _bgService.SetScheduleEnabled(_gammaScheduleToggle.Checked);
-            _scheduleEnabledCheckBox.Checked = Settings.ScheduleEnabled;
-            UpdateScheduleOverrideStatus();
+            _scheduleEnabledCheckBox.Checked = _gammaScheduleToggle.Checked;
+            DebounceAction(() =>
+            {
+                _bgService.SetScheduleEnabled(_gammaScheduleToggle.Checked);
+                UpdateScheduleOverrideStatus();
+            });
         }
 
         private void ScheduleEnabledCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             if (_isUpdatingSchedule) return;
-            _bgService.SetScheduleEnabled(_scheduleEnabledCheckBox.Checked);
-            _gammaScheduleToggle.Checked = Settings.ScheduleEnabled;
-            UpdateScheduleOverrideStatus();
+            _gammaScheduleToggle.Checked = _scheduleEnabledCheckBox.Checked;
+            DebounceAction(() =>
+            {
+                _bgService.SetScheduleEnabled(_scheduleEnabledCheckBox.Checked);
+                UpdateScheduleOverrideStatus();
+            });
         }
 
         private void ScheduleConfigButton_Click(object sender, EventArgs e)
@@ -1455,14 +1488,17 @@ namespace LumiShift
         private void StartWithWindowsCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             Settings.StartWithWindows = _startWithWindowsCheckBox.Checked;
-            _bgService.UpdateStartupRegistry();
-            SettingsStore.SaveSettings(Settings);
+            DebounceAction(() =>
+            {
+                _bgService.UpdateStartupRegistry();
+                SettingsStore.SaveSettings(Settings);
+            });
         }
 
         private void StartMinimizedCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             Settings.StartMinimized = _startMinimizedCheckBox.Checked;
-            SettingsStore.SaveSettings(Settings);
+            DebounceAction(() => SettingsStore.SaveSettings(Settings));
         }
 
         private void OnGammaStatusChanged(object sender, string status)
@@ -1490,6 +1526,12 @@ namespace LumiShift
         private void OnScheduleStateChanged()
         {
             if (_formDisposed || IsDisposed) return;
+            if (InvokeRequired)
+            {
+                try { BeginInvoke(new Action(OnScheduleStateChanged)); }
+                catch { }
+                return;
+            }
             SyncSlidersToSettings();
             UpdateScheduleOverrideStatus();
             PopulateMonitorSelector();
@@ -1510,6 +1552,7 @@ namespace LumiShift
                 _formDisposed = true;
                 _resizeDebounceTimer?.Stop();
                 _initTimer?.Stop();
+                _debounceTimer?.Stop();
                 UnsubscribeEvents();
                 _bgService.OnFormClosing(this);
                 e.Cancel = true;
@@ -1524,6 +1567,7 @@ namespace LumiShift
             _formDisposed = true;
             _resizeDebounceTimer?.Stop();
             _initTimer?.Stop();
+            _debounceTimer?.Stop();
             UnsubscribeEvents();
             _bgService.OnFormClosing(this);
             base.OnFormClosing(e);

@@ -535,7 +535,7 @@ namespace LumiShift
                 Text = "定时切换",
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
-                Font = Typography.BodyBold
+                Font = Typography.Body
             };
             SetLabelTheme(scheduleLabel2, 'p');
 
@@ -548,7 +548,7 @@ namespace LumiShift
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,
                 ForeColor = Colors.TextPrimary,
-                Font = Typography.Caption,
+                Font = Typography.Body,
                 FlatAppearance = { BorderSize = 0 },
                 TextAlign = ContentAlignment.MiddleCenter,
                 Cursor = Cursors.Hand
