@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using LumiShift.Resources;
 
@@ -9,9 +8,18 @@ namespace LumiShift.Controls
     public class ToggleSwitch : Control
     {
         private bool _checked;
-        private float _animProgress;
-        private Timer _animTimer;
         private bool _hovered;
+
+        // 预定义尺寸
+        private const int SwitchWidth = 36;
+        private const int SwitchHeight = 18;
+        private const int TrackHeight = 12;
+        private const int ThumbSize = 14;
+
+        // 预定义颜色（避免每次绘制时创建）
+        private static readonly Color ShadowColor = Color.FromArgb(100, 0, 0, 0);
+        private static readonly Color ThumbBorderColor = Color.FromArgb(60, 0, 0, 0);
+        private static readonly Color HoverThumbColor = Color.FromArgb(250, 250, 250);
 
         public event EventHandler CheckedChanged;
 
@@ -23,7 +31,6 @@ namespace LumiShift.Controls
                 if (_checked != value)
                 {
                     _checked = value;
-                    StartAnimation(value ? 1f : 0f);
                     CheckedChanged?.Invoke(this, EventArgs.Empty);
                     Invalidate();
                 }
@@ -35,40 +42,11 @@ namespace LumiShift.Controls
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                      ControlStyles.ResizeRedraw | ControlStyles.DoubleBuffer |
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
-            Width = 42;
-            Height = 22;
+            Width = SwitchWidth;
+            Height = SwitchHeight;
             BackColor = Color.Transparent;
-            _animProgress = _checked ? 1f : 0f;
-            _animTimer = new Timer { Interval = 16 };
-            _animTimer.Tick += OnAnimationTick;
+            Cursor = Cursors.Hand;
         }
-
-        private void StartAnimation(float target)
-        {
-            _animTimer.Stop();
-            _animTimer.Tag = target;
-            _animTimer.Start();
-        }
-
-        private void OnAnimationTick(object sender, EventArgs e)
-        {
-            float target = (float)_animTimer.Tag;
-            _animProgress += (target - _animProgress) * 0.28f;
-            if (Math.Abs(_animProgress - target) < 0.01f)
-            {
-                _animProgress = target;
-                _animTimer.Stop();
-            }
-            Invalidate();
-        }
-
-        protected override void OnPaintBackground(PaintEventArgs e)
-        {
-            base.OnPaintBackground(e);
-        }
-
-        private static readonly Color ThumbEdgeColor = Color.FromArgb(30, 0, 0, 0);
-        private static readonly Color GlowColorStatic = Color.FromArgb(40, 0, 0, 0);
 
         protected override void OnMouseClick(MouseEventArgs e)
         {
@@ -91,105 +69,39 @@ namespace LumiShift.Controls
             base.OnMouseLeave(e);
         }
 
-        private GraphicsPath _trackPathCache;
-        private GraphicsPath _glowPathCache;
-        private GraphicsPath _bigGlowPathCache;
-        private float _lastTrackX, _lastTrackY, _lastTrackW, _lastTrackH;
-
-        private GraphicsPath GetTrackPath(float x, float y, float w, float h, float r)
-        {
-            if (_trackPathCache != null &&
-                Math.Abs(_lastTrackX - x) < 0.5f &&
-                Math.Abs(_lastTrackY - y) < 0.5f &&
-                Math.Abs(_lastTrackW - w) < 0.5f &&
-                Math.Abs(_lastTrackH - h) < 0.5f)
-                return _trackPathCache;
-
-            _trackPathCache?.Dispose();
-            _glowPathCache?.Dispose();
-            _bigGlowPathCache?.Dispose();
-            _trackPathCache = CreateRoundRect(x, y, w, h, r);
-            _glowPathCache = CreateRoundRect(x, y, w, h, r);
-            var big = new RectangleF(x - 2, y - 2, w + 4, h + 4);
-            _bigGlowPathCache = CreateRoundRect(big.X, big.Y, big.Width, big.Height, big.Height / 2f);
-            _lastTrackX = x;
-            _lastTrackY = y;
-            _lastTrackW = w;
-            _lastTrackH = h;
-            return _trackPathCache;
-        }
-
-        protected override void OnResize(EventArgs e)
-        {
-            base.OnResize(e);
-            _trackPathCache?.Dispose();
-            _trackPathCache = null;
-            _glowPathCache?.Dispose();
-            _glowPathCache = null;
-            _bigGlowPathCache?.Dispose();
-            _bigGlowPathCache = null;
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _animTimer?.Stop();
-                _animTimer?.Dispose();
-                _animTimer = null;
-                _trackPathCache?.Dispose();
-                _trackPathCache = null;
-                _glowPathCache?.Dispose();
-                _glowPathCache = null;
-                _bigGlowPathCache?.Dispose();
-                _bigGlowPathCache = null;
-            }
-            base.Dispose(disposing);
-        }
-
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            float h = Height;
-            float w = Width;
-            float trackH = 12f;
-            float trackY = (h - trackH) / 2f;
-            float trackX = 2f;
-            float trackW = w - 4f;
+            // 计算位置
+            float trackY = (Height - TrackHeight) / 2f;
+            float trackX = 1f;
+            float trackW = Width - 2f;
+            float thumbY = (Height - ThumbSize) / 2f;
+            float thumbX = _checked ? (trackX + trackW - ThumbSize - 1f) : (trackX + 1f);
 
-            float thumbSize = 18f;
-            float thumbY = (h - thumbSize) / 2f;
-            float thumbMin = 2f;
-            float thumbMax = w - thumbSize - 2f;
-            float thumbX = thumbMin + (thumbMax - thumbMin) * _animProgress;
-
+            // 轨道颜色
             Color trackColor = _checked ? Colors.Green : Colors.BorderLight;
+            float radius = TrackHeight / 2f;
 
-            var trackPath = GetTrackPath(trackX, trackY, trackW, trackH, trackH / 2f);
-            g.FillPath(GdiCache.GetBrush(trackColor), trackPath);
+            // 绘制轨道（使用缓存画笔）
+            var trackBrush = GdiCache.GetBrush(trackColor);
+            g.FillEllipse(trackBrush, trackX, trackY, TrackHeight, TrackHeight);
+            g.FillEllipse(trackBrush, trackX + trackW - TrackHeight, trackY, TrackHeight, TrackHeight);
+            g.FillRectangle(trackBrush, trackX + radius, trackY, trackW - TrackHeight, TrackHeight);
 
-            if (_checked)
-            {
-                g.FillPath(GdiCache.GetBrush(Color.FromArgb(40, Colors.Green)), _glowPathCache);
-                g.FillPath(GdiCache.GetBrush(Color.FromArgb(40, Colors.Green)), _bigGlowPathCache);
-            }
+            // 绘制滑块阴影
+            var shadowBrush = GdiCache.GetBrush(ShadowColor);
+            g.FillEllipse(shadowBrush, thumbX + 1, thumbY + 1, ThumbSize, ThumbSize);
 
-            g.FillEllipse(GdiCache.GetBrush(_hovered ? Colors.BrandHover : Color.White), thumbX, thumbY, thumbSize, thumbSize);
+            // 绘制滑块
+            Color thumbColor = _hovered ? HoverThumbColor : Color.White;
+            var thumbBrush = GdiCache.GetBrush(thumbColor);
+            g.FillEllipse(thumbBrush, thumbX, thumbY, ThumbSize, ThumbSize);
 
-            g.DrawEllipse(GdiCache.GetPen(ThumbEdgeColor), thumbX, thumbY, thumbSize, thumbSize);
-        }
-
-        private static GraphicsPath CreateRoundRect(float x, float y, float w, float h, float r)
-        {
-            var path = new GraphicsPath();
-            path.AddArc(x, y, r * 2, r * 2, 180, 90);
-            path.AddArc(x + w - r * 2, y, r * 2, r * 2, 270, 90);
-            path.AddArc(x + w - r * 2, y + h - r * 2, r * 2, r * 2, 0, 90);
-            path.AddArc(x, y + h - r * 2, r * 2, r * 2, 90, 90);
-            path.CloseFigure();
-            return path;
+            // 滑块边框
+            var thumbPen = GdiCache.GetPen(ThumbBorderColor);
+            g.DrawEllipse(thumbPen, thumbX, thumbY, ThumbSize, ThumbSize);
         }
     }
 }
