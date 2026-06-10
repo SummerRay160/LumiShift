@@ -195,6 +195,8 @@ namespace LumiShift
         private void OnTrayMenuOpening(object sender, System.ComponentModel.CancelEventArgs e)
         {
             _trayMenuOpen = true;
+            // 菜单打开时自动应用 Gamma，确保设置生效
+            ApplyGammaToSystem();
         }
 
         private void OnTrayMenuClosed(object sender, ToolStripDropDownClosedEventArgs e)
