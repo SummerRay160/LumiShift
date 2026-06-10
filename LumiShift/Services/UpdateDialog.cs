@@ -20,6 +20,7 @@ namespace LumiShift.Services
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
+            ControlBox = false;
             ClientSize = new Size(460, 380);
             BackColor = Colors.Background;
 
