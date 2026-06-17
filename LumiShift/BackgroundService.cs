@@ -105,7 +105,7 @@ namespace LumiShift
             public TimeSpan Start;
             public TimeSpan End;
             public string PresetName;
-            public Dictionary<string, string> MonitorPresets;
+            public ScheduleSegment Segment;
         }
 
         private List<ParsedSegment> _parsedSegments;
@@ -769,12 +769,14 @@ namespace LumiShift
                 var current = DateTime.Now.TimeOfDay;
 
                 string targetMode = null;
+                string targetScheduleKey = null;
                 ScheduleSegment targetSegment = null;
 
                 EnsureParsedSegments();
 
-                foreach (var parsed in _parsedSegments)
+                for (int i = 0; i < _parsedSegments.Count; i++)
                 {
+                    var parsed = _parsedSegments[i];
                     if (parsed.Start == parsed.End) continue;
 
                     bool inSegment;
@@ -786,7 +788,8 @@ namespace LumiShift
                     if (inSegment)
                     {
                         targetMode = parsed.PresetName;
-                        targetSegment = FindSegmentByPresetName(parsed.PresetName);
+                        targetScheduleKey = $"{i}:{parsed.PresetName}";
+                        targetSegment = parsed.Segment;
                         break;
                     }
                 }
@@ -795,13 +798,13 @@ namespace LumiShift
 
                 if (_scheduleManualOverride)
                 {
-                    if (targetMode == _lastScheduleMode)
+                    if (targetScheduleKey == _lastScheduleMode)
                         return;
 
                     _scheduleManualOverride = false;
                 }
 
-                if (targetMode == _lastScheduleMode) return;
+                if (targetScheduleKey == _lastScheduleMode) return;
 
                 var savedR = Settings.GammaRScale;
                 var savedG = Settings.GammaGScale;
@@ -820,7 +823,7 @@ namespace LumiShift
                     Settings.GammaValue = savedV;
                     Settings.GammaEnabled = savedE;
                     Settings.MasterBrightness = savedM;
-                    _lastScheduleMode = targetMode;
+                    _lastScheduleMode = targetScheduleKey;
                     return;
                 }
 
@@ -839,13 +842,14 @@ namespace LumiShift
                     Settings.GammaValue = savedV;
                     Settings.GammaEnabled = savedE;
                     Settings.MasterBrightness = savedM;
-                    _lastScheduleMode = targetMode;
+                    _lastScheduleMode = targetScheduleKey;
+                    ApplyScheduleMonitorPresets(targetSegment);
                     return;
                 }
 
                 if (_lightweightMode)
                 {
-                    _lastScheduleMode = targetMode;
+                    _lastScheduleMode = targetScheduleKey;
                     _scheduleChangedInLightweight = true;
                     ApplyScheduleMonitorPresets(targetSegment);
                     return;
@@ -853,7 +857,7 @@ namespace LumiShift
 
                 SettingsStore.SaveSettings(Settings);
                 UpdateTrayMenu();
-                _lastScheduleMode = targetMode;
+                _lastScheduleMode = targetScheduleKey;
 
                 ApplyScheduleMonitorPresets(targetSegment);
 
@@ -877,7 +881,11 @@ namespace LumiShift
             }
 
             if (segment.MonitorPresets == null || segment.MonitorPresets.Count == 0)
+            {
+                ApplyGammaToSystem();
+                SettingsStore.SaveSettings(Settings);
                 return;
+            }
 
             foreach (var monitor in MonitorManager.Monitors)
             {
@@ -983,20 +991,9 @@ namespace LumiShift
                     Start = start,
                     End = end,
                     PresetName = segment.PresetName,
-                    MonitorPresets = segment.MonitorPresets
+                    Segment = segment
                 });
             }
-        }
-
-        private ScheduleSegment FindSegmentByPresetName(string presetName)
-        {
-            if (Settings.ScheduleSegments == null) return null;
-            foreach (var segment in Settings.ScheduleSegments)
-            {
-                if (segment.PresetName == presetName)
-                    return segment;
-            }
-            return null;
         }
 
         internal void OnScheduleSegmentChanged()
