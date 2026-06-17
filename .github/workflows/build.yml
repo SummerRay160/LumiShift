@@ -1,0 +1,69 @@
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: '构建配置'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - Release
+          - Debug
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: nuget/setup-nuget@v2
+
+      - name: Restore NuGet packages
+        run: nuget restore LumiShift.sln
+
+      - name: Build
+        run: msbuild LumiShift.sln /p:Configuration=${{ inputs.configuration }} /p:Platform="Any CPU" /verbosity:minimal
+
+      - name: Stage artifacts
+        shell: pwsh
+        run: |
+          $cfg = "${{ inputs.configuration }}"
+          $src = "LumiShift/bin/$cfg"
+          if (-not (Test-Path $src)) {
+            Write-Error "Build output not found: $src"
+            exit 1
+          }
+
+          $staging = "staging"
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+
+          # 主程序
+          $exe = Get-ChildItem -Path $src -Filter "LumiShift.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Error "LumiShift.exe not found"; exit 1 }
+          Copy-Item $exe.FullName "$staging/LumiShift.exe"
+
+          # 配置文件（运行时需要）
+          $config = Get-ChildItem -Path $src -Filter "LumiShift.exe.config" | Select-Object -First 1
+          if ($config) { Copy-Item $config.FullName "$staging/LumiShift.exe.config" }
+
+          # 清单文件（如果存在）
+          $manifest = Get-ChildItem -Path $src -Filter "app.manifest" | Select-Object -First 1
+          if ($manifest) { Copy-Item $manifest.FullName "$staging/app.manifest" }
+
+          Write-Host "=== Staged files ==="
+          Get-ChildItem $staging | ForEach-Object { Write-Host $_.Name }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LumiShift-${{ inputs.configuration }}-exe
+          path: staging/*
+          if-no-files-found: error
