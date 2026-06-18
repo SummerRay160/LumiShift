@@ -11,8 +11,10 @@ namespace LumiShift.Services
     internal static class UpdateService
     {
         private const string ApiUrl = "https://api.github.com/repos/SummerRay160/LumiShift/releases/latest";
+        private const int TimeoutSeconds = 30;
 
-        private static readonly HttpClient _httpClient;
+        private static readonly HttpClient _directClient;
+        private static readonly HttpClient _proxyClient;
 
         private static readonly Regex RxImageRef = new Regex(@"!\[([^\]]*)\]\([^)]*\)", RegexOptions.Compiled);
         private static readonly Regex RxLinkRef = new Regex(@"\[([^\]]*)\]\([^)]*\)", RegexOptions.Compiled);
@@ -36,19 +38,44 @@ namespace LumiShift.Services
 
         static UpdateService()
         {
-            var handler = new HttpClientHandler
+            var decompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate;
+
+            // 直连 client（不经过代理），适用于 TUN 模式
+            var directHandler = new HttpClientHandler
             {
-                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate,
-                MaxConnectionsPerServer = 2,
-                UseProxy = true,
-                Proxy = System.Net.WebRequest.GetSystemWebProxy(),
-                PreAuthenticate = true
+                AutomaticDecompression = decompression,
+                UseProxy = false,
+                MaxConnectionsPerServer = 2
             };
-            handler.Proxy.Credentials = System.Net.CredentialCache.DefaultCredentials;
-            _httpClient = new HttpClient(handler);
-            _httpClient.DefaultRequestHeaders.UserAgent.TryParseAdd("LumiShift");
-            _httpClient.DefaultRequestHeaders.Accept.TryParseAdd("application/vnd.github.v3+json");
-            _httpClient.Timeout = TimeSpan.FromSeconds(10);
+            _directClient = new HttpClient(directHandler);
+            _directClient.DefaultRequestHeaders.UserAgent.TryParseAdd("LumiShift");
+            _directClient.DefaultRequestHeaders.Accept.TryParseAdd("application/vnd.github.v3+json");
+            _directClient.Timeout = TimeSpan.FromSeconds(TimeoutSeconds);
+
+            // 代理 client（使用系统代理配置），适用于 HTTP 代理环境
+            try
+            {
+                var proxyHandler = new HttpClientHandler
+                {
+                    AutomaticDecompression = decompression,
+                    MaxConnectionsPerServer = 2,
+                    UseProxy = true,
+                    Proxy = System.Net.WebRequest.GetSystemWebProxy(),
+                    PreAuthenticate = true
+                };
+                proxyHandler.Proxy.Credentials = System.Net.CredentialCache.DefaultCredentials;
+                _proxyClient = new HttpClient(proxyHandler);
+            }
+            catch
+            {
+                _proxyClient = null;
+            }
+            if (_proxyClient != null)
+            {
+                _proxyClient.DefaultRequestHeaders.UserAgent.TryParseAdd("LumiShift");
+                _proxyClient.DefaultRequestHeaders.Accept.TryParseAdd("application/vnd.github.v3+json");
+                _proxyClient.Timeout = TimeSpan.FromSeconds(TimeoutSeconds);
+            }
 
             try
             {
@@ -65,11 +92,26 @@ namespace LumiShift.Services
             try
             {
                 string response;
-                using (var request = new HttpRequestMessage(HttpMethod.Get, ApiUrl))
-                using (var httpResponse = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
+
+                // 先尝试直连（适用于 TUN 模式 / 无代理环境），失败后回退到系统代理
+                try
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    response = await httpResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    using (var request = new HttpRequestMessage(HttpMethod.Get, ApiUrl))
+                    using (var httpResponse = await _directClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        response = await ValidateResponseAsync(httpResponse);
+                    }
+                }
+                catch (Exception) when (_proxyClient != null)
+                {
+                    // 直连失败，改用代理重试
+                    using (var proxyRequest = new HttpRequestMessage(HttpMethod.Get, ApiUrl))
+                    using (var httpResponse = await _proxyClient.SendAsync(proxyRequest, cancellationToken).ConfigureAwait(false))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        response = await ValidateResponseAsync(httpResponse);
+                    }
                 }
 
                 var result = ParseGitHubRelease(response);
@@ -167,6 +209,37 @@ namespace LumiShift.Services
         public static void Shutdown()
         {
             _disposed = true;
+        }
+
+        #region Helpers
+
+        /// <summary>
+        /// 验证 HTTP 响应是否为有效的 GitHub API 返回，避免代理拦截页被误解析为"最新版本"
+        /// </summary>
+        private static async Task<string> ValidateResponseAsync(HttpResponseMessage httpResponse)
+        {
+            if (!httpResponse.IsSuccessStatusCode)
+            {
+                string errorBody = await httpResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                throw new HttpRequestException($"{(int)httpResponse.StatusCode} {httpResponse.ReasonPhrase}: {Truncate(errorBody, 200)}");
+            }
+
+            string body = await httpResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            // 快速验证是否为 GitHub API 的有效 JSON 响应
+            if (string.IsNullOrEmpty(body) || !body.Contains("\"tag_name\""))
+            {
+                throw new HttpRequestException("服务器返回了无效的响应数据，请检查网络环境后重试。");
+            }
+
+            return body;
+        }
+
+        private static string Truncate(string text, int maxLen)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= maxLen)
+                return text;
+            return text.Substring(0, maxLen) + "...";
         }
 
         private static string GetHttpErrorMessage(HttpRequestException ex)
@@ -296,5 +369,7 @@ namespace LumiShift.Services
             }
             return false;
         }
+
+        #endregion
     }
 }

@@ -166,7 +166,19 @@ namespace LumiShift
                 ForeColor = Colors.TextSecondary,
                 BackColor = Color.Transparent
             };
-            y += 32;
+            y += 24;
+
+            var intervalHint = new Label
+            {
+                Text = "后台每 30 秒检查一次定时切换（关闭窗口后每 2 分钟检查一次）",
+                Location = new Point(Spacing.LG, y),
+                Width = 538,
+                Height = 14,
+                Font = Typography.Caption,
+                ForeColor = Colors.TextDisabled,
+                BackColor = Color.Transparent
+            };
+            y += 18;
 
             var headerRow = new Panel
             {
@@ -265,7 +277,7 @@ namespace LumiShift
             };
             _cancelButton.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
 
-            Controls.AddRange(new Control[] { hintLabel, headerRow, _segmentPanel, _addButton, sepLine, _okButton, _cancelButton });
+            Controls.AddRange(new Control[] { hintLabel, intervalHint, headerRow, _segmentPanel, _addButton, sepLine, _okButton, _cancelButton });
         }
 
         private void AddButton_Click(object sender, EventArgs e)

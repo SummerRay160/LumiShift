@@ -19,31 +19,38 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Setup NuGet
+        uses: nuget/setup-nuget@v2
+
       - name: Restore NuGet packages
         run: nuget restore LumiShift.sln
 
       - name: Build Release
         run: msbuild LumiShift.sln /p:Configuration=Release /p:Platform="Any CPU" /verbosity:minimal
 
-      - name: List build artifacts
+      - name: Stage artifacts
         shell: pwsh
         run: |
-          Write-Host "=== Searching for build outputs ==="
-          Get-ChildItem -Recurse -Filter "*.exe" LumiShift/bin/Release/ | ForEach-Object { Write-Host $_.FullName }
-          Get-ChildItem -Recurse -Filter "*.config" LumiShift/bin/Release/ | ForEach-Object { Write-Host $_.FullName }
-
-      - name: Copy exe to staging
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path staging
-          $exe = Get-ChildItem -Recurse -Filter "LumiShift.exe" LumiShift/bin/Release/ | Select-Object -First 1
-          if ($exe) {
-            Copy-Item $exe.FullName staging/LumiShift.exe
-            Write-Host "Copied: $($exe.FullName) -> staging/LumiShift.exe"
-          } else {
-            Write-Error "LumiShift.exe not found in build output!"
+          $src = "LumiShift/bin/Release"
+          if (-not (Test-Path $src)) {
+            Write-Error "Build output not found: $src"
             exit 1
           }
+
+          $staging = "staging"
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+
+          # 主程序
+          $exe = Get-ChildItem -Path $src -Filter "LumiShift.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Error "LumiShift.exe not found"; exit 1 }
+          Copy-Item $exe.FullName "$staging/LumiShift.exe"
+
+          # 配置文件（运行时需要）
+          $config = Get-ChildItem -Path $src -Filter "LumiShift.exe.config" | Select-Object -First 1
+          if ($config) { Copy-Item $config.FullName "$staging/LumiShift.exe.config" }
+
+          Write-Host "=== Staged files ==="
+          Get-ChildItem $staging | ForEach-Object { Write-Host $_.Name }
 
       - name: Extract version from tag
         id: version
@@ -54,13 +61,30 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Extract changelog for release
+        id: changelog
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $changelog = Get-Content -Raw CHANGELOG.md
+          # 匹配 ## [版本号] 到下一个 ## [ 或 ---
+          $pattern = "## \[$([regex]::Escape($version))\][\s\S]*?(?=\n## \[|\n---|\Z)"
+          $match = [regex]::Match($changelog, $pattern)
+          if ($match.Success) {
+            $body = $match.Value.Trim()
+            $body | Set-Content -Path changelog_body.txt -Encoding UTF8
+            Write-Host "Extracted changelog for v$version"
+          } else {
+            Write-Host "::warning::Changelog for v$version not found, using tag as body"
+            "Release ${{ steps.version.outputs.tag }}" | Set-Content -Path changelog_body.txt -Encoding UTF8
+          }
+
       - name: Delete existing release (if any)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          # Try to get release ID and delete it
           RELEASE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/$TAG")
           RELEASE_ID=$(echo "$RELEASE" | jq -r '.id // empty')
@@ -72,24 +96,6 @@ jobs:
             echo "No existing release found for tag $TAG"
           fi
 
-      - name: Extract changelog for release
-        id: changelog
-        shell: pwsh
-        run: |
-          $changelog = Get-Content -Raw CHANGELOG.md
-          # Extract the content between "## [1.2.0]" and the next "## [" or "---"
-          $pattern = "## \[1\.2\.0\][\s\S]*?(?=\n## \[|\n---)"
-          $match = [regex]::Match($changelog, $pattern)
-          if ($match.Success) {
-            $body = $match.Value.Trim()
-            # Set the body as a multi-line output
-            $body | Set-Content -Path changelog_body.txt -Encoding UTF8
-            Write-Host "Extracted changelog for v1.2.0"
-          } else {
-            Write-Error "Changelog for v1.2.0 not found!"
-            exit 1
-          }
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -99,3 +105,4 @@ jobs:
           body_path: changelog_body.txt
           files: |
             staging/LumiShift.exe
+            staging/LumiShift.exe.config
