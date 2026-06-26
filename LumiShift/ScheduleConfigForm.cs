@@ -161,24 +161,24 @@ namespace LumiShift
                     : "配置各时段的起止时间与对应预设，时段不可重叠",
                 Location = new Point(Spacing.LG, y),
                 Width = 538,
-                Height = 28,
+                Height = 36,
                 Font = Typography.Caption,
                 ForeColor = Colors.TextSecondary,
                 BackColor = Color.Transparent
             };
-            y += 24;
+            y += 38;
 
             var intervalHint = new Label
             {
                 Text = "后台每 30 秒检查一次定时切换（关闭窗口后每 2 分钟检查一次）",
                 Location = new Point(Spacing.LG, y),
                 Width = 538,
-                Height = 14,
+                Height = 22,
                 Font = Typography.Caption,
                 ForeColor = Colors.TextDisabled,
                 BackColor = Color.Transparent
             };
-            y += 18;
+            y += 22;
 
             var headerRow = new Panel
             {
@@ -204,13 +204,13 @@ namespace LumiShift
             {
                 Location = new Point(Spacing.LG, y),
                 Width = 538,
-                Height = 330,
+                Height = 312,
                 AutoScroll = true,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 BackColor = Color.Transparent
             };
-            y += 334;
+            y += 316;
 
             _addButton = new Button
             {
