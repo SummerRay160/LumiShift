@@ -145,7 +145,7 @@ namespace LumiShift
             ApplyGammaToSystem();
             CreateTrayIcon();
             _trayMenuNeedsRebuild = true;
-            RebuildTrayMenu();
+            UpdateTrayText();
 
             if (Settings.EyeProtectionEnabled)
             {
@@ -195,6 +195,11 @@ namespace LumiShift
         private void OnTrayMenuOpening(object sender, System.ComponentModel.CancelEventArgs e)
         {
             _trayMenuOpen = true;
+            if (_trayMenuNeedsRebuild && !_trayClickInProgress)
+            {
+                _trayMenuNeedsRebuild = false;
+                RebuildTrayMenu();
+            }
             // 菜单打开时自动应用 Gamma，确保设置生效
             ApplyGammaToSystem();
         }
@@ -411,7 +416,8 @@ namespace LumiShift
 
         private void BuildStaticTraySection()
         {
-            _trayMenu.Items.Add(new ToolStripSeparator());
+            if (_trayMenu.Items.Count > 0)
+                _trayMenu.Items.Add(new ToolStripSeparator());
 
             var checkUpdateItem = new ToolStripMenuItem("检查更新", null, (s, ev) => ExecuteTrayAction(() => RunUpdateCheck()));
             _trayMenu.Items.Add(checkUpdateItem);
@@ -429,7 +435,11 @@ namespace LumiShift
 
         private void RefreshDynamicTraySection()
         {
-            if (_trayGammaItem == null) return;
+            if (_trayGammaItem == null)
+            {
+                UpdateTrayText();
+                return;
+            }
 
             bool gammaSupported = GammaController.IsSupported;
             _trayGammaItem.Text = gammaSupported && Settings.GammaEnabled
@@ -1124,6 +1134,7 @@ namespace LumiShift
             CleanupStaleSettings(removedIds);
             if (!Form1IsOpen())
             {
+                ApplyGammaToSystem();
                 if (_trayMenuOpen)
                 {
                     _trayMenuNeedsRebuild = true;
