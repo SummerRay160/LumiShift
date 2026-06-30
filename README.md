@@ -50,9 +50,9 @@
 - **定时联动**：可为每台显示器指定不同时段的定时调度方案，支持多屏方案自动切换，手动/定时来源自动标识
 - 基于 GDI32 `SetDeviceGammaRamp`，支持按显示器独立应用 Gamma
 
-#### 📖 使用指南 — 多显示器操作
+#### 📖 使用指南 — 显示方案与多显示器操作
 
-> 以下内容针对 **两台及以上显示器** 的用户，帮助你理解多屏场景下的操作逻辑与常见误区。
+> 以下内容针对 **两台及以上显示器** 的用户，帮助你理解统一方案、多屏方案与临时逐台配置的区别。
 
 ##### Gamma 校正界面（多显示器）
 
@@ -102,7 +102,18 @@
 
 这意味着：你可以放心地在白天临时调整某台屏幕的参数，到了晚上定时切换时间点，它会自动回到夜间预设。
 
-**6. 预设应用的目标**
+**6. 显示方案保存方式**
+
+点击「保存方案」时，LumiShift 会根据当前是否存在显示器独立配置，推荐保存为：
+
+| 方案类型 | 保存内容 | 适用场景 |
+|:---:|:---|:---|
+| **统一方案** | 当前这套 Gamma / 色温参数，应用时同步到所有显示器 | 所有屏幕希望保持一致时 |
+| **多屏方案** | 每台显示器当前的独立 Gamma 参数快照 | 主副屏色彩、亮度、护眼强度不同的场景 |
+
+保存后的方案会在下拉框中显示类型标识（如「标准 · 统一方案」「我的多屏方案 · 多屏方案」），避免误选。
+
+**7. 预设应用的目标**
 
 - 在「所有显示器」模式下应用预设 → **所有显示器**都会切换到该预设
 - 在独立模式下（选中某台显示器）应用预设 → **仅该显示器**切换
@@ -112,36 +123,45 @@
 
 ![定时调度配置](.github/Screenshot/Screenshot_Setting_Time_Scheduling.png)
 
-**1. 统一模式 vs 独立模式**
+**1. 方案模式 vs 临时逐台配置**
 
-每个时段行的右侧有一个 **「多屏」开关控件**：
+每个时段行会显示当前模式摘要：
 
-| 模式 | 开关状态 | 说明 |
+| 模式 | 摘要显示 | 说明 |
 |:---:|:---:|:---|
-| **统一模式** | 关闭（默认） | 该时段内**所有显示器**使用同一个预设 |
-| **独立模式** | 开启 | 可以为该时段内的**每台显示器分别指定不同的预设** |
+| **统一方案** | 使用统一方案 | 该时段内所有显示器切换到同一个统一方案 |
+| **多屏方案** | 使用多屏方案 | 直接应用已保存的多屏方案，自动恢复每台显示器的独立参数 |
+| **临时逐台配置** | 临时逐台配置 | 仅在该时段内为每台显示器单独指定不同方案 |
 
-**2. 如何使用独立模式**
+**2. 如何使用临时逐台配置**
 
-1. 点击时段行右侧的 **Toggle 开关**，将其切换到开启状态
-2. 该行会展开为**每台显示器一个独立的预设下拉框**
-3. 为每台显示器单独选择所需的预设（如：主显示器用「护眼模式」，副显示器用「标准」）
+1. 点击时段行右侧的模式开关，切换为「逐台」
+2. 该行会展开为**每台显示器一个独立的方案下拉框**
+3. 为每台显示器单独选择所需方案（如：主显示器用「护眼模式」，副显示器用「标准」）
 4. 保存即可生效
 
-> ⚠️ **注意**：从独立模式切回统一模式时，如果各显示器之前设置了不同的预设，系统会弹出确认提示："切换到统一模式将清除各显示器的独立预设配置"，因为统一模式下只能保留一个公共预设。
+> ⚠️ **注意**：从临时逐台配置切回方案模式时，如果各显示器之前设置了不同方案，系统会弹出确认提示，因为方案模式下只保留一个统一方案或多屏方案。
 
-**3. 典型场景示例**
+**3. 时间轴预览与重叠提示**
+
+定时配置窗口顶部会显示 24 小时时间轴：
+
+- 不同色块代表不同时间段，帮助快速判断全天调度分布
+- 跨午夜时段会自动拆分显示在时间轴两端
+- 如果两个时间段发生重叠，对应时段会自动标红并显示提示
+
+**4. 典型场景示例**
 
 假设你有两台显示器（主屏 + 副屏），可以这样配置：
 
-| 时段 | 主显示器预设 | 副显示器预设 | 配置方式 |
+| 时段 | 主显示器方案 | 副显示器方案 | 配置方式 |
 |:---|:---|:---|:---|
-| 06:00 – 18:00 | 标准 | 标准 | 统一模式（关闭多屏开关） |
-| 18:00 – 06:00 | 护眼模式 | 防蓝光 | 独立模式（开启多屏开关，分别选择） |
+| 06:00 – 18:00 | 标准 | 标准 | 使用统一方案 |
+| 18:00 – 06:00 | 护眼模式 | 防蓝光 | 临时逐台配置，或保存为多屏方案后直接选择 |
 
 这样白天两屏一致，晚上根据使用场景给不同屏幕设置不同的护眼强度。
 
-**4. 跨午夜时段**
+**5. 跨午夜时段**
 
 支持配置跨越午夜的时间段（如 `22:00 – 06:00`），无需拆分为两个时段。
 
@@ -165,6 +185,7 @@
 - **时间段管理**：按时段自动切换日/夜预设方案（如 18:00 切护眼模式，06:00 恢复标准），支持跨午夜时段配置
 - **多显示器独立调度**：可为每个时间段指定不同显示器的预设方案，也可直接选择多屏方案自动切换
 - **显示方案类型识别**：时段行显示 "使用统一方案"/"使用多屏方案"/"临时逐台配置" 摘要，配置意图一目了然
+- **时间轴预览**：24 小时时间轴直观展示所有时段分布，重叠时段自动标红提醒
 - **手动/定时智能切换**：手动调整时自动覆盖定时设置，下次时段切换时自动恢复定时方案
 - 支持保存、删除和重置调度配置
 
@@ -336,9 +357,9 @@ LumiShift is an open-source screen adjustment tool for Windows that combines mul
 - **Schedule integration**: assign time-based schedules per monitor, multi-display scheme auto-switch support, manual/schedule source auto-labeled
 - Based on GDI32 `SetDeviceGammaRamp`, supports per-display independent Gamma application
 
-#### 📖 Usage Guide — Multi-Monitor Operation
+#### 📖 Usage Guide — Display Schemes & Multi-Monitor Operation
 
-> The following guide is for users with **two or more monitors**, explaining multi-monitor operation logic and common points of confusion.
+> The following guide is for users with **two or more monitors**, explaining unified schemes, multi-display schemes, and temporary per-monitor configuration.
 
 ##### Gamma Correction Interface (Multi-Monitor)
 
@@ -388,7 +409,18 @@ When **schedule is enabled**, any manual adjustment you make in the Gamma interf
 
 This means you can freely adjust a screen's parameters temporarily during the day, and when the evening scheduled time arrives, it will automatically revert to the night preset.
 
-**6. Preset Application Target**
+**6. Saving Display Schemes**
+
+When clicking **Save Scheme**, LumiShift recommends a scheme type based on whether per-display overrides currently exist:
+
+| Scheme Type | What It Saves | Use Case |
+|:---:|:---|:---|
+| **Unified Scheme** | The current Gamma / color temperature parameters, applied to all monitors | When all screens should look identical |
+| **Multi-Display Scheme** | A snapshot of each monitor's independent Gamma parameters | When primary and secondary monitors need different color, brightness, or eye-care strength |
+
+Saved schemes are labeled in dropdowns (for example, "Standard · Unified" or "My Multi-Display Scheme · Multi-Display") to avoid confusion.
+
+**7. Preset Application Target**
 
 - Apply preset in "All Monitors" mode → **All monitors** switch to that preset
 - Apply preset in Per-Display mode (specific monitor selected) → **Only that monitor** switches
@@ -398,36 +430,45 @@ This means you can freely adjust a screen's parameters temporarily during the da
 
 ![Schedule Configuration](.github/Screenshot/Screenshot_Setting_Time_Scheduling.png)
 
-**1. Unified Mode vs. Independent Mode**
+**1. Scheme Mode vs. Temporary Per-Monitor Config**
 
-Each time slot row has a **"Multi-Screen" toggle** on the right side:
+Each time slot row shows a mode summary:
 
-| Mode | Toggle State | Description |
+| Mode | Summary | Description |
 |:---:|:---:|:---|
-| **Unified Mode** | Off (default) | **All monitors** use the same preset for this time slot |
-| **Independent Mode** | On | You can assign **different presets per monitor** for this time slot |
+| **Unified Scheme** | Unified Scheme | All monitors switch to the same unified scheme during this slot |
+| **Multi-Display Scheme** | Multi-Display Scheme | Applies a saved multi-display scheme and restores per-monitor parameters automatically |
+| **Temporary Per-Monitor Config** | Per-Monitor Config | Assigns a different scheme to each monitor only for this time slot |
 
-**2. How to Use Independent Mode**
+**2. How to Use Temporary Per-Monitor Config**
 
-1. Click the **Toggle switch** on the right side of a time slot row to turn it **On**
-2. The row expands to show **one independent preset dropdown per connected monitor**
-3. Select the desired preset for each monitor individually (e.g., Primary → "Eye Care", Secondary → "Standard")
+1. Click the mode switch on the right side of a time slot row and switch it to **Per-Monitor**
+2. The row expands to show **one scheme dropdown per connected monitor**
+3. Select the desired scheme for each monitor individually (e.g., Primary → "Eye Care", Secondary → "Standard")
 4. Save to apply
 
-> ⚠️ **Note**: When switching from Independent mode back to Unified mode, if monitors had different presets configured, a confirmation dialog appears: "Switching to unified mode will clear independent preset configs for each monitor," because Unified mode only retains one shared preset.
+> ⚠️ **Note**: When switching from temporary per-monitor config back to scheme mode, a confirmation dialog appears if monitors had different schemes configured, because scheme mode only keeps one unified or multi-display scheme.
 
-**3. Typical Scenario Example**
+**3. Timeline Preview & Overlap Warning**
+
+The schedule configuration window includes a 24-hour timeline preview:
+
+- Colored blocks represent configured time slots for quick day-wide overview
+- Overnight time slots are automatically split across both ends of the timeline
+- Overlapping time slots are highlighted in red with a warning message
+
+**4. Typical Scenario Example**
 
 With two monitors (Primary + Secondary), you could configure:
 
-| Time Slot | Primary Preset | Secondary Preset | Config Method |
+| Time Slot | Primary Scheme | Secondary Scheme | Config Method |
 |:---|:---|:---|:---|
-| 06:00 – 18:00 | Standard | Standard | Unified mode (toggle off) |
-| 18:00 – 06:00 | Eye Care | Anti-Blue | Independent mode (toggle on, select per monitor) |
+| 06:00 – 18:00 | Standard | Standard | Unified Scheme |
+| 18:00 – 06:00 | Eye Care | Anti-Blue | Temporary per-monitor config, or save as a multi-display scheme and select it directly |
 
 This way both screens are identical during daytime, while at night each screen gets eye-protection tuned to its usage context.
 
-**4. Overnight Time Slots**
+**5. Overnight Time Slots**
 
 Time slots crossing midnight (e.g., `22:00 – 06:00`) are supported — no need to split into two separate slots.
 
@@ -449,7 +490,9 @@ Time slots crossing midnight (e.g., `22:00 – 06:00`) are supported — no need
 ![Schedule Configuration](.github/Screenshot/Screenshot_Setting_Time_Scheduling.png)
 
 - **Time slot management**: auto-switch day/night presets by time (e.g., Eye Care at 18:00, Standard at 06:00); supports overnight ranges
-- **Per-monitor independent scheduling**: assign different presets per monitor per time slot for fine-grained control of each screen's display
+- **Per-monitor independent scheduling**: assign different schemes per monitor per time slot, or select a multi-display scheme for automatic switching
+- **Display scheme type indicator**: time slot rows show Unified Scheme / Multi-Display Scheme / Per-Monitor Config summaries for clear intent
+- **Timeline preview**: 24-hour timeline visualizes all time slots and highlights overlaps in red
 - **Manual/schedule smart switching**: manual adjustments override schedule; auto-resumes on next time slot change
 - Support for saving, deleting, and resetting schedule configurations
 
