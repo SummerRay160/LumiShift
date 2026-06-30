@@ -14,7 +14,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/SummerRay160/LumiShift?style=for-the-badge&logo=github)](https://github.com/SummerRay160/LumiShift/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/SummerRay160/LumiShift?style=for-the-badge&logo=github)](https://github.com/SummerRay160/LumiShift/network/members)
 
-**[中文](README.md) · [English](#introduction) · [🐛 Report Issues](https://github.com/SummerRay160/LumiShift/issues)**
+**[简体中文](README.md) · [English](#introduction) · [繁體中文](README.zh-Hant.md) · [🐛 Report Issues](https://github.com/SummerRay160/LumiShift/issues)**
 
 </div>
 
@@ -34,10 +34,9 @@ LumiShift is an open-source screen adjustment tool for Windows. It's a single ex
 
 Got several monitors hooked up? LumiShift spots each one automatically — just drag the slider to tweak each screen's brightness independently. No more fumbling with the fiddly buttons on the monitor itself.
 
-- Auto-detects every connected monitor and labels it with the vendor name
+- Auto-detects every connected monitor
 - Drag the slider, release, and it's saved — that simple
 - Hot-plug a monitor and the app syncs up without a restart
-- Want a bit of personality? Pick your own wallpaper and tweak its opacity
 
 ### 🎨 Gamma & Color Temperature
 
@@ -57,7 +56,6 @@ Whether you want to fine-tune the R/G/B channels, Gamma value, and master bright
 - Select a specific monitor — only that one changes, others stay put
 - A monitor you haven't tuned individually shows "Follow All", meaning it tracks the global parameters. Once you tweak it individually, it becomes "Independent" and decouples from the rest
 - Want a monitor to follow the global config again? Select it and click the "Follow All" button — its independent config gets cleared
-- "Restore system display on exit" wipes every screen back to its original state when you close the app, leaving no trace
 
 > 💡 **Heads-up**: Switching back from a single monitor to "All Monitors" overwrites everything with the primary monitor's settings — double-check before you do it. Tick "Color Temperature Only" to drop the R/G/B channels and keep just a single warmth slider — quick and simple.
 
@@ -81,7 +79,6 @@ Swaps the system window colors for a softer eye-care tint, so long hours staring
 
 - Three built-in preset colors: Mung Bean, Paper Yellow, Sky Blue
 - Not a fan of the presets? Pick your own color
-- One click to restore the system defaults
 
 ### 🔔 System Tray
 
@@ -100,9 +97,8 @@ Minimizes to the tray and stays out of your taskbar. Right-click the icon to qui
 - **Auto-start with Windows**: launches at boot, no need to open it manually
 - **Minimize to tray on launch**: stays out of your way while you work
 - **Restore Gamma on exit**: resets the screen to its original state when you close the app
-- **Notification preferences**: startup, schedule switch, status change, monitor change — toggle each one independently, or kill them all with the master switch
-- **Auto-check updates**: on by default, switch it off if it bugs you
-- Single instance — relaunching just brings the existing window forward
+- **Notification preferences**: startup, schedule switch, status change, monitor change — toggle each one independently, or turn them all off with the master switch
+- **Auto-check updates**: on by default, turn it off if it bothers you
 
 ### 🔄 Auto Update
 

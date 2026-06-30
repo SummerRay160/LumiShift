@@ -14,7 +14,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/SummerRay160/LumiShift?style=for-the-badge&logo=github)](https://github.com/SummerRay160/LumiShift/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/SummerRay160/LumiShift?style=for-the-badge&logo=github)](https://github.com/SummerRay160/LumiShift/network/members)
 
-**[English](README.en.md) · [中文](#介绍) · [🐛 问题反馈](https://github.com/SummerRay160/LumiShift/issues)**
+**[English](README.en.md) · [简体中文](#介绍) · [繁體中文](README.zh-Hant.md) · [🐛 问题反馈](https://github.com/SummerRay160/LumiShift/issues)**
 
 </div>
 
