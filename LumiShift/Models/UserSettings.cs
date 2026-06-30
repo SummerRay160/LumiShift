@@ -70,6 +70,13 @@ namespace LumiShift.Models
 
         public string SkipVersion { get; set; } = "";
 
+        public bool AutoCheckUpdates { get; set; } = true;
+
         public bool RestoreGammaOnExit { get; set; } = true;
+        public bool NotificationsEnabled { get; set; } = true;
+        public bool NotifyStartup { get; set; } = true;
+        public bool NotifyScheduleSwitch { get; set; } = true;
+        public bool NotifyStatusSwitch { get; set; } = true;
+        public bool NotifyMonitorChange { get; set; } = true;
     }
 }

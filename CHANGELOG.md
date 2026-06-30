@@ -1,5 +1,34 @@
 # 更新日志
 
+## [1.6.0] - 2026-06-30
+
+### 新增
+
+- **显示方案系统** — 引入 `DisplayScheme` 模型，支持统一方案和多屏方案两种类型。统一方案对所有显示器应用相同效果；多屏方案保存每台显示器的独立 Gamma 参数，一键切换还原整组配置
+- **保存显示方案对话框** — 新增 `SaveDisplaySchemeDialog`，保存时自动检测是否存在显示器独立设置，智能推荐统一或多屏方案类型，并支持自定义方案名称
+- **多屏方案管理** — 自定义预设通过 `PerDisplaySnapshot` 自动识别为多屏方案；组合框和定时配置中以 "· 统一方案"/"· 多屏方案" 类型标识区分
+- **Windows 通知偏好** — 新增通知总开关和四种独立通知控制：软件启动通知、定时切换方案通知、显示调节开关变化通知、显示器变更通知；`BackgroundService` 在对应事件触发时发送系统通知
+- **启动时自动检查更新开关** — 设置页新增 `AutoCheckUpdates` 开关，关闭后跳过启动时的静默更新检查，托盘菜单手动检查不受影响
+- **定时调度支持多屏方案** — `ScheduleEvaluator` 配合 `PresetService.IsMultiDisplayPreset`，调度器自动识别并应用多屏方案的逐台显示器参数，无需手动逐台配置
+- **定时调度模式指示** — 时段行新增 "使用统一方案"/"使用多屏方案"/"临时逐台配置" 三态摘要文本
+- **定时时间轴可视化** — 调度配置面板新增 24 小时时间轴，以色块展示各时段分布，重叠时段自动标红
+
+### 优化
+
+- **Gamma 参数管理重构** — 提取 `GammaConfig` 模型与 `DisplayGammaStateService` 服务层，统一管理全局和逐台显示器的 Gamma 读写、预设应用和来源标记；`Form1` 和 `BackgroundService` 中原有的内联操作全部委托至服务层
+- **定时调度引擎重构** — 新增 `ScheduleEvaluator` 类，集中处理时段匹配、下次切换时间计算和配置哈希缓存；替换原有的 `_parsedSegments` 内联解析逻辑
+- **预设服务抽象** — `PresetService` 统一解析内置预设和自定义预设（`TryResolve`），`DisplaySchemeService` 聚合展示层逻辑（方案列表、类型标识、名称剥离）
+- **设置页布局重构** — 新增分区标题和提示文本；合并通知偏好区域；版本信息放入独立面板；统一使用 `CreateSeparator` 生成分隔线
+- **显示器变更检测优化** — `MonitorManager` 新增签名比较（`BuildMonitorSignature`），仅在实际变更时触发事件，避免虚假刷新
+- **CleanupStaleSettings 条件保存** — 仅在实际清理了残留数据时才写磁盘，减少不必要的 I/O
+- **代码组织优化** — `GammaParameters.cs` 重命名为 `GammaConfig.cs`（与文件内容一致）；`OkButton_Click` 时间解析改用 `TryParse` 增强健壮性
+
+### 修复
+
+- **修复定时切换剩余时间显示不精确** — `Math.Max(1, (int)TotalMinutes)` 改为 `Math.Ceiling` 取整，避免不足 1 分钟时显示"1 分钟后"的误导
+
+---
+
 ## [1.2.5] - 2026-06-26
 
 ### 优化

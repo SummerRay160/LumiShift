@@ -23,6 +23,7 @@ namespace LumiShift
         internal static Bitmap StaticCachedBackground { get; set; }
 
         private readonly BackgroundService _bgService;
+        private readonly DisplaySchemeService _schemeService;
 
         private FlowLayoutPanel _brightnessPanel;
         private readonly Dictionary<string, Panel> _brightnessRows = new Dictionary<string, Panel>();
@@ -53,7 +54,13 @@ namespace LumiShift
         private Button _gammaScheduleConfigButton;
         private ToggleSwitch _startWithWindowsCheckBox;
         private ToggleSwitch _startMinimizedCheckBox;
+        private ToggleSwitch _autoCheckUpdatesToggle;
         private ToggleSwitch _restoreGammaToggle;
+        private ToggleSwitch _notificationsEnabledToggle;
+        private ToggleSwitch _notifyStartupToggle;
+        private ToggleSwitch _notifyScheduleToggle;
+        private ToggleSwitch _notifyStatusToggle;
+        private ToggleSwitch _notifyMonitorToggle;
 
         private ToggleSwitch _eyeProtectionToggle;
         private Button _eyeProtectionPreset1Button;
@@ -115,6 +122,7 @@ namespace LumiShift
         {
             DoubleBuffered = true;
             _bgService = bgService;
+            _schemeService = new DisplaySchemeService(bgService.Settings);
             InitializeComponent();
             InitializeApp();
         }
@@ -169,15 +177,13 @@ namespace LumiShift
         {
             _isPopulatingComboBox = true;
             _gammaModeComboBox.Items.Clear();
-            foreach (var p in PresetDefinitions.GetNames())
-                _gammaModeComboBox.Items.Add(p);
-            foreach (var cp in Settings.CustomGammaPresets)
-                _gammaModeComboBox.Items.Add(cp.Name);
+            foreach (var scheme in _schemeService.GetSchemes())
+                _gammaModeComboBox.Items.Add(scheme.DisplayName);
 
             string current = GetCurrentPresetName();
             if (current != null)
             {
-                _gammaModeComboBox.SelectedItem = current;
+                _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
                 _currentPresetName = current;
             }
             _isPopulatingComboBox = false;
@@ -185,33 +191,12 @@ namespace LumiShift
 
         private void RefreshCustomPresetButtons()
         {
+            string selectedName = _gammaModeComboBox.SelectedItem is string selected
+                ? DisplaySchemeService.StripDisplayName(selected)
+                : null;
             bool any = Settings.CustomGammaPresets.Count > 0;
             _gammaSaveCustomButton.Enabled = Settings.GammaEnabled && !_gammaSimplifiedCheckBox.Checked;
-            _gammaDeleteCustomButton.Enabled = any && _gammaModeComboBox.SelectedItem is string selected && !PresetDefinitions.IsBuiltIn(selected);
-        }
-
-        private static string PromptForName(string prompt, string title, string defaultValue)
-        {
-            using (var form = new Form())
-            {
-                form.Text = title;
-                form.FormBorderStyle = FormBorderStyle.FixedDialog;
-                form.StartPosition = FormStartPosition.CenterParent;
-                form.ClientSize = new Size(360, 140);
-                form.MaximizeBox = false;
-                form.MinimizeBox = false;
-                var lbl = new Label { Text = prompt, Location = new Point(12, 12), AutoSize = true };
-                var txt = new TextBox { Text = defaultValue, Location = new Point(12, 36), Width = 336 };
-                var ok = new Button { Text = "确定", DialogResult = DialogResult.OK, Location = new Point(180, 70), Width = 80, Height = 28 };
-                var cancel = new Button { Text = "取消", DialogResult = DialogResult.Cancel, Location = new Point(268, 70), Width = 80, Height = 28 };
-                form.Controls.AddRange(new Control[] { lbl, txt, ok, cancel });
-                form.AcceptButton = ok;
-                form.CancelButton = cancel;
-
-                if (form.ShowDialog() == DialogResult.OK)
-                    return txt.Text;
-                return null;
-            }
+            _gammaDeleteCustomButton.Enabled = any && selectedName != null && !PresetDefinitions.IsBuiltIn(selectedName);
         }
 
         #endregion
@@ -238,7 +223,7 @@ namespace LumiShift
                 string current = GetCurrentPresetName();
                 _currentPresetName = current;
                 if (current != null && !_isPopulatingComboBox)
-                    _gammaModeComboBox.SelectedItem = current;
+                    _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
 
                 UpdateGammaLabels();
                 UpdateColorTempFromSliders();
@@ -257,10 +242,14 @@ namespace LumiShift
             foreach (var monitor in MonitorMgr.Monitors)
             {
                 string label = monitor.DisplayName;
-                if (Settings.GammaPerDisplay.TryGetValue(monitor.DeviceId, out var pdg))
+                if (_bgService.HasDisplayGammaOverride(monitor.DeviceId))
                 {
-                    string sourceTag = pdg.Source == "schedule" ? "定时" : "手动";
-                    label += $" [{sourceTag}]";
+                    string sourceTag = _bgService.GetDisplayGammaSource(monitor.DeviceId) == GammaSourceNames.Schedule ? "定时" : "手动";
+                    label += $" · 单独设置/{sourceTag}";
+                }
+                else
+                {
+                    label += " · 跟随全部";
                 }
                 _monitorSelectorComboBox.Items.Add(label);
             }
@@ -285,25 +274,16 @@ namespace LumiShift
             else
             {
                 string deviceId = GetSelectedMonitorDeviceId();
-                if (deviceId != null && Settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
+                if (deviceId != null)
                 {
-                    _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(pdg.RScale * 100.0));
-                    _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(pdg.GScale * 100.0));
-                    _gammaBSlider.Value = ClampSlider(_gammaBSlider, (int)Math.Round(pdg.BScale * 100.0));
-                    _gammaValueSlider.Value = ClampSlider(_gammaValueSlider, (int)Math.Round(pdg.GammaValue * 100.0));
-                    _gammaBrightSlider.Value = ClampSlider(_gammaBrightSlider, pdg.MasterBrightness);
-                    _gammaCheckBox.Checked = pdg.Enabled;
-                    _resetDisplayGammaButton.Enabled = true;
-                }
-                else
-                {
-                    _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(Settings.GammaRScale * 100.0));
-                    _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(Settings.GammaGScale * 100.0));
-                    _gammaBSlider.Value = ClampSlider(_gammaBSlider, (int)Math.Round(Settings.GammaBScale * 100.0));
-                    _gammaValueSlider.Value = ClampSlider(_gammaValueSlider, (int)Math.Round(Settings.GammaValue * 100.0));
-                    _gammaBrightSlider.Value = ClampSlider(_gammaBrightSlider, Settings.MasterBrightness);
-                    _gammaCheckBox.Checked = Settings.GammaEnabled;
-                    _resetDisplayGammaButton.Enabled = false;
+                    var config = _bgService.GetEffectiveGammaParameters(deviceId);
+                    _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(config.RScale * 100.0));
+                    _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(config.GScale * 100.0));
+                    _gammaBSlider.Value = ClampSlider(_gammaBSlider, (int)Math.Round(config.BScale * 100.0));
+                    _gammaValueSlider.Value = ClampSlider(_gammaValueSlider, (int)Math.Round(config.GammaValue * 100.0));
+                    _gammaBrightSlider.Value = ClampSlider(_gammaBrightSlider, config.MasterBrightness);
+                    _gammaCheckBox.Checked = config.Enabled;
+                    _resetDisplayGammaButton.Enabled = _bgService.HasDisplayGammaOverride(deviceId);
                 }
             }
         }
@@ -323,10 +303,7 @@ namespace LumiShift
             else
             {
                 string deviceId = GetSelectedMonitorDeviceId();
-                if (deviceId != null && Settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
-                    enabled = pdg.Enabled;
-                else
-                    enabled = Settings.GammaEnabled;
+                enabled = deviceId != null ? _bgService.GetEffectiveGammaParameters(deviceId).Enabled : Settings.GammaEnabled;
             }
 
             bool simplified = _gammaSimplifiedCheckBox.Checked;
@@ -370,7 +347,7 @@ namespace LumiShift
             else
             {
                 string currentPreset = GetCurrentPresetName() ?? "自定义";
-                _gammaStatusLabel.Text = $"定时运行中: 当前预设 \"{currentPreset}\"";
+                _gammaStatusLabel.Text = $"定时运行中: 当前方案 \"{currentPreset}\"";
             }
 
             UpdateTitleBar();
@@ -435,7 +412,7 @@ namespace LumiShift
             else _gammaColorTempLabel.Text = "偏暖";
         }
 
-        private void ApplyColorTempToSettings(int colorTemp)
+        private GammaConfig BuildColorTempConfig(int colorTemp, int brightness)
         {
             double r, b, g;
 
@@ -454,11 +431,28 @@ namespace LumiShift
                 g = 1.0 + (1.08 - 1.0) * t;
             }
 
-            Settings.GammaRScale = Math.Round(r, 2);
-            Settings.GammaGScale = 1.0;
-            Settings.GammaBScale = Math.Round(b, 2);
-            Settings.GammaValue = Math.Round(g, 2);
-            Settings.GammaEnabled = true;
+            return new GammaConfig
+            {
+                RScale = Math.Round(r, 2),
+                GScale = 1.0,
+                BScale = Math.Round(b, 2),
+                GammaValue = Math.Round(g, 2),
+                MasterBrightness = brightness,
+                Enabled = true
+            };
+        }
+
+        private GammaConfig BuildSliderGammaConfig(bool enabled)
+        {
+            return new GammaConfig
+            {
+                RScale = _gammaRSlider.Value / 100.0,
+                GScale = _gammaGSlider.Value / 100.0,
+                BScale = _gammaBSlider.Value / 100.0,
+                GammaValue = _gammaValueSlider.Value / 100.0,
+                MasterBrightness = _gammaBrightSlider.Value,
+                Enabled = enabled
+            };
         }
 
         private bool IsGlobalMonitorSelected()
@@ -505,20 +499,26 @@ namespace LumiShift
                     nameLabel.Text = monitor.DisplayName;
                     if (!(monitor.Controller?.IsSupported ?? true))
                         nameLabel.Text = monitor.DisplayName + " (不支持硬件亮度调节)";
-                    nameLabel.Width = _brightnessPanel.Width - row.Padding.Horizontal;
+                    row.Width = _brightnessPanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 2;
+                    nameLabel.Width = row.Width - row.Padding.Horizontal;
                     slider.Maximum = 100;
                     slider.Minimum = 0;
                     slider.Value = currentBrightness;
                     slider.Enabled = monitor.Controller?.IsSupported ?? false;
                     valLabel.Text = $"{currentBrightness}%";
+                    int sliderWidth = Math.Max(210, row.Width - row.Padding.Horizontal - 66);
+                    slider.Width = sliderWidth;
+                    int sliderX = row.Padding.Left;
+                    slider.Location = new Point(sliderX, row.Padding.Top + 32);
+                    valLabel.Location = new Point(sliderX + slider.Width + 12, row.Padding.Top + 36);
                 }
                 else
                 {
                     row = new Panel
                     {
-                        Width = _brightnessPanel.Width,
-                        Height = 56,
-                        Padding = new Padding(Spacing.LG, 8, Spacing.LG, 6),
+                        Width = _brightnessPanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 2,
+                        Height = 74,
+                        Padding = new Padding(0, 10, Spacing.SM, 8),
                         BackColor = Color.Transparent,
                         Tag = deviceId
                     };
@@ -526,19 +526,23 @@ namespace LumiShift
                     var nameLabel = new Label
                     {
                         Text = monitor.DisplayName,
-                        AutoSize = true,
-                        Font = Typography.Body,
+                        AutoSize = false,
+                        Width = row.Width - row.Padding.Horizontal,
+                        Height = 20,
+                        Font = Typography.BodyBold,
                         ForeColor = Colors.TextSecondary
                     };
                     if (!(monitor.Controller?.IsSupported ?? true))
                         nameLabel.Text = monitor.DisplayName + " (不支持硬件亮度调节)";
-                    nameLabel.Location = new Point((row.Width - row.Padding.Horizontal - nameLabel.Width) / 2, row.Padding.Top);
+                    nameLabel.Location = new Point(row.Padding.Left, row.Padding.Top);
+
+                    int sliderWidth = Math.Max(210, row.Width - row.Padding.Horizontal - 66);
 
                     var tb = new ModernSlider
                     {
                         Minimum = 0,
                         Maximum = 100,
-                        Width = 220,
+                        Width = sliderWidth,
                         Value = currentBrightness,
                         Enabled = monitor.Controller?.IsSupported ?? false
                     };
@@ -552,10 +556,9 @@ namespace LumiShift
                         ForeColor = Colors.TextPrimary
                     };
 
-                    int sliderGroupWidth = tb.Width + valLabel.PreferredWidth + 10;
-                    int sliderX = (row.Width - row.Padding.Horizontal - sliderGroupWidth) / 2;
-                    tb.Location = new Point(sliderX, row.Padding.Top + 26);
-                    valLabel.Location = new Point(sliderX + tb.Width + 10, row.Padding.Top + 30);
+                    int sliderX = row.Padding.Left;
+                    tb.Location = new Point(sliderX, row.Padding.Top + 32);
+                    valLabel.Location = new Point(sliderX + tb.Width + 12, row.Padding.Top + 36);
 
                     EventHandler handler = (s, ev) =>
                     {
@@ -610,12 +613,64 @@ namespace LumiShift
         {
             _startWithWindowsCheckBox.Checked = Settings.StartWithWindows;
             _startMinimizedCheckBox.Checked = Settings.StartMinimized;
+            _autoCheckUpdatesToggle.Checked = Settings.AutoCheckUpdates;
             _restoreGammaToggle.Checked = Settings.RestoreGammaOnExit;
+            UpdateNotificationUI();
+        }
+
+        private void AutoCheckUpdatesToggle_CheckedChanged(object sender, EventArgs e)
+        {
+            Settings.AutoCheckUpdates = _autoCheckUpdatesToggle.Checked;
+            DebounceAction(() => SettingsStore.SaveSettings(Settings));
+        }
+
+        private void UpdateNotificationUI()
+        {
+            _notificationsEnabledToggle.Checked = Settings.NotificationsEnabled;
+            _notifyStartupToggle.Checked = Settings.NotifyStartup;
+            _notifyScheduleToggle.Checked = Settings.NotifyScheduleSwitch;
+            _notifyStatusToggle.Checked = Settings.NotifyStatusSwitch;
+            _notifyMonitorToggle.Checked = Settings.NotifyMonitorChange;
+            _notifyStartupToggle.Enabled = Settings.NotificationsEnabled;
+            _notifyScheduleToggle.Enabled = Settings.NotificationsEnabled;
+            _notifyStatusToggle.Enabled = Settings.NotificationsEnabled;
+            _notifyMonitorToggle.Enabled = Settings.NotificationsEnabled;
         }
 
         private void RestoreGammaToggle_CheckedChanged(object sender, EventArgs e)
         {
             Settings.RestoreGammaOnExit = _restoreGammaToggle.Checked;
+            DebounceAction(() => SettingsStore.SaveSettings(Settings));
+        }
+
+        private void NotificationsEnabledToggle_CheckedChanged(object sender, EventArgs e)
+        {
+            Settings.NotificationsEnabled = _notificationsEnabledToggle.Checked;
+            UpdateNotificationUI();
+            DebounceAction(() => SettingsStore.SaveSettings(Settings));
+        }
+
+        private void NotifyScheduleToggle_CheckedChanged(object sender, EventArgs e)
+        {
+            Settings.NotifyScheduleSwitch = _notifyScheduleToggle.Checked;
+            DebounceAction(() => SettingsStore.SaveSettings(Settings));
+        }
+
+        private void NotifyStartupToggle_CheckedChanged(object sender, EventArgs e)
+        {
+            Settings.NotifyStartup = _notifyStartupToggle.Checked;
+            DebounceAction(() => SettingsStore.SaveSettings(Settings));
+        }
+
+        private void NotifyStatusToggle_CheckedChanged(object sender, EventArgs e)
+        {
+            Settings.NotifyStatusSwitch = _notifyStatusToggle.Checked;
+            DebounceAction(() => SettingsStore.SaveSettings(Settings));
+        }
+
+        private void NotifyMonitorToggle_CheckedChanged(object sender, EventArgs e)
+        {
+            Settings.NotifyMonitorChange = _notifyMonitorToggle.Checked;
             DebounceAction(() => SettingsStore.SaveSettings(Settings));
         }
 
@@ -634,6 +689,7 @@ namespace LumiShift
 
         private void EyeProtectionToggle_CheckedChanged(object sender, EventArgs e)
         {
+            bool enabled = _eyeProtectionToggle.Checked;
             Settings.EyeProtectionEnabled = _eyeProtectionToggle.Checked;
             UpdateEyeProtectionUI();
             DebounceAction(() =>
@@ -643,6 +699,7 @@ namespace LumiShift
                 else
                     EyeProtectionService.RestoreDefault();
                 SettingsStore.SaveSettings(Settings);
+                _bgService.NotifyStatusSwitch("LumiShift 状态切换", enabled ? "护眼模式已启用" : "护眼模式已关闭");
             });
         }
 
@@ -998,11 +1055,13 @@ namespace LumiShift
             UpdateColorTempFromSliders();
             if (_currentPresetName != null && _gammaModeComboBox.Items.Contains(_currentPresetName))
                 _gammaModeComboBox.SelectedItem = _currentPresetName;
+            else if (_currentPresetName != null && _gammaModeComboBox.Items.Contains(_schemeService.GetDisplayName(_currentPresetName)))
+                _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(_currentPresetName);
             else
             {
                 string current = GetCurrentPresetName();
                 if (current != null)
-                    _gammaModeComboBox.SelectedItem = current;
+                    _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
             }
             RefreshSliderVisibility();
             RefreshCustomPresetButtons();
@@ -1014,36 +1073,23 @@ namespace LumiShift
         private void GammaCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             if (_isUpdatingGammaSliders) return;
+            bool enabled = _gammaCheckBox.Checked;
 
             if (IsGlobalMonitorSelected())
             {
-                Settings.GammaEnabled = _gammaCheckBox.Checked;
-                if (Settings.GammaPerDisplay.Count > 0)
-                {
-                    Settings.GammaPerDisplay.Clear();
-                    PopulateMonitorSelector();
-                }
+                var config = GammaConfig.FromSettings(Settings);
+                config.Enabled = enabled;
+                _bgService.SetGlobalGammaParameters(config, clearDisplayOverrides: true);
+                PopulateMonitorSelector();
             }
             else
             {
                 string deviceId = GetSelectedMonitorDeviceId();
                 if (deviceId != null)
                 {
-                    if (!Settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
-                    {
-                        pdg = new PerDisplayGamma
-                        {
-                            RScale = Settings.GammaRScale,
-                            GScale = Settings.GammaGScale,
-                            BScale = Settings.GammaBScale,
-                            GammaValue = Settings.GammaValue,
-                            MasterBrightness = Settings.MasterBrightness,
-                            Source = "manual"
-                        };
-                        Settings.GammaPerDisplay[deviceId] = pdg;
-                    }
-                    pdg.Enabled = _gammaCheckBox.Checked;
-                    pdg.Source = "manual";
+                    var config = _bgService.GetEffectiveGammaParameters(deviceId);
+                    config.Enabled = enabled;
+                    _bgService.SetDisplayGammaParameters(deviceId, config);
                     PopulateMonitorSelector();
                 }
             }
@@ -1058,6 +1104,7 @@ namespace LumiShift
                 SettingsStore.SaveSettings(Settings);
                 _bgService.UpdateTrayMenu();
                 UpdateScheduleOverrideStatus();
+                _bgService.NotifyStatusSwitch("LumiShift 状态切换", enabled ? "显示调节已启用" : "显示调节已关闭");
             });
         }
 
@@ -1077,44 +1124,20 @@ namespace LumiShift
 
             _isUpdatingGammaSliders = true;
 
-            ApplyColorTempToSettings(_gammaColorTempSlider.Value);
+            var colorConfig = BuildColorTempConfig(_gammaColorTempSlider.Value, _gammaBrightSlider.Value);
 
             if (IsGlobalMonitorSelected())
             {
-                Settings.MasterBrightness = _gammaBrightSlider.Value;
-                if (Settings.GammaPerDisplay.Count > 0)
-                {
-                    Settings.GammaPerDisplay.Clear();
-                    PopulateMonitorSelector();
-                }
+                _bgService.SetGlobalGammaParameters(colorConfig, clearDisplayOverrides: true);
+                PopulateMonitorSelector();
             }
             else
             {
                 string deviceId = GetSelectedMonitorDeviceId();
                 if (deviceId != null)
                 {
-                    if (!Settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
-                    {
-                        pdg = new PerDisplayGamma
-                        {
-                            RScale = Settings.GammaRScale,
-                            GScale = Settings.GammaGScale,
-                            BScale = Settings.GammaBScale,
-                            GammaValue = Settings.GammaValue,
-                            MasterBrightness = Settings.MasterBrightness,
-                            Enabled = Settings.GammaEnabled,
-                            Source = "manual"
-                        };
-                        Settings.GammaPerDisplay[deviceId] = pdg;
-                        PopulateMonitorSelector();
-                    }
-                    pdg.RScale = Settings.GammaRScale;
-                    pdg.GScale = Settings.GammaGScale;
-                    pdg.BScale = Settings.GammaBScale;
-                    pdg.GammaValue = Settings.GammaValue;
-                    pdg.MasterBrightness = _gammaBrightSlider.Value;
-                    pdg.Enabled = true;
-                    pdg.Source = "manual";
+                    _bgService.SetDisplayGammaParameters(deviceId, colorConfig);
+                    PopulateMonitorSelector();
                     _resetDisplayGammaButton.Enabled = true;
                 }
             }
@@ -1131,7 +1154,7 @@ namespace LumiShift
             string current = GetCurrentPresetName();
             _currentPresetName = current;
             if (current != null)
-                _gammaModeComboBox.SelectedItem = current;
+                _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
 
             _bgService.ApplyGammaToSystem();
             SettingsStore.SaveSettings(Settings);
@@ -1143,7 +1166,8 @@ namespace LumiShift
         {
             if (_isUpdatingGammaSliders || _isPopulatingComboBox) return;
 
-            if (!(_gammaModeComboBox.SelectedItem is string selected)) return;
+            if (!(_gammaModeComboBox.SelectedItem is string selectedDisplay)) return;
+            string selected = DisplaySchemeService.StripDisplayName(selectedDisplay);
 
             _currentPresetName = selected;
 
@@ -1153,43 +1177,17 @@ namespace LumiShift
             if (IsGlobalMonitorSelected())
             {
                 _bgService.TryApplyPreset(selected);
-                if (Settings.GammaPerDisplay.Count > 0)
-                {
-                    Settings.GammaPerDisplay.Clear();
-                    PopulateMonitorSelector();
-                }
+                _bgService.SetGlobalGammaParameters(GammaConfig.FromSettings(Settings), clearDisplayOverrides: true);
+                PopulateMonitorSelector();
             }
             else
             {
                 string deviceId = GetSelectedMonitorDeviceId();
                 if (deviceId != null)
                 {
-                    double r, g, b, gv;
-                    int mb;
-                    bool en;
-
-                    if (PresetDefinitions.TryResolveParams(selected, Settings.CustomGammaPresets,
-                        out r, out g, out b, out gv, out mb, out en))
-                    {
-                        if (!Settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
-                        {
-                            pdg = new PerDisplayGamma
-                            {
-                                RScale = Settings.GammaRScale,
-                                GScale = Settings.GammaGScale,
-                                BScale = Settings.GammaBScale,
-                                GammaValue = Settings.GammaValue,
-                                MasterBrightness = Settings.MasterBrightness,
-                                Enabled = Settings.GammaEnabled,
-                                Source = "manual"
-                            };
-                            Settings.GammaPerDisplay[deviceId] = pdg;
-                        }
-                        pdg.RScale = r; pdg.GScale = g; pdg.BScale = b;
-                        pdg.GammaValue = gv; pdg.MasterBrightness = mb; pdg.Enabled = en;
-                        pdg.Source = "manual";
+                    _bgService.ApplyPresetToMonitor(selected, deviceId);
+                    if (Settings.GammaPerDisplay.ContainsKey(deviceId))
                         PopulateMonitorSelector();
-                    }
                 }
             }
 
@@ -1211,45 +1209,16 @@ namespace LumiShift
 
             if (IsGlobalMonitorSelected())
             {
-                Settings.GammaRScale = _gammaRSlider.Value / 100.0;
-                Settings.GammaGScale = _gammaGSlider.Value / 100.0;
-                Settings.GammaBScale = _gammaBSlider.Value / 100.0;
-                Settings.GammaValue = _gammaValueSlider.Value / 100.0;
-                Settings.MasterBrightness = _gammaBrightSlider.Value;
-                Settings.GammaEnabled = _gammaCheckBox.Checked;
-                if (Settings.GammaPerDisplay.Count > 0)
-                {
-                    Settings.GammaPerDisplay.Clear();
-                    PopulateMonitorSelector();
-                }
+                _bgService.SetGlobalGammaParameters(BuildSliderGammaConfig(_gammaCheckBox.Checked), clearDisplayOverrides: true);
+                PopulateMonitorSelector();
             }
             else
             {
                 string deviceId = GetSelectedMonitorDeviceId();
                 if (deviceId != null)
                 {
-                    if (!Settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
-                    {
-                        pdg = new PerDisplayGamma
-                        {
-                            RScale = Settings.GammaRScale,
-                            GScale = Settings.GammaGScale,
-                            BScale = Settings.GammaBScale,
-                            GammaValue = Settings.GammaValue,
-                            MasterBrightness = Settings.MasterBrightness,
-                            Enabled = Settings.GammaEnabled,
-                            Source = "manual"
-                        };
-                        Settings.GammaPerDisplay[deviceId] = pdg;
-                        PopulateMonitorSelector();
-                    }
-                    pdg.RScale = _gammaRSlider.Value / 100.0;
-                    pdg.GScale = _gammaGSlider.Value / 100.0;
-                    pdg.BScale = _gammaBSlider.Value / 100.0;
-                    pdg.GammaValue = _gammaValueSlider.Value / 100.0;
-                    pdg.MasterBrightness = _gammaBrightSlider.Value;
-                    pdg.Enabled = _gammaCheckBox.Checked;
-                    pdg.Source = "manual";
+                    _bgService.SetDisplayGammaParameters(deviceId, BuildSliderGammaConfig(_gammaCheckBox.Checked));
+                    PopulateMonitorSelector();
                     _resetDisplayGammaButton.Enabled = true;
                 }
             }
@@ -1258,7 +1227,7 @@ namespace LumiShift
             string current = GetCurrentPresetName();
             _currentPresetName = current;
             if (current != null && !_isPopulatingComboBox)
-                _gammaModeComboBox.SelectedItem = current;
+                _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
 
             if (GammaCtrl.IsSupported)
                 _bgService.ApplyGammaToSystem();
@@ -1269,14 +1238,19 @@ namespace LumiShift
 
         private void GammaSaveCustomButton_Click(object sender, EventArgs e)
         {
-            string name = PromptForName("请输入自定义预设名称:", "保存当前设置为预设", "我的自定义");
-            if (name == null) return;
-            name = name.Trim();
-            if (name.Length == 0) return;
+            bool hasDisplayOverrides = Settings.GammaPerDisplay != null && Settings.GammaPerDisplay.Count > 0;
+            string name;
+            bool saveMultiDisplay;
+            using (var dialog = new SaveDisplaySchemeDialog(hasDisplayOverrides))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                name = dialog.SchemeName;
+                saveMultiDisplay = dialog.SchemeKind == DisplaySchemeKind.MultiDisplay;
+            }
 
             if (PresetDefinitions.IsBuiltIn(name))
             {
-                MessageBox.Show("该名称与内置预设冲突，请更换名称。", "提示",
+                MessageBox.Show("该名称与内置方案冲突，请更换名称。", "提示",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -1284,7 +1258,7 @@ namespace LumiShift
             var existing = Settings.CustomGammaPresets.FirstOrDefault(cp => cp.Name == name);
             if (existing != null)
             {
-                if (MessageBox.Show($"预设 \"{name}\" 已存在，是否覆盖？", "确认覆盖",
+                if (MessageBox.Show($"显示方案 \"{name}\" 已存在，是否覆盖？", "确认覆盖",
                     MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                     return;
                 Settings.CustomGammaPresets.Remove(existing);
@@ -1301,7 +1275,7 @@ namespace LumiShift
                 Enabled = Settings.GammaEnabled
             };
 
-            if (Settings.GammaPerDisplay != null && Settings.GammaPerDisplay.Count > 0)
+            if (saveMultiDisplay)
             {
                 preset.PerDisplaySnapshot = new Dictionary<string, PerDisplayGamma>();
                 foreach (var kvp in Settings.GammaPerDisplay)
@@ -1323,20 +1297,23 @@ namespace LumiShift
 
             PopulatePresetComboBox();
             _currentPresetName = name;
-            _gammaModeComboBox.SelectedItem = name;
+            _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(name);
             SettingsStore.SaveSettings(Settings);
             _bgService.UpdateTrayMenu();
             RefreshCustomPresetButtons();
 
-            _gammaStatusLabel.Text = $"已保存自定义预设 \"{name}\"";
+            _gammaStatusLabel.Text = saveMultiDisplay
+                ? $"已保存多屏方案 \"{name}\""
+                : $"已保存统一方案 \"{name}\"";
         }
 
         private void GammaDeleteCustomButton_Click(object sender, EventArgs e)
         {
-            if (!(_gammaModeComboBox.SelectedItem is string selected)) return;
+            if (!(_gammaModeComboBox.SelectedItem is string selectedDisplay)) return;
+            string selected = DisplaySchemeService.StripDisplayName(selectedDisplay);
             if (PresetDefinitions.IsBuiltIn(selected)) return;
 
-            if (MessageBox.Show($"确定要删除自定义预设 \"{selected}\" 吗？", "确认删除",
+            if (MessageBox.Show($"确定要删除显示方案 \"{selected}\" 吗？", "确认删除",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
 
@@ -1357,7 +1334,7 @@ namespace LumiShift
             _bgService.UpdateTrayMenu();
             RefreshCustomPresetButtons();
 
-            _gammaStatusLabel.Text = $"已删除自定义预设 \"{selected}\"";
+            _gammaStatusLabel.Text = $"已删除显示方案 \"{selected}\"";
         }
 
         private void MonitorSelectorComboBox_SelectedIndexChanged(object sender, EventArgs e)
@@ -1367,16 +1344,16 @@ namespace LumiShift
             int prevIndex = _previousMonitorSelectedIndex;
             _previousMonitorSelectedIndex = _monitorSelectorComboBox.SelectedIndex;
 
-            if (IsGlobalMonitorSelected() && Settings.GammaPerDisplay.Count > 0)
+            if (IsGlobalMonitorSelected() && _bgService.HasAnyDisplayGammaOverride())
             {
-                bool hasManual = Settings.GammaPerDisplay.Any(kvp => kvp.Value.Source == "manual");
-                bool hasSchedule = Settings.GammaPerDisplay.Any(kvp => kvp.Value.Source == "schedule");
+                bool hasManual = _bgService.HasManualDisplayGammaOverride();
+                bool hasSchedule = _bgService.HasScheduleDisplayGammaOverride();
 
                 if (hasManual || hasSchedule)
                 {
                     string msg = hasSchedule && Settings.ScheduleEnabled
-                        ? "切换到\"所有显示器\"模式将同步所有显示器参数，定时调度的独立配置将被清除。\n\n是否继续？"
-                        : "切换到\"所有显示器\"模式将同步所有显示器参数，各显示器的独立配置将被清除。\n\n是否继续？";
+                        ? "切换到“全部显示器”会把当前效果作为统一方案应用，并清除定时带来的单屏设置。\n\n是否继续？"
+                        : "切换到“全部显示器”会把当前效果作为统一方案应用，并清除各显示器的独立设置。\n\n是否继续？";
 
                     if (MessageBox.Show(msg, "同步确认", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                     {
@@ -1390,17 +1367,12 @@ namespace LumiShift
                 var primary = MonitorMgr.Monitors.FirstOrDefault(m => m.Screen?.Primary == true)
                     ?? MonitorMgr.Monitors.FirstOrDefault();
 
-                if (primary != null && Settings.GammaPerDisplay.TryGetValue(primary.DeviceId, out var primaryPdg))
+                if (primary != null && _bgService.HasDisplayGammaOverride(primary.DeviceId))
                 {
-                    Settings.GammaRScale = primaryPdg.RScale;
-                    Settings.GammaGScale = primaryPdg.GScale;
-                    Settings.GammaBScale = primaryPdg.BScale;
-                    Settings.GammaValue = primaryPdg.GammaValue;
-                    Settings.MasterBrightness = primaryPdg.MasterBrightness;
-                    Settings.GammaEnabled = primaryPdg.Enabled;
+                    _bgService.SetGlobalGammaParameters(_bgService.GetEffectiveGammaParameters(primary.DeviceId), clearDisplayOverrides: false);
                 }
 
-                Settings.GammaPerDisplay.Clear();
+                _bgService.SetGlobalGammaParameters(GammaConfig.FromSettings(Settings), clearDisplayOverrides: true);
                 _bgService.ApplyGammaToSystem();
                 SettingsStore.SaveSettings(Settings);
                 PopulateMonitorSelector();
@@ -1419,17 +1391,17 @@ namespace LumiShift
             string deviceId = GetSelectedMonitorDeviceId();
             if (deviceId == null) return;
 
-            bool isFromSchedule = Settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg) && pdg.Source == "schedule";
+            bool isFromSchedule = _bgService.GetDisplayGammaSource(deviceId) == GammaSourceNames.Schedule;
 
             if (isFromSchedule && Settings.ScheduleEnabled)
             {
                 if (MessageBox.Show(
-                    "此配置由定时调度生成，重置后将在下次时段切换时恢复。\n\n是否仍要重置？",
-                    "定时配置提示", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
+                    "此显示器当前由定时切换单独控制。恢复跟随后，它会先使用统一方案；下次时段切换时会再次按调度应用。\n\n是否继续？",
+                    "恢复跟随统一方案", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
                     return;
             }
 
-            Settings.GammaPerDisplay.Remove(deviceId);
+            _bgService.ClearDisplayGammaOverride(deviceId);
             PopulateMonitorSelector();
 
             _isUpdatingGammaSliders = true;
@@ -1443,8 +1415,8 @@ namespace LumiShift
             _bgService.UpdateTrayMenu();
 
             _gammaStatusLabel.Text = isFromSchedule && Settings.ScheduleEnabled
-                ? "已重置为全局设置（定时调度将在下次时段切换时恢复）"
-                : "已重置为全局设置";
+                ? "已恢复跟随统一方案；下次时段切换会继续按调度应用"
+                : "已恢复跟随统一方案";
         }
 
         private void GammaScheduleToggle_CheckedChanged(object sender, EventArgs e)

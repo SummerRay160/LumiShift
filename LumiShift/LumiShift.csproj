@@ -12,7 +12,7 @@
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
-    <Version>1.2.5</Version>
+    <Version>1.6.0</Version>
     <Company>LumiShift</Company>
     <Description>屏幕亮度与Gamma校正工具</Description>
     <Copyright>Copyright © 2026</Copyright>
@@ -96,11 +96,20 @@
     <Compile Include="Infrastructure\MonitorManager.cs" />
     <Compile Include="Infrastructure\NativeMethods.cs" />
     <Compile Include="Infrastructure\NightLightController.cs" />
+    <Compile Include="Infrastructure\ScheduleEvaluator.cs" />
+    <Compile Include="Models\DisplayScheme.cs" />
+    <Compile Include="Models\GammaConfig.cs" />
     <Compile Include="Models\UserSettings.cs" />
     <Compile Include="Models\PresetDefinitions.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Resources\DesignConstants.cs" />
+    <Compile Include="Services\DisplaySchemeService.cs" />
+    <Compile Include="Services\DisplayGammaStateService.cs" />
+    <Compile Include="Services\PresetService.cs" />
+    <Compile Include="Services\SaveDisplaySchemeDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Services\SettingsStore.cs" />
     <Compile Include="Services\UpdateDialog.cs">
       <SubType>Form</SubType>

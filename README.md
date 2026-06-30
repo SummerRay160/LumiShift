@@ -43,10 +43,11 @@
 ![Gamma 校正](.github/Screenshot/Screenshot_Gamma.png)
 
 - **多显示器独立调整**：下拉选择目标显示器，单独设置 Gamma 参数，支持一键重置
+- **显示方案系统**：支持保存统一方案（所有显示器相同效果）和多屏方案（每台显示器独立参数），一键切换整组配置
 - 精确调节 R / G / B 三通道增益、Gamma 值（Y）和主亮度，底部实时显示当前参数值
 - **简化色温模式**：勾选「只调节色温」后，单一滑块即可映射冷暖色温（偏冷 ↔ 偏暖）
-- **预设管理**：内置标准、防蓝光、护眼模式、游戏模式等预设，支持保存和删除自定义预设
-- **定时联动**：可为每台显示器指定不同时段的定时调度方案，手动/定时来源自动标识
+- **预设管理**：内置标准、防蓝光、护眼模式、游戏模式等预设，支持保存和删除自定义显示方案
+- **定时联动**：可为每台显示器指定不同时段的定时调度方案，支持多屏方案自动切换，手动/定时来源自动标识
 - 基于 GDI32 `SetDeviceGammaRamp`，支持按显示器独立应用 Gamma
 
 #### 📖 使用指南 — 多显示器操作
@@ -152,7 +153,9 @@
 - **自定义背景**：可选择本地图片作为界面壁纸，支持透明度调节
 - **开机自启**：可选开机自动启动
 - **启动时最小化到托盘**：启动后自动最小化到系统托盘
+- **启动时自动检查更新**：可关闭启动后的静默 GitHub Releases 更新检查，托盘菜单仍可手动检查
 - **退出时还原 Gamma**：可选关闭程序时自动恢复所有显示器的 Gamma 值为系统原始状态
+- **通知偏好**：可独立控制启动通知、定时切换通知、状态变更通知、显示器变更通知，总开关一键控制
 - 单实例运行，重复启动时激活已有窗口
 
 #### ⏰ 定时调度配置
@@ -160,7 +163,8 @@
 ![定时调度配置](.github/Screenshot/Screenshot_Setting_Time_Scheduling.png)
 
 - **时间段管理**：按时段自动切换日/夜预设方案（如 18:00 切护眼模式，06:00 恢复标准），支持跨午夜时段配置
-- **多显示器独立调度**：可为每个时间段指定不同显示器的预设方案，精细化控制每台屏幕的显示效果
+- **多显示器独立调度**：可为每个时间段指定不同显示器的预设方案，也可直接选择多屏方案自动切换
+- **显示方案类型识别**：时段行显示 "使用统一方案"/"使用多屏方案"/"临时逐台配置" 摘要，配置意图一目了然
 - **手动/定时智能切换**：手动调整时自动覆盖定时设置，下次时段切换时自动恢复定时方案
 - 支持保存、删除和重置调度配置
 
@@ -182,7 +186,7 @@
 
 #### 🔄 自动更新
 
-- 启动时静默检查 GitHub Releases 新版本
+- 启动时静默检查 GitHub Releases 新版本，可在设置中关闭
 - 托盘菜单支持手动检查更新
 
 ### 📥 下载安装
@@ -227,10 +231,13 @@ LumiShift/
 │   ├── NightLightController.cs     # Windows 夜间模式控制
 │   ├── MonitorManager.cs           # 显示器管理 (EDID/热插拔/位置推断)
 │   ├── NativeMethods.cs            # Win32 API 声明
+│   ├── ScheduleEvaluator.cs        # 定时调度时段评估与哈希缓存
 │   ├── WeakEvent.cs                # 弱事件模式实现
 │   ├── LightweightJson.cs          # 轻量级 JSON 解析器
 │   └── IBrightnessController.cs    # 亮度控制接口
 ├── Models/
+│   ├── DisplayScheme.cs            # 显示方案模型（统一/多屏）
+│   ├── GammaConfig.cs              # Gamma 配置与来源名称工具
 │   ├── PresetDefinitions.cs        # 预设定义
 │   └── UserSettings.cs             # 用户设置模型
 ├── Properties/
@@ -238,6 +245,10 @@ LumiShift/
 ├── Resources/
 │   └── DesignConstants.cs          # 主题与设计常量
 ├── Services/
+│   ├── DisplayGammaStateService.cs # 全局/逐台显示器 Gamma 状态管理
+│   ├── DisplaySchemeService.cs     # 显示方案聚合
+│   ├── PresetService.cs            # 预设解析（内置 + 自定义）
+│   ├── SaveDisplaySchemeDialog.cs  # 保存显示方案对话框
 │   ├── SettingsStore.cs            # 设置持久化
 │   ├── UpdateService.cs            # 自动更新服务
 │   └── UpdateDialog.cs             # 更新提示对话框
@@ -318,10 +329,11 @@ LumiShift is an open-source screen adjustment tool for Windows that combines mul
 ![Gamma Correction](.github/Screenshot/Screenshot_Gamma.png)
 
 - **Per-monitor independent adjustment**: select target monitor from dropdown, set individual Gamma parameters, one-click reset
+- **Display scheme system**: save unified schemes (same effect across all monitors) and multi-display schemes (independent per-monitor parameters); switch entire config groups with one click
 - Fine-tune R / G / B channel gain, Gamma value (Y), and master brightness; real-time parameter display at bottom
 - **Simplified color temperature mode**: enable "Color Temperature Only" for a single slider mapping warmth (Cool ↔ Warm)
-- **Preset management**: built-in Standard, Anti-Blue, Eye Care, Gaming presets; save and delete custom presets
-- **Schedule integration**: assign time-based schedules per monitor, manual/schedule source auto-labeled
+- **Preset management**: built-in Standard, Anti-Blue, Eye Care, Gaming presets; save and delete custom display schemes
+- **Schedule integration**: assign time-based schedules per monitor, multi-display scheme auto-switch support, manual/schedule source auto-labeled
 - Based on GDI32 `SetDeviceGammaRamp`, supports per-display independent Gamma application
 
 #### 📖 Usage Guide — Multi-Monitor Operation
@@ -427,7 +439,9 @@ Time slots crossing midnight (e.g., `22:00 – 06:00`) are supported — no need
 - **Custom background**: choose local image as interface wallpaper with adjustable opacity
 - **Auto-start**: optional startup with Windows
 - **Minimize to tray on launch**: automatically minimize to system tray on startup
+- **Auto-check updates on startup**: optionally disable the silent GitHub Releases update check; manual tray checks remain available
 - **Restore Gamma on exit**: optionally restore all monitors' Gamma values to system defaults when closing
+- **Notification preferences**: independently control startup, schedule switch, status change, and monitor change notifications; master toggle for one-click control
 - Single instance: re-launching activates the existing window
 
 #### ⏰ Schedule Configuration
@@ -457,7 +471,7 @@ Time slots crossing midnight (e.g., `22:00 – 06:00`) are supported — no need
 
 #### 🔄 Auto Update
 
-- Silent check for new versions on GitHub Releases at startup
+- Silent check for new versions on GitHub Releases at startup, configurable in Settings
 - Manual update check from tray menu
 
 ### 📥 Download
@@ -502,10 +516,13 @@ LumiShift/
 │   ├── NightLightController.cs     # Windows Night Light control
 │   ├── MonitorManager.cs           # Monitor management (EDID/hot-plug/position)
 │   ├── NativeMethods.cs            # Win32 API declarations
+│   ├── ScheduleEvaluator.cs        # Schedule time slot evaluation & hash caching
 │   ├── WeakEvent.cs                # Weak event pattern implementation
 │   ├── LightweightJson.cs          # Lightweight JSON parser
 │   └── IBrightnessController.cs    # Brightness control interface
 ├── Models/
+│   ├── DisplayScheme.cs            # Display scheme model (unified/multi-display)
+│   ├── GammaConfig.cs              # Gamma config & source name helpers
 │   ├── PresetDefinitions.cs        # Preset definitions
 │   └── UserSettings.cs             # User settings model
 ├── Properties/
@@ -513,6 +530,10 @@ LumiShift/
 ├── Resources/
 │   └── DesignConstants.cs          # Theme & design constants
 ├── Services/
+│   ├── DisplayGammaStateService.cs # Global & per-display Gamma state management
+│   ├── DisplaySchemeService.cs     # Display scheme aggregation
+│   ├── PresetService.cs            # Preset resolution (built-in + custom)
+│   ├── SaveDisplaySchemeDialog.cs  # Save display scheme dialog
 │   ├── SettingsStore.cs            # Settings persistence
 │   ├── UpdateService.cs            # Auto-update service
 │   └── UpdateDialog.cs             # Update notification dialog

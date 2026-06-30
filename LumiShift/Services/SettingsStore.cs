@@ -99,7 +99,13 @@ namespace LumiShift.Services
                 GammaValue = 1.0,
                 GammaRScale = 1.0,
                 GammaGScale = 1.0,
-                GammaBScale = 1.0
+                GammaBScale = 1.0,
+                AutoCheckUpdates = true,
+                NotificationsEnabled = true,
+                NotifyStartup = true,
+                NotifyScheduleSwitch = true,
+                NotifyStatusSwitch = true,
+                NotifyMonitorChange = true
             };
         }
 
@@ -134,7 +140,13 @@ namespace LumiShift.Services
             WriteBrightnessDict(w, s.BrightnessPerDisplay); w.WriteComma();
             WritePerDisplayGammaDict(w, s.GammaPerDisplay); w.WriteComma();
             WriteProp(w, "SkipVersion", s.SkipVersion ?? ""); w.WriteComma();
-            WriteProp(w, "RestoreGammaOnExit", s.RestoreGammaOnExit);
+            WriteProp(w, "AutoCheckUpdates", s.AutoCheckUpdates); w.WriteComma();
+            WriteProp(w, "RestoreGammaOnExit", s.RestoreGammaOnExit); w.WriteComma();
+            WriteProp(w, "NotificationsEnabled", s.NotificationsEnabled); w.WriteComma();
+            WriteProp(w, "NotifyStartup", s.NotifyStartup); w.WriteComma();
+            WriteProp(w, "NotifyScheduleSwitch", s.NotifyScheduleSwitch); w.WriteComma();
+            WriteProp(w, "NotifyStatusSwitch", s.NotifyStatusSwitch); w.WriteComma();
+            WriteProp(w, "NotifyMonitorChange", s.NotifyMonitorChange);
 
             w.WriteObjectEnd();
         }
@@ -337,7 +349,13 @@ namespace LumiShift.Services
             s.BackgroundImageOpacity = GetInt(root, "BackgroundImageOpacity", 30);
             s.SkipVersion = GetString(root, "SkipVersion") ?? "";
 
+            s.AutoCheckUpdates = GetBool(root, "AutoCheckUpdates", true);
             s.RestoreGammaOnExit = GetBool(root, "RestoreGammaOnExit", true);
+            s.NotificationsEnabled = GetBool(root, "NotificationsEnabled", true);
+            s.NotifyStartup = GetBool(root, "NotifyStartup", true);
+            s.NotifyScheduleSwitch = GetBool(root, "NotifyScheduleSwitch", true);
+            s.NotifyStatusSwitch = GetBool(root, "NotifyStatusSwitch", true);
+            s.NotifyMonitorChange = GetBool(root, "NotifyMonitorChange", true);
 
             s.ScheduleSegments = DeserializeScheduleSegments(root);
             s.CustomGammaPresets = DeserializeCustomGammaPresets(root);
