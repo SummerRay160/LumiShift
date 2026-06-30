@@ -19,6 +19,7 @@ namespace LumiShift.Infrastructure
     {
         private List<MonitorInfo> _monitors;
         private readonly List<IBrightnessController> _allControllers;
+        private string _lastSignature;
 
         public IReadOnlyList<MonitorInfo> Monitors => _monitors.AsReadOnly();
 
@@ -34,6 +35,7 @@ namespace LumiShift.Infrastructure
         public HashSet<string> RefreshMonitors()
         {
             var oldDeviceIds = new HashSet<string>(_monitors.Select(m => m.DeviceId));
+            string oldSignature = _lastSignature;
 
             foreach (var ctrl in _allControllers)
             {
@@ -99,10 +101,25 @@ namespace LumiShift.Infrastructure
             var newDeviceIds = new HashSet<string>(_monitors.Select(m => m.DeviceId));
             var removedDeviceIds = new HashSet<string>(oldDeviceIds);
             removedDeviceIds.ExceptWith(newDeviceIds);
+            _lastSignature = BuildMonitorSignature(_monitors);
 
-            OnMonitorsChanged();
+            if (!string.Equals(oldSignature, _lastSignature, StringComparison.Ordinal))
+                OnMonitorsChanged();
 
             return removedDeviceIds;
+        }
+
+        private static string BuildMonitorSignature(IEnumerable<MonitorInfo> monitors)
+        {
+            return string.Join("|", monitors.Select(m => string.Join(":", new[]
+            {
+                m.DeviceId ?? "",
+                m.DisplayName ?? "",
+                m.Screen?.DeviceName ?? "",
+                m.Screen?.Bounds.ToString() ?? "",
+                m.Screen?.Primary.ToString() ?? "False",
+                m.IsBuiltIn.ToString()
+            })));
         }
 
         private static string BuildDisplayName(bool isBuiltIn, string monitorName, string manufacturerCode, Screen screen, Screen[] allScreens)

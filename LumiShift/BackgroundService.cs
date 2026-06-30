@@ -19,6 +19,8 @@ namespace LumiShift
     {
         internal UserSettings Settings { get; }
         internal GammaController GammaController { get; }
+        private PresetService _presetService;
+        private DisplayGammaStateService _displayGammaState;
 
         private MonitorManager _monitorManager;
         internal MonitorManager MonitorManager
@@ -100,16 +102,9 @@ namespace LumiShift
         private const int FullCompactEveryNTicks = 20;
         private const int Gen1CollectEveryNTicks = 5;
 
-        private struct ParsedSegment
-        {
-            public TimeSpan Start;
-            public TimeSpan End;
-            public string PresetName;
-            public ScheduleSegment Segment;
-        }
-
-        private List<ParsedSegment> _parsedSegments;
+        private ScheduleEvaluator _scheduleEvaluator;
         private int _parsedSegmentsHash;
+        private DateTime _lastMonitorNotificationTime = DateTime.MinValue;
 
         public event Action MonitorsChanged;
         public event Action ScheduleStateChanged;
@@ -119,10 +114,66 @@ namespace LumiShift
             return Program.AppIcon;
         }
 
+        internal void ShowWindowsNotification(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
+        {
+            if (_trayIcon == null || _exiting || _disposed) return;
+            try
+            {
+                _trayIcon.BalloonTipTitle = title;
+                _trayIcon.BalloonTipText = message;
+                _trayIcon.BalloonTipIcon = icon;
+                _trayIcon.ShowBalloonTip(3500);
+            }
+            catch { }
+        }
+
+        internal void NotifyStatusSwitch(string title, string message)
+        {
+            if (!Settings.NotificationsEnabled || !Settings.NotifyStatusSwitch) return;
+            ShowWindowsNotification(title, message);
+        }
+
+        private void NotifyScheduleSwitch(string presetName, ScheduleSegment segment)
+        {
+            if (!Settings.NotificationsEnabled || !Settings.NotifyScheduleSwitch) return;
+            string range = segment == null ? "" : $"（{segment.StartTime}-{segment.EndTime}）";
+            ShowWindowsNotification("LumiShift 定时切换", $"已切换到 {presetName} {range}".Trim());
+        }
+
+        private void NotifyMonitorChange(int monitorCount, int removedCount)
+        {
+            if (!Settings.NotificationsEnabled || !Settings.NotifyMonitorChange) return;
+            var now = DateTime.Now;
+            if ((now - _lastMonitorNotificationTime).TotalSeconds < 2) return;
+            _lastMonitorNotificationTime = now;
+            string message = removedCount > 0
+                ? $"显示器配置已变更，当前 {monitorCount} 台，移除 {removedCount} 台。"
+                : $"显示器配置已变更，当前 {monitorCount} 台。";
+            ShowWindowsNotification("LumiShift 显示器变更", message);
+        }
+
+        private void ScheduleStartupNotification()
+        {
+            if (!Settings.NotificationsEnabled || !Settings.NotifyStartup) return;
+
+            var timer = new Timer { Interval = 1200 };
+            timer.Tick += (s, e) =>
+            {
+                timer.Stop();
+                timer.Dispose();
+                string scheduleText = Settings.ScheduleEnabled ? "定时调度已开启" : "定时调度未开启";
+                string gammaText = Settings.GammaEnabled ? "显示调节已启用" : "显示调节未启用";
+                ShowWindowsNotification("LumiShift 已启动", $"{gammaText}，{scheduleText}。");
+            };
+            timer.Start();
+        }
+
         public BackgroundService()
         {
             Settings = SettingsStore.LoadSettings();
             GammaController = new GammaController();
+            _presetService = new PresetService(Settings);
+            _displayGammaState = new DisplayGammaStateService(Settings, _presetService);
 
             SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
@@ -146,6 +197,7 @@ namespace LumiShift
             CreateTrayIcon();
             _trayMenuNeedsRebuild = true;
             UpdateTrayText();
+            ScheduleStartupNotification();
 
             if (Settings.EyeProtectionEnabled)
             {
@@ -159,15 +211,18 @@ namespace LumiShift
 
             _messageWindow = new MessageWindow(this);
 
-            _updateCheckTimer = new Timer { Interval = 3000 };
-            _updateCheckTimer.Tick += (s, e) =>
+            if (Settings.AutoCheckUpdates)
             {
-                _updateCheckTimer.Stop();
-                _updateCheckTimer.Dispose();
-                _updateCheckTimer = null;
-                RunUpdateCheck(silent: true);
-            };
-            _updateCheckTimer.Start();
+                _updateCheckTimer = new Timer { Interval = 3000 };
+                _updateCheckTimer.Tick += (s, e) =>
+                {
+                    _updateCheckTimer.Stop();
+                    _updateCheckTimer.Dispose();
+                    _updateCheckTimer = null;
+                    RunUpdateCheck(silent: true);
+                };
+                _updateCheckTimer.Start();
+            }
 
             _healthCheckTimer = new Timer { Interval = 5 * 60 * 1000 };
             _healthCheckTimer.Tick += HealthCheckTimer_Tick;
@@ -590,69 +645,13 @@ namespace LumiShift
 
         internal bool TryApplyPreset(string name)
         {
-            var builtIn = PresetDefinitions.GetByName(name);
-            if (builtIn != null)
-            {
-                Settings.GammaEnabled = builtIn.Enabled;
-                Settings.GammaRScale = builtIn.RScale;
-                Settings.GammaGScale = builtIn.GScale;
-                Settings.GammaBScale = builtIn.BScale;
-                Settings.GammaValue = builtIn.GammaValue;
-                Settings.MasterBrightness = builtIn.MasterBrightness;
-                return true;
-            }
-
-            var custom = Settings.CustomGammaPresets.FirstOrDefault(cp => cp.Name == name);
-            if (custom != null)
-            {
-                Settings.GammaEnabled = custom.Enabled;
-                Settings.GammaRScale = custom.RScale;
-                Settings.GammaGScale = custom.GScale;
-                Settings.GammaBScale = custom.BScale;
-                Settings.GammaValue = custom.GammaValue;
-                Settings.MasterBrightness = custom.MasterBrightness;
-
-                if (custom.PerDisplaySnapshot != null && custom.PerDisplaySnapshot.Count > 0)
-                {
-                    Settings.GammaPerDisplay.Clear();
-                    foreach (var kvp in custom.PerDisplaySnapshot)
-                    {
-                        Settings.GammaPerDisplay[kvp.Key] = new PerDisplayGamma
-                        {
-                            RScale = kvp.Value.RScale,
-                            GScale = kvp.Value.GScale,
-                            BScale = kvp.Value.BScale,
-                            GammaValue = kvp.Value.GammaValue,
-                            MasterBrightness = kvp.Value.MasterBrightness,
-                            Enabled = kvp.Value.Enabled,
-                            Source = "manual"
-                        };
-                    }
-                }
-
-                return true;
-            }
-            return false;
+            return _displayGammaState.SetGlobalPreset(name, GammaSource.Manual);
         }
 
         internal void ApplyPresetToMonitor(string presetName, string deviceId)
         {
-            double r, g, b, gv;
-            int mb;
-            bool en;
-
-            if (!PresetDefinitions.TryResolveParams(presetName, Settings.CustomGammaPresets,
-                out r, out g, out b, out gv, out mb, out en))
+            if (!_displayGammaState.SetDisplayPreset(deviceId, presetName, GammaSource.Manual))
                 return;
-
-            if (!Settings.GammaPerDisplay.TryGetValue(deviceId, out var pdg))
-            {
-                pdg = new PerDisplayGamma();
-                Settings.GammaPerDisplay[deviceId] = pdg;
-            }
-            pdg.RScale = r; pdg.GScale = g; pdg.BScale = b;
-            pdg.GammaValue = gv; pdg.MasterBrightness = mb; pdg.Enabled = en;
-            pdg.Source = "manual";
 
             if (Settings.ScheduleEnabled)
                 _scheduleManualOverride = true;
@@ -660,7 +659,53 @@ namespace LumiShift
             ApplyGammaToSystem();
             UpdateTrayMenu();
             SettingsStore.SaveSettings(Settings);
+            NotifyStatusSwitch("LumiShift 状态切换", $"{presetName} 已应用到当前显示器");
             ScheduleStateChanged?.Invoke();
+        }
+
+        internal void SetGlobalGammaParameters(GammaConfig parameters, bool clearDisplayOverrides)
+        {
+            _displayGammaState.SetGlobalParameters(parameters, clearDisplayOverrides);
+        }
+
+        internal void SetDisplayGammaParameters(string deviceId, GammaConfig parameters)
+        {
+            _displayGammaState.SetDisplayParameters(deviceId, parameters, GammaSource.Manual);
+        }
+
+        internal bool ClearDisplayGammaOverride(string deviceId)
+        {
+            return _displayGammaState.ClearDisplayOverride(deviceId);
+        }
+
+        internal GammaConfig GetEffectiveGammaParameters(string deviceId)
+        {
+            return _displayGammaState.GetEffectiveParameters(deviceId);
+        }
+
+        internal bool HasDisplayGammaOverride(string deviceId)
+        {
+            return _displayGammaState.HasDisplayOverride(deviceId);
+        }
+
+        internal string GetDisplayGammaSource(string deviceId)
+        {
+            return _displayGammaState.GetDisplaySource(deviceId);
+        }
+
+        internal bool HasAnyDisplayGammaOverride()
+        {
+            return _displayGammaState.OverrideCount > 0;
+        }
+
+        internal bool HasManualDisplayGammaOverride()
+        {
+            return _displayGammaState.HasManualOverrides();
+        }
+
+        internal bool HasScheduleDisplayGammaOverride()
+        {
+            return _displayGammaState.HasScheduleOverrides();
         }
 
         internal void QuickPreset(string presetName)
@@ -671,6 +716,7 @@ namespace LumiShift
             ApplyGammaToSystem();
             UpdateTrayMenu();
             SettingsStore.SaveSettings(Settings);
+            NotifyStatusSwitch("LumiShift 状态切换", $"已切换到 {presetName}");
             ScheduleStateChanged?.Invoke();
         }
 
@@ -682,6 +728,7 @@ namespace LumiShift
             ApplyGammaToSystem();
             UpdateTrayMenu();
             SettingsStore.SaveSettings(Settings);
+            NotifyStatusSwitch("LumiShift 状态切换", Settings.GammaEnabled ? "显示调节已启用" : "显示调节已关闭");
             ScheduleStateChanged?.Invoke();
         }
 
@@ -698,7 +745,7 @@ namespace LumiShift
             {
                 if (Settings.GammaEnabled)
                 {
-                    var parameters = new GammaParameters(
+                    var parameters = new Infrastructure.GammaParameters(
                         Settings.GammaRScale,
                         Settings.GammaGScale,
                         Settings.GammaBScale,
@@ -713,7 +760,7 @@ namespace LumiShift
                 return;
             }
 
-            var perScreenParams = new Dictionary<string, GammaParameters>();
+            var perScreenParams = new Dictionary<string, Infrastructure.GammaParameters>();
             var coveredDeviceNames = new HashSet<string>();
 
             foreach (var monitor in MonitorManager.Monitors)
@@ -727,7 +774,7 @@ namespace LumiShift
                 {
                     if (overrideGamma.Enabled)
                     {
-                        perScreenParams[screen.DeviceName] = new GammaParameters(
+                        perScreenParams[screen.DeviceName] = new Infrastructure.GammaParameters(
                             overrideGamma.RScale,
                             overrideGamma.GScale,
                             overrideGamma.BScale,
@@ -739,7 +786,7 @@ namespace LumiShift
                 {
                     if (Settings.GammaEnabled)
                     {
-                        perScreenParams[screen.DeviceName] = new GammaParameters(
+                        perScreenParams[screen.DeviceName] = new Infrastructure.GammaParameters(
                             Settings.GammaRScale,
                             Settings.GammaGScale,
                             Settings.GammaBScale,
@@ -754,7 +801,7 @@ namespace LumiShift
                 if (coveredDeviceNames.Contains(screen.DeviceName)) continue;
                 if (Settings.GammaEnabled)
                 {
-                    perScreenParams[screen.DeviceName] = new GammaParameters(
+                    perScreenParams[screen.DeviceName] = new Infrastructure.GammaParameters(
                         Settings.GammaRScale,
                         Settings.GammaGScale,
                         Settings.GammaBScale,
@@ -776,35 +823,13 @@ namespace LumiShift
 
             try
             {
-                var current = DateTime.Now.TimeOfDay;
-
-                string targetMode = null;
-                string targetScheduleKey = null;
-                ScheduleSegment targetSegment = null;
-
                 EnsureParsedSegments();
+                var target = _scheduleEvaluator?.FindCurrent(DateTime.Now.TimeOfDay);
+                if (target == null) return;
 
-                for (int i = 0; i < _parsedSegments.Count; i++)
-                {
-                    var parsed = _parsedSegments[i];
-                    if (parsed.Start == parsed.End) continue;
-
-                    bool inSegment;
-                    if (parsed.Start < parsed.End)
-                        inSegment = current >= parsed.Start && current < parsed.End;
-                    else
-                        inSegment = current >= parsed.Start || current < parsed.End;
-
-                    if (inSegment)
-                    {
-                        targetMode = parsed.PresetName;
-                        targetScheduleKey = $"{i}:{parsed.PresetName}";
-                        targetSegment = parsed.Segment;
-                        break;
-                    }
-                }
-
-                if (targetMode == null) return;
+                string targetMode = target.PresetName;
+                string targetScheduleKey = target.Key;
+                ScheduleSegment targetSegment = target.Segment;
 
                 if (_scheduleManualOverride)
                 {
@@ -871,6 +896,7 @@ namespace LumiShift
 
                 ApplyScheduleMonitorPresets(targetSegment);
 
+                NotifyScheduleSwitch(targetMode, targetSegment);
                 ScheduleStateChanged?.Invoke();
             }
             catch
@@ -884,7 +910,8 @@ namespace LumiShift
 
             if (segment.SyncMode != false)
             {
-                Settings.GammaPerDisplay.Clear();
+                if (!_presetService.IsMultiDisplayPreset(segment.PresetName))
+                    _displayGammaState.ClearAllDisplayOverrides();
                 ApplyGammaToSystem();
                 SettingsStore.SaveSettings(Settings);
                 return;
@@ -902,22 +929,8 @@ namespace LumiShift
                 if (!segment.MonitorPresets.TryGetValue(monitor.DeviceId, out var presetName))
                     continue;
 
-                double r, g, b, gv;
-                int mb;
-                bool en;
-
-                if (!PresetDefinitions.TryResolveParams(presetName, Settings.CustomGammaPresets,
-                    out r, out g, out b, out gv, out mb, out en))
+                if (!_displayGammaState.SetDisplayPreset(monitor.DeviceId, presetName, GammaSource.Schedule))
                     continue;
-
-                if (!Settings.GammaPerDisplay.TryGetValue(monitor.DeviceId, out var pdg))
-                {
-                    pdg = new PerDisplayGamma();
-                    Settings.GammaPerDisplay[monitor.DeviceId] = pdg;
-                }
-                pdg.RScale = r; pdg.GScale = g; pdg.BScale = b;
-                pdg.GammaValue = gv; pdg.MasterBrightness = mb; pdg.Enabled = en;
-                pdg.Source = "schedule";
             }
 
             ApplyGammaToSystem();
@@ -929,86 +942,31 @@ namespace LumiShift
             if (Settings.ScheduleSegments == null || Settings.ScheduleSegments.Count == 0)
                 return "";
 
-            var current = DateTime.Now.TimeOfDay;
             EnsureParsedSegments();
-
-            ScheduleSegment nextSegment = null;
-            TimeSpan minDiff = TimeSpan.MaxValue;
-
-            for (int i = 0; i < _parsedSegments.Count; i++)
-            {
-                var parsed = _parsedSegments[i];
-                var start = parsed.Start;
-
-                TimeSpan diff;
-                if (start > current)
-                    diff = start - current;
-                else
-                    diff = TimeSpan.FromHours(24) - (current - start);
-
-                if (diff < minDiff)
-                {
-                    minDiff = diff;
-                    nextSegment = Settings.ScheduleSegments[i];
-                }
-            }
-
-            if (nextSegment == null) return "";
-
-            if (minDiff.TotalHours < 1)
-                return $"{(int)minDiff.TotalMinutes}分钟后";
-            return $"{(int)minDiff.TotalHours}小时{(int)minDiff.Minutes}分钟后";
+            return _scheduleEvaluator?.GetNextSwitchInfo(DateTime.Now.TimeOfDay) ?? "";
         }
 
         private void EnsureParsedSegments()
         {
             if (Settings.ScheduleSegments == null)
             {
-                _parsedSegments = null;
+                _scheduleEvaluator = null;
                 _parsedSegmentsHash = 0;
                 return;
             }
 
-            int hash = Settings.ScheduleSegments.Count;
-            foreach (var s in Settings.ScheduleSegments)
-            {
-                if (s != null)
-                {
-                    hash ^= (s.StartTime ?? "").GetHashCode();
-                    hash ^= (s.EndTime ?? "").GetHashCode();
-                    hash ^= (s.PresetName ?? "").GetHashCode();
-                }
-            }
+            int hash = ScheduleEvaluator.ComputeHash(Settings.ScheduleSegments);
 
-            if (_parsedSegments != null && _parsedSegmentsHash == hash)
+            if (_scheduleEvaluator != null && _parsedSegmentsHash == hash)
                 return;
 
             _parsedSegmentsHash = hash;
-            _parsedSegments = new List<ParsedSegment>(Settings.ScheduleSegments.Count);
-
-            foreach (var segment in Settings.ScheduleSegments)
-            {
-                if (segment == null) continue;
-                var startParts = segment.StartTime?.Split(':') ?? new[] { "0", "0" };
-                var endParts = segment.EndTime?.Split(':') ?? new[] { "0", "0" };
-                if (startParts.Length < 2 || endParts.Length < 2) continue;
-
-                var start = new TimeSpan(int.Parse(startParts[0]), int.Parse(startParts[1]), 0);
-                var end = new TimeSpan(int.Parse(endParts[0]), int.Parse(endParts[1]), 0);
-
-                _parsedSegments.Add(new ParsedSegment
-                {
-                    Start = start,
-                    End = end,
-                    PresetName = segment.PresetName,
-                    Segment = segment
-                });
-            }
+            _scheduleEvaluator = new ScheduleEvaluator(Settings.ScheduleSegments);
         }
 
         internal void OnScheduleSegmentChanged()
         {
-            _parsedSegments = null;
+            _scheduleEvaluator = null;
             _parsedSegmentsHash = 0;
             if (Settings.ScheduleEnabled)
             {
@@ -1131,7 +1089,8 @@ namespace LumiShift
             }
 
             var removedIds = _monitorManager.RefreshMonitors();
-            CleanupStaleSettings(removedIds);
+            bool cleaned = CleanupStaleSettings(removedIds);
+            NotifyMonitorChange(_monitorManager.Monitors.Count, removedIds == null ? 0 : removedIds.Count);
             if (!Form1IsOpen())
             {
                 ApplyGammaToSystem();
@@ -1146,17 +1105,23 @@ namespace LumiShift
                     ScheduleMicroGc();
                 }
             }
+            else if (cleaned)
+            {
+                SettingsStore.SaveSettings(Settings);
+            }
         }
 
-        private void CleanupStaleSettings(HashSet<string> removedDeviceIds)
+        private bool CleanupStaleSettings(HashSet<string> removedDeviceIds)
         {
             if (removedDeviceIds == null || removedDeviceIds.Count == 0)
-                return;
+                return false;
+
+            bool changed = false;
 
             foreach (var id in removedDeviceIds)
             {
-                Settings.BrightnessPerDisplay.Remove(id);
-                Settings.GammaPerDisplay.Remove(id);
+                changed |= Settings.BrightnessPerDisplay.Remove(id);
+                changed |= Settings.GammaPerDisplay.Remove(id);
             }
 
             if (Settings.ScheduleSegments != null)
@@ -1167,10 +1132,13 @@ namespace LumiShift
                     {
                         foreach (var id in removedDeviceIds)
                         {
-                            segment.MonitorPresets.Remove(id);
+                            changed |= segment.MonitorPresets.Remove(id);
                         }
                         if (segment.MonitorPresets.Count == 0)
+                        {
                             segment.MonitorPresets = null;
+                            changed = true;
+                        }
                     }
                 }
             }
@@ -1183,15 +1151,20 @@ namespace LumiShift
                     {
                         foreach (var id in removedDeviceIds)
                         {
-                            preset.PerDisplaySnapshot.Remove(id);
+                            changed |= preset.PerDisplaySnapshot.Remove(id);
                         }
                         if (preset.PerDisplaySnapshot.Count == 0)
+                        {
                             preset.PerDisplaySnapshot = null;
+                            changed = true;
+                        }
                     }
                 }
             }
 
-            SettingsStore.SaveSettings(Settings);
+            if (changed)
+                SettingsStore.SaveSettings(Settings);
+            return changed;
         }
 
         #endregion
@@ -1233,9 +1206,16 @@ namespace LumiShift
                 if (_monitorManager != null)
                 {
                     if (displayChanged)
-                        _monitorManager.RefreshMonitors();
+                    {
+                        var removedIds = _monitorManager.RefreshMonitors();
+                        CleanupStaleSettings(removedIds);
+                        ApplyGammaToSystem();
+                        _trayMenuNeedsRebuild = true;
+                    }
                     else
+                    {
                         _monitorManager.ExitLightweightMode();
+                    }
                 }
                 if (_scheduleTimer != null)
                     _scheduleTimer.Interval = ScheduleTimerIntervalNormal;
@@ -1270,7 +1250,7 @@ namespace LumiShift
             Form1.CleanupStaticFields();
             Controls.GdiCache.Clear();
             GammaController.TrimCache();
-            _parsedSegments = null;
+            _scheduleEvaluator = null;
             _parsedSegmentsHash = 0;
             _messageWindow?.Dispose();
             _messageWindow = null;
@@ -1542,7 +1522,7 @@ namespace LumiShift
 
             try { _menuCleanupTimer?.Stop(); _menuCleanupTimer?.Dispose(); _menuCleanupTimer = null; } catch { }
 
-            _parsedSegments = null;
+            _scheduleEvaluator = null;
             _parsedSegmentsHash = 0;
             MonitorsChanged = null;
             ScheduleStateChanged = null;
@@ -1617,7 +1597,7 @@ namespace LumiShift
             try { _microGcTimer?.Stop(); _microGcTimer?.Dispose(); } catch { }
             try { _menuCleanupTimer?.Stop(); _menuCleanupTimer?.Dispose(); } catch { }
 
-            _parsedSegments = null;
+            _scheduleEvaluator = null;
             _parsedSegmentsHash = 0;
             MonitorsChanged = null;
             ScheduleStateChanged = null;

@@ -172,11 +172,11 @@ namespace LumiShift
 
             _tabControl.TabPages.AddRange(new[] { _gammaTab, _brightnessTab, _settingsTab, _eyeProtectionTab });
 
-            ClientSize = new Size(400, 500);
+            ClientSize = new Size(430, 540);
             Controls.Add(_tabControl);
             Text = "LumiShift";
-            MinimumSize = new Size(400, 500);
-            MaximumSize = new Size(400, 500);
+            MinimumSize = new Size(430, 540);
+            MaximumSize = new Size(430, 540);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
@@ -225,35 +225,81 @@ namespace LumiShift
                 lbl.ForeColor = Colors.TextPrimary;
         }
 
+        private Label CreateTitleLabel(string text, int y)
+        {
+            var lbl = new Label
+            {
+                Text = text,
+                Location = new Point(Spacing.LG, y),
+                AutoSize = true,
+                Font = Typography.H1
+            };
+            SetLabelTheme(lbl, 'p');
+            return lbl;
+        }
+
+        private Label CreateHintLabel(string text, int y, int width = 380)
+        {
+            var lbl = new Label
+            {
+                Text = text,
+                Location = new Point(Spacing.LG, y),
+                Width = width,
+                Height = 18,
+                Font = Typography.Caption
+            };
+            SetLabelTheme(lbl, 's');
+            return lbl;
+        }
+
+        private Label CreateSeparator(int y, int width = 382)
+        {
+            var lbl = new Label
+            {
+                Location = new Point(Spacing.LG, y),
+                Width = width,
+                Height = 1,
+                Font = Typography.Caption
+            };
+            SetLabelTheme(lbl, 'b');
+            return lbl;
+        }
+
         // ======================================================================
         //  Gamma Tab
         // ======================================================================
         private void BuildGammaTab()
         {
-            _gammaTab = new TabPage("Gamma")
+            _gammaTab = new TabPage("调光")
             {
                 BackColor = Colors.Background
             };
 
-            int gy = 6;
+            int gy = 14;
+
+            var titleLabel = CreateTitleLabel("屏幕显示调节", gy);
+            gy += 24;
+
+            var titleHint = CreateHintLabel("先选择全部显示器或单台显示器，调好后可保存为显示方案。", gy);
+            gy += 30;
 
             _gammaCheckBox = new ToggleSwitch { Location = new Point(Spacing.LG, gy), Checked = false };
             _gammaCheckBox.CheckedChanged += GammaCheckBox_CheckedChanged;
 
             var gammaLabel = new Label
             {
-                Text = "Gamma 校正",
+                Text = "启用显示调节",
                 Location = new Point(Spacing.LG + 48, gy + 1),
                 AutoSize = true,
-                Font = Typography.Body
+                Font = Typography.BodyBold
             };
-            SetLabelTheme(gammaLabel, 's');
+            SetLabelTheme(gammaLabel, 'p');
 
-            gy += 30;
+            gy += 32;
 
             var monitorLabel = new Label
             {
-                Text = "显示器",
+                Text = "范围",
                 Location = new Point(Spacing.LG, gy + 2),
                 AutoSize = true,
                 Font = Typography.Body
@@ -262,8 +308,8 @@ namespace LumiShift
 
             _monitorSelectorComboBox = new ComboBox
             {
-                Location = new Point(62, gy),
-                Width = 160,
+                Location = new Point(72, gy),
+                Width = 182,
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,
@@ -274,16 +320,17 @@ namespace LumiShift
 
             _resetDisplayGammaButton = new Button
             {
-                Text = "重置",
-                Location = new Point(228, gy),
-                Width = 50,
-                Height = 24,
+                Text = "跟随全部",
+                Location = new Point(262, gy),
+                Width = 86,
+                Height = 26,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,
                 ForeColor = Colors.Red,
                 Font = Typography.Caption,
                 FlatAppearance = { BorderSize = 0 },
                 TextAlign = ContentAlignment.MiddleCenter,
+                Cursor = Cursors.Hand,
                 Enabled = false,
                 Tag = "resetDisplayGamma"
             };
@@ -295,9 +342,10 @@ namespace LumiShift
 
             var monitorHint = new Label
             {
-                Text = "选择具体显示器可独立调整，[手动]/[定时] 表示配置来源",
+                Text = "全部显示器适合统一调节；选择单台可做独立调整。",
                 Location = new Point(Spacing.LG, gy),
-                AutoSize = true,
+                Width = 360,
+                Height = 18,
                 Font = Typography.Caption,
                 ForeColor = Colors.TextSecondary,
                 BackColor = Color.Transparent
@@ -307,7 +355,7 @@ namespace LumiShift
 
             var presetLabel = new Label
             {
-                Text = "预设",
+                Text = "显示方案",
                 Location = new Point(Spacing.LG, gy + 2),
                 AutoSize = true,
                 Font = Typography.Body
@@ -316,8 +364,8 @@ namespace LumiShift
 
             _gammaModeComboBox = new ComboBox
             {
-                Location = new Point(54, gy),
-                Width = 150,
+                Location = new Point(92, gy),
+                Width = 152,
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,
@@ -328,10 +376,10 @@ namespace LumiShift
 
             _gammaSaveCustomButton = new Button
             {
-                Text = "保存",
-                Location = new Point(210, gy),
-                Width = 50,
-                Height = 24,
+                Text = "保存方案",
+                Location = new Point(252, gy),
+                Width = 74,
+                Height = 26,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Brand,
                 ForeColor = Color.White,
@@ -346,9 +394,9 @@ namespace LumiShift
             _gammaDeleteCustomButton = new Button
             {
                 Text = "删除",
-                Location = new Point(264, gy),
-                Width = 50,
-                Height = 24,
+                Location = new Point(332, gy),
+                Width = 54,
+                Height = 26,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,
                 ForeColor = Colors.Red,
@@ -364,22 +412,22 @@ namespace LumiShift
 
             var scheduleQuickLabel = new Label
             {
-                Text = "定时",
+                Text = "定时切换",
                 Location = new Point(Spacing.LG, gy + 2),
                 AutoSize = true,
                 Font = Typography.Body
             };
             SetLabelTheme(scheduleQuickLabel, 's');
 
-            _gammaScheduleToggle = new ToggleSwitch { Location = new Point(54, gy), Checked = false };
+            _gammaScheduleToggle = new ToggleSwitch { Location = new Point(92, gy), Checked = false };
             _gammaScheduleToggle.CheckedChanged += GammaScheduleToggle_CheckedChanged;
 
             _gammaScheduleConfigButton = new Button
             {
                 Text = "配置...",
-                Location = new Point(108, gy),
-                Width = 60,
-                Height = 24,
+                Location = new Point(146, gy),
+                Width = 70,
+                Height = 26,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,
                 ForeColor = Colors.TextPrimary,
@@ -394,7 +442,7 @@ namespace LumiShift
 
             _gammaSimplifiedCheckBox = new CheckBox
             {
-                Text = "只调节色温",
+                Text = "简洁模式：只调节冷暖和亮度",
                 Location = new Point(Spacing.LG, gy + 1),
                 AutoSize = true,
                 Font = Typography.Body,
@@ -406,8 +454,8 @@ namespace LumiShift
 
             _gammaColorTempSlider = new ModernSlider
             {
-                Location = new Point(100, gy),
-                Width = 170,
+                Location = new Point(164, gy),
+                Width = 150,
                 Minimum = 0,
                 Maximum = 100,
                 Value = 50
@@ -417,7 +465,7 @@ namespace LumiShift
             _gammaColorTempLabel = new Label
             {
                 Text = "适中",
-                Location = new Point(278, gy + 2),
+                Location = new Point(322, gy + 2),
                 AutoSize = true,
                 Font = Typography.Caption
             };
@@ -427,41 +475,41 @@ namespace LumiShift
 
             var rLbl = new Label { Text = "R", Location = new Point(Spacing.LG, gy + 2), AutoSize = true, Font = Typography.Body };
             SetLabelTheme(rLbl, 's');
-            _gammaRSlider = new ModernSlider { Location = new Point(54, gy), Width = 210, Minimum = 50, Maximum = 150, Value = 100 };
+            _gammaRSlider = new ModernSlider { Location = new Point(72, gy), Width = 240, Minimum = 50, Maximum = 150, Value = 100 };
             _gammaRSlider.ValueChanged += GammaSlider_ValueChanged;
-            _gammaRLabel = new Label { Text = "1.00", Location = new Point(272, gy + 2), AutoSize = true, Font = Typography.Mono };
+            _gammaRLabel = new Label { Text = "1.00", Location = new Point(322, gy + 2), AutoSize = true, Font = Typography.Mono };
             SetLabelTheme(_gammaRLabel, 'g');
             gy += 28;
 
             var gLbl = new Label { Text = "G", Location = new Point(Spacing.LG, gy + 2), AutoSize = true, Font = Typography.Body };
             SetLabelTheme(gLbl, 's');
-            _gammaGSlider = new ModernSlider { Location = new Point(54, gy), Width = 210, Minimum = 50, Maximum = 150, Value = 100 };
+            _gammaGSlider = new ModernSlider { Location = new Point(72, gy), Width = 240, Minimum = 50, Maximum = 150, Value = 100 };
             _gammaGSlider.ValueChanged += GammaSlider_ValueChanged;
-            _gammaGLabel = new Label { Text = "1.00", Location = new Point(272, gy + 2), AutoSize = true, Font = Typography.Mono };
+            _gammaGLabel = new Label { Text = "1.00", Location = new Point(322, gy + 2), AutoSize = true, Font = Typography.Mono };
             SetLabelTheme(_gammaGLabel, 'g');
             gy += 28;
 
             var bLbl = new Label { Text = "B", Location = new Point(Spacing.LG, gy + 2), AutoSize = true, Font = Typography.Body };
             SetLabelTheme(bLbl, 's');
-            _gammaBSlider = new ModernSlider { Location = new Point(54, gy), Width = 210, Minimum = 10, Maximum = 150, Value = 100 };
+            _gammaBSlider = new ModernSlider { Location = new Point(72, gy), Width = 240, Minimum = 10, Maximum = 150, Value = 100 };
             _gammaBSlider.ValueChanged += GammaSlider_ValueChanged;
-            _gammaBLabel = new Label { Text = "1.00", Location = new Point(272, gy + 2), AutoSize = true, Font = Typography.Mono };
+            _gammaBLabel = new Label { Text = "1.00", Location = new Point(322, gy + 2), AutoSize = true, Font = Typography.Mono };
             SetLabelTheme(_gammaBLabel, 'g');
             gy += 28;
 
             var gvLbl = new Label { Text = "γ", Location = new Point(Spacing.LG, gy + 2), AutoSize = true, Font = Typography.Body };
             SetLabelTheme(gvLbl, 's');
-            _gammaValueSlider = new ModernSlider { Location = new Point(54, gy), Width = 210, Minimum = 50, Maximum = 200, Value = 100 };
+            _gammaValueSlider = new ModernSlider { Location = new Point(72, gy), Width = 240, Minimum = 50, Maximum = 200, Value = 100 };
             _gammaValueSlider.ValueChanged += GammaSlider_ValueChanged;
-            _gammaValueLabel = new Label { Text = "1.00", Location = new Point(272, gy + 2), AutoSize = true, Font = Typography.Mono };
+            _gammaValueLabel = new Label { Text = "1.00", Location = new Point(322, gy + 2), AutoSize = true, Font = Typography.Mono };
             SetLabelTheme(_gammaValueLabel, 'g');
             gy += 28;
 
             var brightLbl = new Label { Text = "亮度", Location = new Point(Spacing.LG, gy + 2), AutoSize = true, Font = Typography.Body };
             SetLabelTheme(brightLbl, 's');
-            _gammaBrightSlider = new ModernSlider { Location = new Point(54, gy), Width = 210, Minimum = 0, Maximum = 100, Value = 100 };
+            _gammaBrightSlider = new ModernSlider { Location = new Point(72, gy), Width = 240, Minimum = 0, Maximum = 100, Value = 100 };
             _gammaBrightSlider.ValueChanged += GammaSlider_ValueChanged;
-            _gammaBrightLabel = new Label { Text = "100%", Location = new Point(272, gy + 2), AutoSize = true, Font = Typography.Mono };
+            _gammaBrightLabel = new Label { Text = "100%", Location = new Point(322, gy + 2), AutoSize = true, Font = Typography.Mono };
             SetLabelTheme(_gammaBrightLabel, 'p');
             gy += 30;
 
@@ -469,13 +517,14 @@ namespace LumiShift
             {
                 Text = "",
                 Location = new Point(Spacing.LG, gy),
-                Width = 340,
+                Width = 380,
                 Height = 18,
                 Font = Typography.Caption
             };
             SetLabelTheme(_gammaStatusLabel, 's');
 
             _gammaTab.Controls.AddRange(new Control[] {
+                titleLabel, titleHint,
                 _gammaCheckBox, gammaLabel,
                 monitorLabel, _monitorSelectorComboBox, _resetDisplayGammaButton, monitorHint,
                 presetLabel, _gammaModeComboBox, _gammaSaveCustomButton, _gammaDeleteCustomButton,
@@ -502,15 +551,20 @@ namespace LumiShift
 
             _brightnessPanel = new FlowLayoutPanel
             {
-                Location = new Point(0, 0),
-                Width = 400,
-                Height = 410,
-                AutoScroll = false,
+                Location = new Point(Spacing.LG, 72),
+                Width = 382,
+                Height = 416,
+                AutoScroll = true,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 BackColor = Color.Transparent
             };
 
+            var titleLabel = CreateTitleLabel("硬件亮度", 14);
+            var titleHint = CreateHintLabel("调节显示器硬件亮度；不支持的设备会自动隐藏。", 38);
+            var separator = CreateSeparator(62);
+
+            _brightnessTab.Controls.AddRange(new Control[] { titleLabel, titleHint, separator });
             _brightnessTab.Controls.Add(_brightnessPanel);
         }
 
@@ -525,26 +579,33 @@ namespace LumiShift
                 AutoScroll = true
             };
 
-            int sy = 6;
+            const int settingsContentWidth = 360;
+            int sy = 14;
+
+            var titleLabel = CreateTitleLabel("偏好设置", sy);
+            sy += 24;
+
+            var titleHint = CreateHintLabel("管理定时、通知、启动和界面选项，默认保持轻量运行。", sy, settingsContentWidth);
+            sy += 34;
 
             _scheduleEnabledCheckBox = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = false };
             _scheduleEnabledCheckBox.CheckedChanged += ScheduleEnabledCheckBox_CheckedChanged;
 
             var scheduleLabel2 = new Label
             {
-                Text = "定时切换",
+                Text = "自动定时切换",
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
-                Font = Typography.Body
+                Font = Typography.BodyBold
             };
             SetLabelTheme(scheduleLabel2, 'p');
 
             _scheduleConfigButton = new Button
             {
                 Text = "配置定时...",
-                Location = new Point(240, sy),
-                Width = 100,
-                Height = 24,
+                Location = new Point(278, sy),
+                Width = 104,
+                Height = 26,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,
                 ForeColor = Colors.TextPrimary,
@@ -555,11 +616,11 @@ namespace LumiShift
             };
             _scheduleConfigButton.Click += ScheduleConfigButton_Click;
 
-            sy += 28;
+            sy += 30;
 
             var scheduleHint = new Label
             {
-                Text = "可为每个时段指定不同显示器的预设方案",
+                Text = "到指定时间自动切换显示方案，适合白天、夜间和办公场景。",
                 Location = new Point(Spacing.LG, sy),
                 AutoSize = true,
                 Font = Typography.Caption,
@@ -569,14 +630,7 @@ namespace LumiShift
 
             sy += 20;
 
-            var sepLine1 = new Label
-            {
-                Location = new Point(Spacing.LG, sy),
-                Width = 340,
-                Height = 1,
-                Font = Typography.Caption
-            };
-            SetLabelTheme(sepLine1, 'b');
+            var sepLine1 = CreateSeparator(sy, settingsContentWidth);
             sy += 10;
 
             _bgImageToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = false };
@@ -584,21 +638,21 @@ namespace LumiShift
 
             var bgImageLabel = new Label
             {
-                Text = "自定义背景",
+                Text = "轻量背景图",
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
-                Font = Typography.Body
+                Font = Typography.BodyBold
             };
             SetLabelTheme(bgImageLabel, 'p');
 
-            sy += 28;
+            sy += 30;
 
             _bgImageSelectButton = new Button
             {
                 Text = "选择图片",
                 Location = new Point(Spacing.LG, sy),
-                Width = 90,
-                Height = 24,
+                Width = 92,
+                Height = 26,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,
                 ForeColor = Colors.TextPrimary,
@@ -612,8 +666,8 @@ namespace LumiShift
             {
                 Text = "清除",
                 Location = new Point(Spacing.LG + 96, sy),
-                Width = 60,
-                Height = 24,
+                Width = 62,
+                Height = 26,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,
                 ForeColor = Colors.Red,
@@ -623,13 +677,13 @@ namespace LumiShift
             };
             _bgImageClearButton.Click += BgImageClearButton_Click;
 
-            var opacityLbl = new Label { Text = "透明度", Location = new Point(Spacing.LG + 164, sy + 2), AutoSize = true, Font = Typography.Body };
+            var opacityLbl = new Label { Text = "透明度", Location = new Point(Spacing.LG + 170, sy + 2), AutoSize = true, Font = Typography.Body };
             SetLabelTheme(opacityLbl, 's');
 
             _bgImageOpacitySlider = new ModernSlider
             {
-                Location = new Point(Spacing.LG + 210, sy),
-                Width = 90,
+                Location = new Point(Spacing.LG + 218, sy),
+                Width = 104,
                 Minimum = 5,
                 Maximum = 80,
                 Value = 30
@@ -639,7 +693,7 @@ namespace LumiShift
             _bgImageOpacityLabel = new Label
             {
                 Text = "30%",
-                Location = new Point(Spacing.LG + 306, sy + 2),
+                Location = new Point(Spacing.LG + 328, sy + 2),
                 AutoSize = true,
                 Font = Typography.Caption
             };
@@ -651,7 +705,7 @@ namespace LumiShift
             {
                 Text = "",
                 Location = new Point(Spacing.LG, sy),
-                Width = 340,
+                Width = settingsContentWidth,
                 Height = 16,
                 Font = Typography.Caption
             };
@@ -659,14 +713,7 @@ namespace LumiShift
 
             sy += 20;
 
-            var sepLine3 = new Label
-            {
-                Location = new Point(Spacing.LG, sy),
-                Width = 340,
-                Height = 1,
-                Font = Typography.Caption
-            };
-            SetLabelTheme(sepLine3, 'b');
+            var sepLine3 = CreateSeparator(sy, settingsContentWidth);
             sy += 10;
 
             _startWithWindowsCheckBox = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = false };
@@ -677,7 +724,7 @@ namespace LumiShift
                 Text = "开机自启动",
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
-                Font = Typography.Body
+                Font = Typography.BodyBold
             };
             SetLabelTheme(startupLbl, 'p');
 
@@ -691,20 +738,27 @@ namespace LumiShift
                 Text = "启动时最小化到托盘",
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
-                Font = Typography.Body
+                Font = Typography.BodyBold
             };
             SetLabelTheme(minimizedLbl, 'p');
 
+            sy += 30;
+
+            _autoCheckUpdatesToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = true };
+            _autoCheckUpdatesToggle.CheckedChanged += AutoCheckUpdatesToggle_CheckedChanged;
+
+            var autoCheckUpdatesLbl = new Label
+            {
+                Text = "启动时自动检查更新",
+                Location = new Point(Spacing.LG + 48, sy + 1),
+                AutoSize = true,
+                Font = Typography.BodyBold
+            };
+            SetLabelTheme(autoCheckUpdatesLbl, 'p');
+
             sy += 34;
 
-            var restoreGammaSep = new Label
-            {
-                Location = new Point(Spacing.LG, sy),
-                Width = 340,
-                Height = 1,
-                Font = Typography.Caption
-            };
-            SetLabelTheme(restoreGammaSep, 'b');
+            var restoreGammaSep = CreateSeparator(sy, settingsContentWidth);
             sy += 10;
 
             _restoreGammaToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = true };
@@ -712,38 +766,95 @@ namespace LumiShift
 
             var restoreGammaLbl = new Label
             {
-                Text = "退出时还原系统Gamma",
+                Text = "退出时还原系统显示效果",
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
-                Font = Typography.Body
+                Font = Typography.BodyBold
             };
             SetLabelTheme(restoreGammaLbl, 'p');
 
             sy += 34;
 
-            var sepLine4 = new Label
+            var notificationSep = CreateSeparator(sy, settingsContentWidth);
+            sy += 10;
+
+            _notificationsEnabledToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = true };
+            _notificationsEnabledToggle.CheckedChanged += NotificationsEnabledToggle_CheckedChanged;
+
+            var notificationLbl = new Label
+            {
+                Text = "Windows 通知提醒",
+                Location = new Point(Spacing.LG + 48, sy + 1),
+                AutoSize = true,
+                Font = Typography.BodyBold
+            };
+            SetLabelTheme(notificationLbl, 'p');
+
+            sy += 30;
+
+            _notifyStartupToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = true };
+            _notifyStartupToggle.CheckedChanged += NotifyStartupToggle_CheckedChanged;
+            var notifyStartupLbl = new Label { Text = "软件启动时通知", Location = new Point(Spacing.LG + 48, sy + 1), AutoSize = true, Font = Typography.Body };
+            SetLabelTheme(notifyStartupLbl, 's');
+
+            sy += 28;
+
+            _notifyScheduleToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = true };
+            _notifyScheduleToggle.CheckedChanged += NotifyScheduleToggle_CheckedChanged;
+            var notifyScheduleLbl = new Label { Text = "定时切换方案时通知", Location = new Point(Spacing.LG + 48, sy + 1), AutoSize = true, Font = Typography.Body };
+            SetLabelTheme(notifyScheduleLbl, 's');
+
+            sy += 28;
+
+            _notifyStatusToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = true };
+            _notifyStatusToggle.CheckedChanged += NotifyStatusToggle_CheckedChanged;
+            var notifyStatusLbl = new Label { Text = "显示调节开关变化时通知", Location = new Point(Spacing.LG + 48, sy + 1), AutoSize = true, Font = Typography.Body };
+            SetLabelTheme(notifyStatusLbl, 's');
+
+            sy += 28;
+
+            _notifyMonitorToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = true };
+            _notifyMonitorToggle.CheckedChanged += NotifyMonitorToggle_CheckedChanged;
+            var notifyMonitorLbl = new Label { Text = "显示器变更时通知", Location = new Point(Spacing.LG + 48, sy + 1), AutoSize = true, Font = Typography.Body };
+            SetLabelTheme(notifyMonitorLbl, 's');
+
+            sy += 34;
+
+            var sepLine4 = CreateSeparator(sy, settingsContentWidth);
+            sy += 16;
+
+            var versionPanel = new Panel
             {
                 Location = new Point(Spacing.LG, sy),
-                Width = 340,
-                Height = 1,
-                Font = Typography.Caption
+                Width = settingsContentWidth,
+                Height = 54,
+                BackColor = Colors.Surface
             };
-            SetLabelTheme(sepLine4, 'b');
-            sy += 12;
 
             var versionLabel = new Label
             {
                 Text = $"v{Assembly.GetExecutingAssembly().GetName().Version.ToString(3)}  ·  SummerRay160",
-                Location = new Point(Spacing.LG, sy),
+                Location = new Point(12, 10),
                 AutoSize = true,
-                Font = Typography.Caption
+                Font = Typography.BodyBold,
+                BackColor = Color.Transparent
             };
             SetLabelTheme(versionLabel, 's');
+
+            var versionHintLabel = new Label
+            {
+                Text = "轻量显示调节工具",
+                Location = new Point(12, 30),
+                AutoSize = true,
+                Font = Typography.Caption,
+                BackColor = Color.Transparent
+            };
+            SetLabelTheme(versionHintLabel, 's');
 
             var githubLink = new LinkLabel
             {
                 Text = "GitHub",
-                Location = new Point(Spacing.LG + versionLabel.PreferredWidth + 8, sy),
+                Location = new Point(settingsContentWidth - 58, 18),
                 AutoSize = true,
                 Font = Typography.Caption,
                 BackColor = Color.Transparent,
@@ -752,8 +863,11 @@ namespace LumiShift
                 VisitedLinkColor = Colors.TextSecondary
             };
             githubLink.LinkClicked += (s, e) => System.Diagnostics.Process.Start("https://github.com/SummerRay160/LumiShift");
+            versionPanel.Controls.AddRange(new Control[] { versionLabel, versionHintLabel, githubLink });
+            sy += 70;
             
             _settingsTab.Controls.AddRange(new Control[] {
+                titleLabel, titleHint,
                 _scheduleEnabledCheckBox, scheduleLabel2,
                 _scheduleConfigButton, scheduleHint,
                 sepLine1,
@@ -763,10 +877,15 @@ namespace LumiShift
                 sepLine3,
                 _startWithWindowsCheckBox, startupLbl,
                 _startMinimizedCheckBox, minimizedLbl,
+                _autoCheckUpdatesToggle, autoCheckUpdatesLbl,
                 restoreGammaSep, _restoreGammaToggle, restoreGammaLbl,
+                notificationSep, _notificationsEnabledToggle, notificationLbl,
+                _notifyStartupToggle, notifyStartupLbl,
+                _notifyScheduleToggle, notifyScheduleLbl,
+                _notifyStatusToggle, notifyStatusLbl,
+                _notifyMonitorToggle, notifyMonitorLbl,
                 sepLine4,
-                versionLabel,
-                githubLink
+                versionPanel
             });
         }
 
@@ -780,39 +899,38 @@ namespace LumiShift
                 BackColor = Colors.Background
             };
 
-            int ey = 6;
+            int ey = 14;
+
+            var titleLabel = CreateTitleLabel("护眼模式", ey);
+            ey += 24;
+
+            var titleHint = CreateHintLabel("为窗口背景添加柔和色调，减少长时间阅读的刺眼感。", ey);
+            ey += 34;
 
             _eyeProtectionToggle = new ToggleSwitch { Location = new Point(Spacing.LG, ey), Checked = false };
             _eyeProtectionToggle.CheckedChanged += EyeProtectionToggle_CheckedChanged;
 
             var eyeLabel = new Label
             {
-                Text = "系统护眼模式",
+                Text = "启用系统护眼色",
                 Location = new Point(Spacing.LG + 48, ey + 1),
                 AutoSize = true,
-                Font = Typography.Body
+                Font = Typography.BodyBold
             };
-            SetLabelTheme(eyeLabel, 's');
+            SetLabelTheme(eyeLabel, 'p');
 
             ey += 34;
 
-            var sep1 = new Label
-            {
-                Location = new Point(Spacing.LG, ey),
-                Width = 340,
-                Height = 1,
-                Font = Typography.Caption
-            };
-            SetLabelTheme(sep1, 'b');
+            var sep1 = CreateSeparator(ey);
 
             ey += 10;
 
             var presetHint = new Label
             {
-                Text = "预设方案",
+                Text = "护眼颜色",
                 Location = new Point(Spacing.LG, ey + 2),
                 AutoSize = true,
-                Font = Typography.Body
+                Font = Typography.BodyBold
             };
             SetLabelTheme(presetHint, 'p');
 
@@ -825,10 +943,10 @@ namespace LumiShift
                 ("天空蓝", 199, 216, 237)
             };
 
-            int presetButtonWidth = 100;
-            int presetGap = 10;
+            int presetButtonWidth = 116;
+            int presetGap = 8;
             int presetTotalWidth = presetButtonWidth * 3 + presetGap * 2;
-            int presetContainerWidth = 340;
+            int presetContainerWidth = 382;
             int presetStartX = Spacing.LG + (presetContainerWidth - presetTotalWidth) / 2;
 
             _eyeProtectionPreset1Button = CreatePresetButton(presetStartX, ey, presetButtonWidth, presetColors[0]);
@@ -841,8 +959,8 @@ namespace LumiShift
             {
                 Text = "自定义颜色",
                 Location = new Point(Spacing.LG, ey),
-                Width = 340,
-                Height = 28,
+                Width = 382,
+                Height = 30,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,
                 ForeColor = Colors.TextPrimary,
@@ -858,8 +976,8 @@ namespace LumiShift
             {
                 Text = "恢复默认",
                 Location = new Point(Spacing.LG, ey),
-                Width = 340,
-                Height = 28,
+                Width = 382,
+                Height = 30,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,
                 ForeColor = Colors.Red,
@@ -875,13 +993,14 @@ namespace LumiShift
             {
                 Text = "",
                 Location = new Point(Spacing.LG, ey),
-                Width = 340,
+                Width = 382,
                 Height = 18,
                 Font = Typography.Caption
             };
             SetLabelTheme(_eyeProtectionStatusLabel, 's');
 
             _eyeProtectionTab.Controls.AddRange(new Control[] {
+                titleLabel, titleHint,
                 _eyeProtectionToggle, eyeLabel,
                 sep1,
                 presetHint,

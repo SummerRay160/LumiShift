@@ -1,0 +1,6 @@
+# Auto detect text files and normalize to CRLF (Windows)
+* text=auto
+
+# Binary files
+*.png binary
+*.ico binary
