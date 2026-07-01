@@ -10,11 +10,9 @@
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)]()
 [![Release](https://img.shields.io/github/v/release/SummerRay160/LumiShift?style=for-the-badge&label=最新版本)](https://github.com/SummerRay160/LumiShift/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/SummerRay160/LumiShift/total?style=for-the-badge&color=brightgreen)](https://github.com/SummerRay160/LumiShift/releases)
-[![GitHub Issues](https://img.shields.io/github/issues/SummerRay160/LumiShift?style=for-the-badge&logo=github)](https://github.com/SummerRay160/LumiShift/issues)
 [![GitHub Stars](https://img.shields.io/github/stars/SummerRay160/LumiShift?style=for-the-badge&logo=github)](https://github.com/SummerRay160/LumiShift/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/SummerRay160/LumiShift?style=for-the-badge&logo=github)](https://github.com/SummerRay160/LumiShift/network/members)
 
-**[简体中文](README.md) · [English](README.en.md) · [繁體中文](#介紹) · [🐛 問題回報](https://github.com/SummerRay160/LumiShift/issues)**
+**[简体中文](README.md) · [English](README.en.md) · [繁體中文](#介紹) · [問題回報](https://github.com/SummerRay160/LumiShift/issues)**
 
 </div>
 
