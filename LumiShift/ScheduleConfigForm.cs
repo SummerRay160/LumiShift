@@ -117,10 +117,7 @@ namespace LumiShift
             _formBackground?.Dispose();
             _formBackground = null;
 
-            _segments?.Clear();
-            _segments = null;
             _customPresets = null;
-            ResultSegments = null;
         }
 
         protected override void Dispose(bool disposing)
