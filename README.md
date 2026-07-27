@@ -6,11 +6,7 @@
 
 **轻量级屏幕亮度与 Gamma 校正工具 — 让你的屏幕更护眼**
 
-[![License: GPL-2.0](https://img.shields.io/github/license/SummerRay160/LumiShift?style=for-the-badge&logo=gnu)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)]()
-[![Release](https://img.shields.io/github/v/release/SummerRay160/LumiShift?style=for-the-badge&label=最新版本)](https://github.com/SummerRay160/LumiShift/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/SummerRay160/LumiShift/total?style=for-the-badge&color=brightgreen)](https://github.com/SummerRay160/LumiShift/releases)
-[![GitHub Stars](https://img.shields.io/github/stars/SummerRay160/LumiShift?style=for-the-badge&logo=github)](https://github.com/SummerRay160/LumiShift/stargazers)
+[![Platform](https://img.shields.io/badge/platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)]()  [![Release](https://img.shields.io/github/v/release/SummerRay160/LumiShift?style=for-the-badge&label=最新版本)](https://github.com/SummerRay160/LumiShift/releases/latest)  [![Downloads](https://img.shields.io/github/downloads/SummerRay160/LumiShift/total?style=for-the-badge&color=brightgreen)](https://github.com/SummerRay160/LumiShift/releases)  [![GitHub Stars](https://img.shields.io/github/stars/SummerRay160/LumiShift?style=for-the-badge&logo=github)](https://github.com/SummerRay160/LumiShift/stargazers)
 
 **[English](README.en.md) · [简体中文](#介绍) · [繁體中文](README.zh-Hant.md) · [问题反馈](https://github.com/SummerRay160/LumiShift/issues)**
 
@@ -68,6 +64,8 @@ LumiShift 是一款 Windows 平台上的开源屏幕调节工具。一个 exe �
 - 多显示器可以为每个时段指定不同方案，或者直接套用多屏方案
 - 顶部时间轴一眼看到全天安排，时段重叠会自动标红提醒
 - 白天临时手动调一下也没事，下个时段开始时会自动恢复定时
+- 自适应轮询：调度器根据距下次切换的剩余时间自动调整检查频率（切换前 1 分钟内 5 秒一次，空闲时段 5 分钟一次），切换更精准、后台更省电
+- 睡眠/休眠唤醒或系统时间被修改后，会立即重新评估并应用目标方案，不再等下一个轮询周期
 
 ### 👁️ 护眼模式
 
@@ -133,6 +131,8 @@ LumiShift/
 ├── BackgroundService.cs            # 后台服务（托盘/调度/定时器）
 ├── Controls/                       # 自定义控件
 │   ├── FlatTabControl.cs           # 扁平化选项卡
+│   ├── DateTimePickerEx.cs         # DateTimePicker 扩展（Enter 键失焦）
+│   ├── FocusablePanel.cs           # 可获取焦点的 Panel（焦点吸收容器）
 │   ├── GdiCache.cs                 # GDI 对象缓存池
 │   ├── ModernSlider.cs             # 现代风格滑块
 │   └── ToggleSwitch.cs             # 开关切换控件

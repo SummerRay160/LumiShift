@@ -12,7 +12,7 @@
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
-    <Version>1.6.1</Version>
+    <Version>1.6.2</Version>
     <Company>LumiShift</Company>
     <Description>屏幕亮度与Gamma校正工具</Description>
     <Copyright>Copyright © 2026</Copyright>
@@ -68,6 +68,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Controls\FlatTabControl.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Controls\DateTimePickerEx.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Controls\FocusablePanel.cs">
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Controls\GdiCache.cs" />

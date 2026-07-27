@@ -176,6 +176,8 @@ namespace LumiShift
             _displayGammaState = new DisplayGammaStateService(Settings, _presetService);
 
             SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+            SystemEvents.PowerModeChanged += OnPowerModeChanged;
+            SystemEvents.TimeChanged += OnTimeChanged;
 
             _lastScheduleMode = "";
             _scheduleTimer = new Timer { Interval = ScheduleTimerIntervalNormal };
@@ -825,7 +827,12 @@ namespace LumiShift
             {
                 EnsureParsedSegments();
                 var target = _scheduleEvaluator?.FindCurrent(DateTime.Now.TimeOfDay);
-                if (target == null) return;
+                if (target == null)
+                {
+                    // 当前不在任何时段内：仍要更新 lastScheduleMode 以便下次进入时段时正确切换
+                    _lastScheduleMode = "";
+                    return;
+                }
 
                 string targetMode = target.PresetName;
                 string targetScheduleKey = target.Key;
@@ -902,6 +909,92 @@ namespace LumiShift
             catch
             {
             }
+            finally
+            {
+                ScheduleNextWakeUp();
+            }
+        }
+
+        /// <summary>
+        /// 根据距下次切换的时长动态调整 Timer.Interval，平衡精度与功耗。
+        /// 切换点附近高频轮询（5s/15s），平时低频兜底（1min/5min）。
+        /// </summary>
+        private void ScheduleNextWakeUp()
+        {
+            if (_scheduleTimer == null || _disposed) return;
+
+            EnsureParsedSegments();
+            double minutesToNext = _scheduleEvaluator?.MinutesToNextSwitch(DateTime.Now.TimeOfDay)
+                                   ?? double.MaxValue;
+
+            int interval;
+            if (minutesToNext <= 1)
+                interval = 5000;        // 切换前 1 分钟：5s 精度
+            else if (minutesToNext <= 5)
+                interval = 15000;       // 5 分钟内：15s 精度
+            else if (minutesToNext <= 60)
+                interval = 60000;       // 1 小时内：1 分钟精度
+            else
+                interval = 300000;      // 超过 1 小时：5 分钟
+
+            // 轻量模式下
+            if (_lightweightMode && minutesToNext > 5)
+                interval = Math.Max(interval, 120000);
+
+            _scheduleTimer.Interval = interval;
+        }
+
+        private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
+        {
+            if (_exiting || _disposed) return;
+            if (e.Mode != PowerModes.Resume) return;
+            if (!Settings.ScheduleEnabled) return;
+
+            // 从睡眠恢复：立即重新评估，并强制重新应用（避免睡眠期间错过切换）
+            _lastScheduleMode = "";
+            InvokeOnUIThread(() =>
+            {
+                try
+                {
+                    if (_scheduleTimer != null && !_disposed)
+                    {
+                        _scheduleTimer.Stop();
+                        _scheduleTimer.Start();
+                        ScheduleTimer_Tick(null, null);
+                    }
+                }
+                catch { }
+            });
+        }
+
+        private void OnTimeChanged(object sender, EventArgs e)
+        {
+            if (_exiting || _disposed || !Settings.ScheduleEnabled) return;
+
+            // 用户手动改系统时间或 NTP 同步：重新评估
+            _lastScheduleMode = "";
+            InvokeOnUIThread(() =>
+            {
+                try { ScheduleTimer_Tick(null, null); }
+                catch { }
+            });
+        }
+
+        private void InvokeOnUIThread(Action action)
+        {
+            var form = MainForm;
+            if (form != null && !form.IsDisposed)
+            {
+                try
+                {
+                    if (form.InvokeRequired) form.Invoke(action);
+                    else action();
+                    return;
+                }
+                catch { }
+            }
+            // 无主窗体或调用失败：直接执行（事件回调可能在任意线程，但 ScheduleTimer_Tick 内部逻辑线程安全）
+            try { action(); } catch { }
         }
 
         private void ApplyScheduleMonitorPresets(ScheduleSegment segment)
@@ -972,7 +1065,11 @@ namespace LumiShift
             {
                 _lastScheduleMode = "";
                 _scheduleManualOverride = false;
-                ScheduleTimer_Tick(null, null);
+                ScheduleTimer_Tick(null, null);   // 内部 finally 已调用 ScheduleNextWakeUp
+            }
+            else
+            {
+                ScheduleNextWakeUp();   // 即使禁用也要重置间隔（虽然 timer 已停，但保持状态一致）
             }
             SettingsStore.SaveSettings(Settings);
         }
@@ -981,7 +1078,10 @@ namespace LumiShift
         {
             Settings.ScheduleEnabled = enabled;
             if (_scheduleTimer != null)
+            {
                 _scheduleTimer.Enabled = enabled;
+                if (enabled) ScheduleNextWakeUp();   // 启用时立即用自适应间隔
+            }
             if (enabled)
             {
                 _preScheduleGammaEnabled = Settings.GammaEnabled;
@@ -1480,6 +1580,8 @@ namespace LumiShift
             CancelUpdateCheck();
 
             try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
+            try { SystemEvents.PowerModeChanged -= OnPowerModeChanged; } catch { }
+            try { SystemEvents.TimeChanged -= OnTimeChanged; } catch { }
 
             try { _updateCheckTimer?.Stop(); _updateCheckTimer?.Dispose(); _updateCheckTimer = null; } catch { }
 
@@ -1574,6 +1676,8 @@ namespace LumiShift
         private void PerformEmergencyCleanup()
         {
             try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
+            try { SystemEvents.PowerModeChanged -= OnPowerModeChanged; } catch { }
+            try { SystemEvents.TimeChanged -= OnTimeChanged; } catch { }
 
             CancelUpdateCheck();
 

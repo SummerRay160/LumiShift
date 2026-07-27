@@ -68,6 +68,8 @@ Standard mode during the day, eye care mode at night? Let the schedule handle it
 - Multi-monitor setups can use different schemes per slot, or just apply a multi-display scheme directly
 - The timeline at the top shows the whole day at a glance; overlapping slots are flagged in red
 - Need to tweak things manually during the day? No problem — it auto-resumes the schedule at the next slot
+- Adaptive polling: the scheduler automatically adjusts its check frequency based on time to the next switch (every 5s within 1 minute of a switch, every 5 minutes during idle periods) — more accurate transitions, lower idle CPU
+- After wake-from-sleep or a system time change, the schedule is re-evaluated and the target scheme is applied immediately — no waiting for the next polling tick
 
 ### 👁️ Eye Protection Mode
 
@@ -133,6 +135,8 @@ LumiShift/
 ├── BackgroundService.cs            # Background service (tray/schedule/timer)
 ├── Controls/                       # Custom controls
 │   ├── FlatTabControl.cs           # Flat tab control
+│   ├── DateTimePickerEx.cs         # DateTimePicker extension (Enter-key focus release)
+│   ├── FocusablePanel.cs           # Focusable Panel (focus-absorbing container)
 │   ├── GdiCache.cs                 # GDI object cache pool
 │   ├── ModernSlider.cs             # Modern-style slider
 │   └── ToggleSwitch.cs             # Toggle switch control

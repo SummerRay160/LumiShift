@@ -322,28 +322,31 @@ namespace LumiShift
 
         private void OkButton_Click(object sender, EventArgs e)
         {
+            // 1) 严格校验每个时段的格式、起止时间与方案
             for (int i = 0; i < _segments.Count; i++)
             {
                 var seg = _segments[i];
-                var sParts = seg.StartTime.Split(':');
-                var eParts = seg.EndTime.Split(':');
-                if (sParts.Length < 2 || eParts.Length < 2) continue;
-                if (!int.TryParse(sParts[0], out int sh) || !int.TryParse(sParts[1], out int sm)
-                    || !int.TryParse(eParts[0], out int eh) || !int.TryParse(eParts[1], out int em))
-                    continue;
-                if (sh < 0 || sh > 23 || sm < 0 || sm > 59 || eh < 0 || eh > 23 || em < 0 || em > 59)
-                    continue;
-                var start = new TimeSpan(sh, sm, 0);
-                var end = new TimeSpan(eh, em, 0);
-
+                if (!TryParseTime(seg.StartTime, out var start) || !TryParseTime(seg.EndTime, out var end))
+                {
+                    MessageBox.Show($"时段 {i + 1} 的时间格式无效（{seg.StartTime} → {seg.EndTime}），请使用 HH:mm 格式。",
+                        "无效时段", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
                 if (start == end)
                 {
-                    MessageBox.Show($"时段 {i + 1}（{seg.StartTime} → {seg.EndTime}）的起止时间相同，请修正。", "无效时段",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show($"时段 {i + 1}（{seg.StartTime} → {seg.EndTime}）的起止时间相同，请修正。",
+                        "无效时段", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                if (string.IsNullOrWhiteSpace(seg.PresetName))
+                {
+                    MessageBox.Show($"时段 {i + 1} 未选择显示方案，请选择后再保存。",
+                        "无效时段", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
             }
 
+            // 2) 时段重叠检测
             for (int i = 0; i < _segments.Count; i++)
             {
                 for (int j = i + 1; j < _segments.Count; j++)
@@ -360,6 +363,18 @@ namespace LumiShift
             ResultSegments = _segments;
             DialogResult = DialogResult.OK;
             Close();
+        }
+
+        private static bool TryParseTime(string text, out TimeSpan result)
+        {
+            result = default;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            var parts = text.Split(':');
+            if (parts.Length != 2) return false;
+            if (!int.TryParse(parts[0], out int h) || !int.TryParse(parts[1], out int m)) return false;
+            if (h < 0 || h > 23 || m < 0 || m > 59) return false;
+            result = new TimeSpan(h, m, 0);
+            return true;
         }
 
         private static bool SegmentsOverlap(ScheduleSegment a, ScheduleSegment b)
@@ -429,7 +444,7 @@ namespace LumiShift
                 string multiText = _hasMultipleMonitors
                     ? $"独立多屏 {independentCount} 个"
                     : "单显示器模式";
-                _summaryLabel.Text = $"已配置 {_segments.Count}/{MaxSegments} 个时段  ·  {multiText}  ·  后台每 30 秒检查一次，关闭窗口后每 2 分钟检查一次";
+                _summaryLabel.Text = $"已配置 {_segments.Count}/{MaxSegments} 个时段  {multiText}";
             }
 
             _timelinePanel?.Invalidate();
@@ -570,6 +585,34 @@ namespace LumiShift
             UpdateSchedulePreview();
         }
 
+        /// <summary>
+        /// 删除指定索引的时段，并重建后续行以刷新 idx 闭包。
+        /// </summary>
+        private void DeleteSegmentAt(int idx)
+        {
+            if (idx < 0 || idx >= _segments.Count) return;
+            if (MessageBox.Show($"确定删除此时段（{_segments[idx].StartTime} - {_segments[idx].EndTime}）？", "确认删除",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+
+            _segments.RemoveAt(idx);
+            _segmentPanel.SuspendLayout();
+            var oldRow = _segmentPanel.Controls[idx];
+            _segmentPanel.Controls.RemoveAt(idx);
+            DisposeControlTree(oldRow);
+            // 重建后续行：每行的 idx 闭包需更新为新索引
+            for (int j = idx; j < _segments.Count; j++)
+            {
+                var existingRow = _segmentPanel.Controls[j];
+                _segmentPanel.Controls.RemoveAt(j);
+                DisposeControlTree(existingRow);
+                _segmentPanel.Controls.Add(CreateSegmentRow(j));
+                _segmentPanel.Controls.SetChildIndex(_segmentPanel.Controls[_segmentPanel.Controls.Count - 1], j);
+            }
+            _segmentPanel.ResumeLayout(true);
+            UpdateSchedulePreview();
+        }
+
         private Panel CreateSegmentRow(int i)
         {
             var segment = _segments[i];
@@ -579,19 +622,20 @@ namespace LumiShift
             bool hasMonitorPresets = _hasMultipleMonitors && isIndependent && segment.MonitorPresets != null && segment.MonitorPresets.Count > 0;
             bool hasOverlap = HasOverlap(i);
 
-            int containerHeight = 86;
+            // 始终预留 22px overlap 提示空间，避免 overlap 状态变化时行高变化触发重建
+            int containerHeight = 108;
             if (hasMonitorPresets)
                 containerHeight += 6 + _monitors.Count * 30;
-            if (hasOverlap)
-                containerHeight += 22;
 
-            var container = new Panel
+            var container = new FocusablePanel
             {
                 Width = 548,
                 Height = containerHeight,
                 BackColor = Color.Transparent,
                 Padding = new Padding(12, 10, 12, 10)
             };
+            // 点击容器空白处时让 picker/combo 失焦
+            container.Click += (s, ev) => container.Focus();
 
             var accent = new Label
             {
@@ -622,7 +666,7 @@ namespace LumiShift
                 BackColor = Color.Transparent
             };
 
-            var startPicker = new DateTimePicker
+            var startPicker = new DateTimePickerEx
             {
                 Format = DateTimePickerFormat.Time,
                 ShowUpDown = true,
@@ -649,7 +693,7 @@ namespace LumiShift
                 BackColor = Color.Transparent
             };
 
-            var endPicker = new DateTimePicker
+            var endPicker = new DateTimePickerEx
             {
                 Format = DateTimePickerFormat.Time,
                 ShowUpDown = true,
@@ -680,20 +724,19 @@ namespace LumiShift
 
             container.Controls.AddRange(new Control[] { accent, timeTitle, modeSummary, startPicker, arrowLbl, endPicker, presetCombo });
 
-            if (hasOverlap)
+            // overlapLabel 始终创建，通过 Visible 切换；避免 overlap 状态变化时重建行
+            var overlapLabel = new Label
             {
-                var overlapLabel = new Label
-                {
-                    Text = "此时段与其他时段重叠，请调整时间。",
-                    Location = new Point(12, 66),
-                    Width = 420,
-                    Height = 18,
-                    Font = Typography.Caption,
-                    ForeColor = Colors.Red,
-                    BackColor = Color.Transparent
-                };
-                container.Controls.Add(overlapLabel);
-            }
+                Text = "此时段与其他时段重叠，请调整时间。",
+                Location = new Point(12, 66),
+                Width = 420,
+                Height = 18,
+                Font = Typography.Caption,
+                ForeColor = Colors.Red,
+                BackColor = Color.Transparent,
+                Visible = hasOverlap
+            };
+            container.Controls.Add(overlapLabel);
 
             if (_hasMultipleMonitors)
             {
@@ -782,28 +825,7 @@ namespace LumiShift
                     ReplaceSegmentRow(idx);
                 };
 
-                deleteBtn.Click += (s, ev) =>
-                {
-                    if (MessageBox.Show($"确定删除此时段（{_segments[idx].StartTime} - {_segments[idx].EndTime}）？", "确认删除",
-                        MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                    {
-                        _segments.RemoveAt(idx);
-                        _segmentPanel.SuspendLayout();
-                        var oldRow = _segmentPanel.Controls[idx];
-                        _segmentPanel.Controls.RemoveAt(idx);
-                        DisposeControlTree(oldRow);
-                        for (int j = idx; j < _segments.Count; j++)
-                        {
-                            var existingRow = _segmentPanel.Controls[j];
-                            _segmentPanel.Controls.RemoveAt(j);
-                            DisposeControlTree(existingRow);
-                            _segmentPanel.Controls.Add(CreateSegmentRow(j));
-                            _segmentPanel.Controls.SetChildIndex(_segmentPanel.Controls[_segmentPanel.Controls.Count - 1], j);
-                        }
-                        _segmentPanel.ResumeLayout(true);
-                        UpdateSchedulePreview();
-                    }
-                };
+                deleteBtn.Click += (s, ev) => DeleteSegmentAt(idx);
 
                 container.Controls.AddRange(new Control[] { monitorToggle, monitorLabel, deleteBtn });
             }
@@ -836,28 +858,7 @@ namespace LumiShift
                 deleteBtn.MouseEnter += (s, ev) => { deleteBtn.BackColor = Colors.Red; deleteBtn.ForeColor = Color.White; };
                 deleteBtn.MouseLeave += (s, ev) => { deleteBtn.BackColor = Color.Transparent; deleteBtn.ForeColor = Colors.TextSecondary; };
 
-                deleteBtn.Click += (s, ev) =>
-                {
-                    if (MessageBox.Show($"确定删除此时段（{_segments[idx].StartTime} - {_segments[idx].EndTime}）？", "确认删除",
-                        MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                    {
-                        _segments.RemoveAt(idx);
-                        _segmentPanel.SuspendLayout();
-                        var oldRow = _segmentPanel.Controls[idx];
-                        _segmentPanel.Controls.RemoveAt(idx);
-                        DisposeControlTree(oldRow);
-                        for (int j = idx; j < _segments.Count; j++)
-                        {
-                            var existingRow = _segmentPanel.Controls[j];
-                            _segmentPanel.Controls.RemoveAt(j);
-                            DisposeControlTree(existingRow);
-                            _segmentPanel.Controls.Add(CreateSegmentRow(j));
-                            _segmentPanel.Controls.SetChildIndex(_segmentPanel.Controls[_segmentPanel.Controls.Count - 1], j);
-                        }
-                        _segmentPanel.ResumeLayout(true);
-                        UpdateSchedulePreview();
-                    }
-                };
+                deleteBtn.Click += (s, ev) => DeleteSegmentAt(idx);
 
                 container.Controls.AddRange(new Control[] { allScreensHint, deleteBtn });
             }
@@ -866,14 +867,16 @@ namespace LumiShift
             {
                 var t = startPicker.Value;
                 _segments[idx].StartTime = $"{t.Hour:D2}:{t.Minute:D2}";
-                ReplaceSegmentRow(idx);
+                UpdateRowLightweight(idx, timeTitle, modeSummary, accent, overlapLabel);
+                UpdateSchedulePreview();
             };
 
             endPicker.ValueChanged += (s, ev) =>
             {
                 var t = endPicker.Value;
                 _segments[idx].EndTime = $"{t.Hour:D2}:{t.Minute:D2}";
-                ReplaceSegmentRow(idx);
+                UpdateRowLightweight(idx, timeTitle, modeSummary, accent, overlapLabel);
+                UpdateSchedulePreview();
             };
 
             presetCombo.SelectedIndexChanged += (s, ev) =>
@@ -883,7 +886,7 @@ namespace LumiShift
                 {
                     _segments[idx].SyncMode = true;
                     _segments[idx].MonitorPresets = null;
-                    ReplaceSegmentRow(idx);
+                    ReplaceSegmentRow(idx);   // 切到多屏方案：结构变化，必须重建
                     return;
                 }
                 if (_segments[idx].MonitorPresets != null)
@@ -894,12 +897,27 @@ namespace LumiShift
                             _segments[idx].MonitorPresets[m.DeviceId] = _segments[idx].PresetName;
                     }
                 }
+                UpdateRowLightweight(idx, timeTitle, modeSummary, accent, overlapLabel);
                 UpdateSchedulePreview();
+            };
+
+            // ComboBox 按 Enter 键时让父容器获得焦点（与 DateTimePickerEx 行为一致）
+            presetCombo.PreviewKeyDown += (s, ev) =>
+            {
+                if (ev.KeyCode == Keys.Enter) ev.IsInputKey = true;
+            };
+            presetCombo.KeyDown += (s, ev) =>
+            {
+                if (ev.KeyCode == Keys.Enter)
+                {
+                    container.Focus();
+                    ev.SuppressKeyPress = true;
+                }
             };
 
             if (hasMonitorPresets)
             {
-                int my = hasOverlap ? 100 : 78;
+                int my = 100;  // 固定位置，行高已始终预留 overlap 空间
                 foreach (var mon in _monitors)
                 {
                     var monId = mon.DeviceId;
@@ -949,6 +967,20 @@ namespace LumiShift
                         UpdateSchedulePreview();
                     };
 
+                    // ComboBox 按 Enter 键时让父容器获得焦点
+                    monCombo.PreviewKeyDown += (s, ev) =>
+                    {
+                        if (ev.KeyCode == Keys.Enter) ev.IsInputKey = true;
+                    };
+                    monCombo.KeyDown += (s, ev) =>
+                    {
+                        if (ev.KeyCode == Keys.Enter)
+                        {
+                            container.Focus();
+                            ev.SuppressKeyPress = true;
+                        }
+                    };
+
                     container.Controls.Add(monIndent);
                     container.Controls.Add(monLabel);
                     container.Controls.Add(monCombo);
@@ -957,6 +989,27 @@ namespace LumiShift
             }
 
             return container;
+        }
+
+        /// <summary>
+        /// 行内轻量更新：仅刷新文本/颜色/可见性，不重建控件，保留焦点。
+        /// 用于时间或方案变化时刷新行显示，避免 ReplaceSegmentRow 导致焦点丢失。
+        /// </summary>
+        private void UpdateRowLightweight(int idx, Label timeTitle, Label modeSummary, Label accent, Label overlapLabel)
+        {
+            var segment = _segments[idx];
+            bool isMultiDisplayPreset = IsMultiDisplayPreset(segment.PresetName);
+            bool isIndependent = segment.SyncMode == false;
+            bool hasOverlap = HasOverlap(idx);
+
+            timeTitle.Text = $"时段 {idx + 1}    {segment.StartTime} → {segment.EndTime}" + (IsOvernight(segment) ? "  跨午夜" : "");
+            timeTitle.ForeColor = hasOverlap ? Colors.Red : Colors.TextPrimary;
+            modeSummary.Text = GetModeSummaryText(segment);
+            modeSummary.ForeColor = isIndependent || isMultiDisplayPreset ? Colors.Brand : Colors.TextSecondary;
+            accent.BackColor = hasOverlap ? Colors.Red : (isIndependent || isMultiDisplayPreset ? Colors.Brand : Colors.Green);
+
+            if (overlapLabel != null)
+                overlapLabel.Visible = hasOverlap;
         }
 
         private void FillPresetCombo(ComboBox cb, string selected)

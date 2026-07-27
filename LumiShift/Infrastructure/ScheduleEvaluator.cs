@@ -61,23 +61,36 @@ namespace LumiShift.Infrastructure
 
         public string GetNextSwitchInfo(TimeSpan current)
         {
-            if (_segments.Count == 0) return "";
+            double minutes = MinutesToNextSwitch(current);
+            if (minutes == double.MaxValue) return "";
 
-            TimeSpan minDiff = TimeSpan.MaxValue;
-            foreach (var segment in _segments)
-            {
-                TimeSpan diff = segment.Start > current
-                    ? segment.Start - current
-                    : TimeSpan.FromHours(24) - (current - segment.Start);
-
-                if (diff < minDiff)
-                    minDiff = diff;
-            }
-
-            if (minDiff == TimeSpan.MaxValue) return "";
+            var minDiff = TimeSpan.FromMinutes(minutes);
             if (minDiff.TotalHours < 1)
                 return $"{Math.Max(1, (int)Math.Ceiling(minDiff.TotalMinutes))}分钟后";
             return $"{(int)minDiff.TotalHours}小时{(int)minDiff.Minutes}分钟后";
+        }
+
+        /// <summary>
+        /// 返回距下一次时段切换的分钟数；无可用时段返回 double.MaxValue。
+        /// 用于调度器自适应调整轮询间隔。
+        /// </summary>
+        public double MinutesToNextSwitch(TimeSpan current)
+        {
+            if (_segments.Count == 0) return double.MaxValue;
+
+            double minMinutes = double.MaxValue;
+            foreach (var segment in _segments)
+            {
+                if (segment.Start == segment.End) continue;
+
+                double minutesToStart = segment.Start > current
+                    ? (segment.Start - current).TotalMinutes
+                    : (TimeSpan.FromHours(24) - (current - segment.Start)).TotalMinutes;
+
+                if (minutesToStart < minMinutes)
+                    minMinutes = minutesToStart;
+            }
+            return minMinutes;
         }
 
         public static int ComputeHash(IEnumerable<ScheduleSegment> segments)

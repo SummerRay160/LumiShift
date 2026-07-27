@@ -68,6 +68,8 @@ LumiShift 是一款 Windows 平台上的開源螢幕調節工具。一個 exe �
 - 多顯示器可以為每個時段指定不同方案，或者直接套用多屏方案
 - 頂部時間軸一眼看到全天安排，時段重疊會自動標紅提醒
 - 白天臨時手動調一下也沒事，下個時段開始時會自動恢復排程
+- 自適應輪詢：排程器根據距下次切換的剩餘時間自動調整檢查頻率（切換前 1 分鐘內 5 秒一次，空閒時段 5 分鐘一次），切換更精準、後台更省電
+- 睡眠/休眠喚醒或系統時間被修改後，會立即重新評估並套用目標方案，不再等下一個輪詢週期
 
 ### 👁️ 護眼模式
 
@@ -133,6 +135,8 @@ LumiShift/
 ├── BackgroundService.cs            # 背景服務（系統匣/排程/計時器）
 ├── Controls/                       # 自訂控制項
 │   ├── FlatTabControl.cs           # 扁平化索引標籤
+│   ├── DateTimePickerEx.cs         # DateTimePicker 擴充（Enter 鍵失焦）
+│   ├── FocusablePanel.cs           # 可取得焦點的 Panel（焦點吸收容器）
 │   ├── GdiCache.cs                 # GDI 物件快取池
 │   ├── ModernSlider.cs             # 現代風格滑桿
 │   └── ToggleSwitch.cs             # 開關切換控制項
