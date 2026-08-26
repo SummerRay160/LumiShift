@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
 
 namespace LumiShift.Controls
 {
+    /// <summary>
+    /// GDI 对象（Brush/Pen）缓存。
+    /// </summary>
     public static class GdiCache
     {
         private const int MaxBrushCache = 64;
@@ -39,9 +41,9 @@ namespace LumiShift.Controls
                     return cached.Brush;
                 }
 
-                var brush = new SolidBrush(color);
                 if (_brushes.Count >= MaxBrushCache)
                     EvictOldestBrush();
+                var brush = new SolidBrush(color);
                 _brushes[argb] = new CachedBrush { Brush = brush, LastAccess = _accessCounter };
                 return brush;
             }
@@ -61,14 +63,15 @@ namespace LumiShift.Controls
                     return cached.Pen;
                 }
 
-                var pen = new Pen(color, width);
                 if (_pens.Count >= MaxPenCache)
                     EvictOldestPen();
+                var pen = new Pen(color, width);
                 _pens[key] = new CachedPen { Pen = pen, LastAccess = _accessCounter };
                 return pen;
             }
         }
 
+        /// <summary>缓存已满时淘汰最久未使用的画笔并释放其 GDI 资源。</summary>
         private static void EvictOldestBrush()
         {
             int oldestKey = 0;
@@ -88,6 +91,7 @@ namespace LumiShift.Controls
             }
         }
 
+        /// <summary>缓存已满时淘汰最久未使用的画笔（Pen）并释放其 GDI 资源。</summary>
         private static void EvictOldestPen()
         {
             long oldestKey = 0;
@@ -117,32 +121,6 @@ namespace LumiShift.Controls
                 foreach (var kvp in _pens)
                     kvp.Value.Pen.Dispose();
                 _pens.Clear();
-            }
-        }
-
-        public static void Trim(int keepBrushCount = 16, int keepPenCount = 16)
-        {
-            lock (_cacheLock)
-            {
-                if (_brushes.Count > keepBrushCount)
-                {
-                    var sorted = _brushes.OrderByDescending(kvp => kvp.Value.LastAccess).ToList();
-                    for (int i = keepBrushCount; i < sorted.Count; i++)
-                    {
-                        sorted[i].Value.Brush.Dispose();
-                        _brushes.Remove(sorted[i].Key);
-                    }
-                }
-
-                if (_pens.Count > keepPenCount)
-                {
-                    var sorted = _pens.OrderByDescending(kvp => kvp.Value.LastAccess).ToList();
-                    for (int i = keepPenCount; i < sorted.Count; i++)
-                    {
-                        sorted[i].Value.Pen.Dispose();
-                        _pens.Remove(sorted[i].Key);
-                    }
-                }
             }
         }
     }

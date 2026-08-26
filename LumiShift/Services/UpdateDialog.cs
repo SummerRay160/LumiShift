@@ -14,7 +14,7 @@ namespace LumiShift.Services
 
         public UpdateDialog(string version, string name, string body)
         {
-            Text = "LumiShift 更新";
+            Text = Lang.Get("LumiShift 更新");
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -26,7 +26,7 @@ namespace LumiShift.Services
 
             var titleLabel = new Label
             {
-                Text = $"发现新版本 {version}",
+                Text = Lang.F("发现新版本 {0}", version),
                 Font = Typography.H1,
                 ForeColor = Colors.TextPrimary,
                 Location = new Point(16, 16),
@@ -61,7 +61,7 @@ namespace LumiShift.Services
 
             _downloadButton = new Button
             {
-                Text = "下载更新",
+                Text = Lang.Get("下载更新"),
                 Font = Typography.Body,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Brand,
@@ -74,7 +74,7 @@ namespace LumiShift.Services
 
             _laterButton = new Button
             {
-                Text = "稍后提醒",
+                Text = Lang.Get("稍后提醒"),
                 Font = Typography.Body,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,
@@ -87,7 +87,7 @@ namespace LumiShift.Services
 
             _skipButton = new Button
             {
-                Text = "跳过版本",
+                Text = Lang.Get("跳过版本"),
                 Font = Typography.Body,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Colors.Surface,

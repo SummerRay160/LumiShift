@@ -5,6 +5,7 @@ using System.Windows.Forms;
 using LumiShift.Controls;
 using LumiShift.Infrastructure;
 using LumiShift.Resources;
+using LumiShift.Services;
 using Microsoft.Win32;
 
 namespace LumiShift
@@ -180,7 +181,7 @@ namespace LumiShift
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            Icon = LoadAppIcon();
+            Icon = Program.AppIcon;
 
             ResumeLayout(false);
         }
@@ -270,17 +271,17 @@ namespace LumiShift
         // ======================================================================
         private void BuildGammaTab()
         {
-            _gammaTab = new TabPage("调光")
+            _gammaTab = new TabPage(Lang.Get("调光"))
             {
                 BackColor = Colors.Background
             };
 
             int gy = 14;
 
-            var titleLabel = CreateTitleLabel("屏幕显示调节", gy);
+            var titleLabel = CreateTitleLabel(Lang.Get("屏幕显示调节"), gy);
             gy += 24;
 
-            var titleHint = CreateHintLabel("先选择全部显示器或单台显示器，调好后可保存为显示方案。", gy);
+            var titleHint = CreateHintLabel(Lang.Get("先选择全部显示器或单台显示器，调好后可保存为显示方案。"), gy);
             gy += 30;
 
             _gammaCheckBox = new ToggleSwitch { Location = new Point(Spacing.LG, gy), Checked = false };
@@ -288,7 +289,7 @@ namespace LumiShift
 
             var gammaLabel = new Label
             {
-                Text = "启用显示调节",
+                Text = Lang.Get("启用显示调节"),
                 Location = new Point(Spacing.LG + 48, gy + 1),
                 AutoSize = true,
                 Font = Typography.BodyBold
@@ -299,14 +300,14 @@ namespace LumiShift
 
             var monitorLabel = new Label
             {
-                Text = "范围",
+                Text = Lang.Get("范围"),
                 Location = new Point(Spacing.LG, gy + 2),
                 AutoSize = true,
                 Font = Typography.Body
             };
             SetLabelTheme(monitorLabel, 's');
 
-            _monitorSelectorComboBox = new ComboBox
+            _monitorSelectorComboBox = new BlurComboBox
             {
                 Location = new Point(72, gy),
                 Width = 182,
@@ -320,7 +321,7 @@ namespace LumiShift
 
             _resetDisplayGammaButton = new Button
             {
-                Text = "跟随全部",
+                Text = Lang.Get("跟随全部"),
                 Location = new Point(262, gy),
                 Width = 86,
                 Height = 26,
@@ -342,7 +343,7 @@ namespace LumiShift
 
             var monitorHint = new Label
             {
-                Text = "全部显示器适合统一调节；选择单台可做独立调整。",
+                Text = Lang.Get("全部显示器适合统一调节；选择单台可做独立调整。"),
                 Location = new Point(Spacing.LG, gy),
                 Width = 360,
                 Height = 18,
@@ -355,14 +356,14 @@ namespace LumiShift
 
             var presetLabel = new Label
             {
-                Text = "显示方案",
+                Text = Lang.Get("显示方案"),
                 Location = new Point(Spacing.LG, gy + 2),
                 AutoSize = true,
                 Font = Typography.Body
             };
             SetLabelTheme(presetLabel, 's');
 
-            _gammaModeComboBox = new ComboBox
+            _gammaModeComboBox = new BlurComboBox
             {
                 Location = new Point(92, gy),
                 Width = 152,
@@ -376,7 +377,7 @@ namespace LumiShift
 
             _gammaSaveCustomButton = new Button
             {
-                Text = "保存方案",
+                Text = Lang.Get("保存方案"),
                 Location = new Point(252, gy),
                 Width = 74,
                 Height = 26,
@@ -393,7 +394,7 @@ namespace LumiShift
 
             _gammaDeleteCustomButton = new Button
             {
-                Text = "删除",
+                Text = Lang.Get("删除"),
                 Location = new Point(332, gy),
                 Width = 54,
                 Height = 26,
@@ -412,7 +413,7 @@ namespace LumiShift
 
             var scheduleQuickLabel = new Label
             {
-                Text = "定时切换",
+                Text = Lang.Get("定时切换"),
                 Location = new Point(Spacing.LG, gy + 2),
                 AutoSize = true,
                 Font = Typography.Body
@@ -424,7 +425,7 @@ namespace LumiShift
 
             _gammaScheduleConfigButton = new Button
             {
-                Text = "配置...",
+                Text = Lang.Get("配置..."),
                 Location = new Point(146, gy),
                 Width = 70,
                 Height = 26,
@@ -442,7 +443,7 @@ namespace LumiShift
 
             _gammaSimplifiedCheckBox = new CheckBox
             {
-                Text = "简洁模式：只调节冷暖和亮度",
+                Text = Lang.Get("简洁模式"),
                 Location = new Point(Spacing.LG, gy + 1),
                 AutoSize = true,
                 Font = Typography.Body,
@@ -452,10 +453,12 @@ namespace LumiShift
             };
             _gammaSimplifiedCheckBox.CheckedChanged += GammaSimplifiedCheckBox_CheckedChanged;
 
+            // 色温滑块起点紧跟复选框（文案宽度随语言变化），右端与下方 R/G/B 滑块对齐 (x=312)，标签固定 x=322
+            int colorTempSliderX = Spacing.LG + _gammaSimplifiedCheckBox.GetPreferredSize(Size.Empty).Width + 8;
             _gammaColorTempSlider = new ModernSlider
             {
-                Location = new Point(164, gy),
-                Width = 150,
+                Location = new Point(colorTempSliderX, gy),
+                Width = 312 - colorTempSliderX,
                 Minimum = 0,
                 Maximum = 100,
                 Value = 50
@@ -464,7 +467,7 @@ namespace LumiShift
 
             _gammaColorTempLabel = new Label
             {
-                Text = "适中",
+                Text = Lang.Get("适中"),
                 Location = new Point(322, gy + 2),
                 AutoSize = true,
                 Font = Typography.Caption
@@ -505,7 +508,7 @@ namespace LumiShift
             SetLabelTheme(_gammaValueLabel, 'g');
             gy += 28;
 
-            var brightLbl = new Label { Text = "亮度", Location = new Point(Spacing.LG, gy + 2), AutoSize = true, Font = Typography.Body };
+            var brightLbl = new Label { Text = Lang.Get("亮度"), Location = new Point(Spacing.LG, gy + 2), AutoSize = true, Font = Typography.Body };
             SetLabelTheme(brightLbl, 's');
             _gammaBrightSlider = new ModernSlider { Location = new Point(72, gy), Width = 240, Minimum = 0, Maximum = 100, Value = 100 };
             _gammaBrightSlider.ValueChanged += GammaSlider_ValueChanged;
@@ -544,7 +547,7 @@ namespace LumiShift
         // ======================================================================
         private void BuildBrightnessTab()
         {
-            _brightnessTab = new TabPage("亮度")
+            _brightnessTab = new TabPage(Lang.Get("亮度"))
             {
                 BackColor = Colors.Background
             };
@@ -560,8 +563,8 @@ namespace LumiShift
                 BackColor = Color.Transparent
             };
 
-            var titleLabel = CreateTitleLabel("硬件亮度", 14);
-            var titleHint = CreateHintLabel("调节显示器硬件亮度；不支持的设备会自动隐藏。", 38);
+            var titleLabel = CreateTitleLabel(Lang.Get("硬件亮度"), 14);
+            var titleHint = CreateHintLabel(Lang.Get("调节显示器硬件亮度；不支持的设备会自动隐藏。"), 38);
             var separator = CreateSeparator(62);
 
             _brightnessTab.Controls.AddRange(new Control[] { titleLabel, titleHint, separator });
@@ -573,7 +576,7 @@ namespace LumiShift
         // ======================================================================
         private void BuildSettingsTab()
         {
-            _settingsTab = new TabPage("设置")
+            _settingsTab = new TabPage(Lang.Get("设置"))
             {
                 BackColor = Colors.Background,
                 AutoScroll = true
@@ -582,10 +585,10 @@ namespace LumiShift
             const int settingsContentWidth = 360;
             int sy = 14;
 
-            var titleLabel = CreateTitleLabel("偏好设置", sy);
+            var titleLabel = CreateTitleLabel(Lang.Get("偏好设置"), sy);
             sy += 24;
 
-            var titleHint = CreateHintLabel("管理定时、通知、启动和界面选项，默认保持轻量运行。", sy, settingsContentWidth);
+            var titleHint = CreateHintLabel(Lang.Get("管理定时、通知、启动和界面选项，默认保持轻量运行。"), sy, settingsContentWidth);
             sy += 34;
 
             _scheduleEnabledCheckBox = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = false };
@@ -593,7 +596,7 @@ namespace LumiShift
 
             var scheduleLabel2 = new Label
             {
-                Text = "自动定时切换",
+                Text = Lang.Get("自动定时切换"),
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
                 Font = Typography.BodyBold
@@ -602,7 +605,7 @@ namespace LumiShift
 
             _scheduleConfigButton = new Button
             {
-                Text = "配置定时...",
+                Text = Lang.Get("配置定时..."),
                 Location = new Point(278, sy),
                 Width = 104,
                 Height = 26,
@@ -620,7 +623,7 @@ namespace LumiShift
 
             var scheduleHint = new Label
             {
-                Text = "到指定时间自动切换显示方案，适合白天、夜间和办公场景。",
+                Text = Lang.Get("到指定时间自动切换显示方案，适合白天、夜间和办公场景。"),
                 Location = new Point(Spacing.LG, sy),
                 AutoSize = true,
                 Font = Typography.Caption,
@@ -638,7 +641,7 @@ namespace LumiShift
 
             var bgImageLabel = new Label
             {
-                Text = "轻量背景图",
+                Text = Lang.Get("轻量背景图"),
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
                 Font = Typography.BodyBold
@@ -649,7 +652,7 @@ namespace LumiShift
 
             _bgImageSelectButton = new Button
             {
-                Text = "选择图片",
+                Text = Lang.Get("选择图片"),
                 Location = new Point(Spacing.LG, sy),
                 Width = 92,
                 Height = 26,
@@ -664,7 +667,7 @@ namespace LumiShift
 
             _bgImageClearButton = new Button
             {
-                Text = "清除",
+                Text = Lang.Get("清除"),
                 Location = new Point(Spacing.LG + 96, sy),
                 Width = 62,
                 Height = 26,
@@ -677,7 +680,7 @@ namespace LumiShift
             };
             _bgImageClearButton.Click += BgImageClearButton_Click;
 
-            var opacityLbl = new Label { Text = "透明度", Location = new Point(Spacing.LG + 170, sy + 2), AutoSize = true, Font = Typography.Body };
+            var opacityLbl = new Label { Text = Lang.Get("透明度"), Location = new Point(Spacing.LG + 170, sy + 2), AutoSize = true, Font = Typography.Body };
             SetLabelTheme(opacityLbl, 's');
 
             _bgImageOpacitySlider = new ModernSlider
@@ -721,7 +724,7 @@ namespace LumiShift
 
             var startupLbl = new Label
             {
-                Text = "开机自启动",
+                Text = Lang.Get("开机自启动"),
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
                 Font = Typography.BodyBold
@@ -735,7 +738,7 @@ namespace LumiShift
 
             var minimizedLbl = new Label
             {
-                Text = "启动时最小化到托盘",
+                Text = Lang.Get("启动时最小化到托盘"),
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
                 Font = Typography.BodyBold
@@ -749,7 +752,7 @@ namespace LumiShift
 
             var autoCheckUpdatesLbl = new Label
             {
-                Text = "启动时自动检查更新",
+                Text = Lang.Get("启动时自动检查更新"),
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
                 Font = Typography.BodyBold
@@ -766,12 +769,38 @@ namespace LumiShift
 
             var restoreGammaLbl = new Label
             {
-                Text = "退出时还原系统显示效果",
+                Text = Lang.Get("退出时还原系统显示效果"),
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
                 Font = Typography.BodyBold
             };
             SetLabelTheme(restoreGammaLbl, 'p');
+
+            sy += 30;
+
+            var languageLbl = new Label
+            {
+                Text = Lang.Get("界面语言"),
+                Location = new Point(Spacing.LG, sy + 4),
+                AutoSize = true,
+                Font = Typography.BodyBold
+            };
+            SetLabelTheme(languageLbl, 'p');
+
+            _languageComboBox = new BlurComboBox
+            {
+                Location = new Point(278, sy),
+                Width = 104,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Colors.Surface,
+                ForeColor = Colors.TextPrimary,
+                Font = Typography.Body
+            };
+            // 语言名称用各自母语写法（不随界面语言变化）；"跟随系统"仍随界面语言翻译
+            _languageComboBox.Items.AddRange(new object[] { Lang.Get("跟随系统"), "简体中文", "繁體中文", "English" });
+            _languageComboBox.SelectedIndex = 0;
+            _languageComboBox.SelectedIndexChanged += LanguageComboBox_SelectedIndexChanged;
 
             sy += 34;
 
@@ -783,7 +812,7 @@ namespace LumiShift
 
             var notificationLbl = new Label
             {
-                Text = "Windows 通知提醒",
+                Text = Lang.Get("Windows 通知提醒"),
                 Location = new Point(Spacing.LG + 48, sy + 1),
                 AutoSize = true,
                 Font = Typography.BodyBold
@@ -794,28 +823,28 @@ namespace LumiShift
 
             _notifyStartupToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = true };
             _notifyStartupToggle.CheckedChanged += NotifyStartupToggle_CheckedChanged;
-            var notifyStartupLbl = new Label { Text = "软件启动时通知", Location = new Point(Spacing.LG + 48, sy + 1), AutoSize = true, Font = Typography.Body };
+            var notifyStartupLbl = new Label { Text = Lang.Get("软件启动时通知"), Location = new Point(Spacing.LG + 48, sy + 1), AutoSize = true, Font = Typography.Body };
             SetLabelTheme(notifyStartupLbl, 's');
 
             sy += 28;
 
             _notifyScheduleToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = true };
             _notifyScheduleToggle.CheckedChanged += NotifyScheduleToggle_CheckedChanged;
-            var notifyScheduleLbl = new Label { Text = "定时切换方案时通知", Location = new Point(Spacing.LG + 48, sy + 1), AutoSize = true, Font = Typography.Body };
+            var notifyScheduleLbl = new Label { Text = Lang.Get("定时切换方案时通知"), Location = new Point(Spacing.LG + 48, sy + 1), AutoSize = true, Font = Typography.Body };
             SetLabelTheme(notifyScheduleLbl, 's');
 
             sy += 28;
 
             _notifyStatusToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = true };
             _notifyStatusToggle.CheckedChanged += NotifyStatusToggle_CheckedChanged;
-            var notifyStatusLbl = new Label { Text = "显示调节开关变化时通知", Location = new Point(Spacing.LG + 48, sy + 1), AutoSize = true, Font = Typography.Body };
+            var notifyStatusLbl = new Label { Text = Lang.Get("显示调节开关变化时通知"), Location = new Point(Spacing.LG + 48, sy + 1), AutoSize = true, Font = Typography.Body };
             SetLabelTheme(notifyStatusLbl, 's');
 
             sy += 28;
 
             _notifyMonitorToggle = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = true };
             _notifyMonitorToggle.CheckedChanged += NotifyMonitorToggle_CheckedChanged;
-            var notifyMonitorLbl = new Label { Text = "显示器变更时通知", Location = new Point(Spacing.LG + 48, sy + 1), AutoSize = true, Font = Typography.Body };
+            var notifyMonitorLbl = new Label { Text = Lang.Get("显示器变更时通知"), Location = new Point(Spacing.LG + 48, sy + 1), AutoSize = true, Font = Typography.Body };
             SetLabelTheme(notifyMonitorLbl, 's');
 
             sy += 34;
@@ -827,7 +856,7 @@ namespace LumiShift
             {
                 Location = new Point(Spacing.LG, sy),
                 Width = settingsContentWidth,
-                Height = 54,
+                Height = 34,
                 BackColor = Colors.Surface
             };
 
@@ -841,20 +870,10 @@ namespace LumiShift
             };
             SetLabelTheme(versionLabel, 's');
 
-            var versionHintLabel = new Label
-            {
-                Text = "轻量显示调节工具",
-                Location = new Point(12, 30),
-                AutoSize = true,
-                Font = Typography.Caption,
-                BackColor = Color.Transparent
-            };
-            SetLabelTheme(versionHintLabel, 's');
-
             var githubLink = new LinkLabel
             {
                 Text = "GitHub",
-                Location = new Point(settingsContentWidth - 58, 18),
+                Location = new Point(settingsContentWidth - 58, 11),
                 AutoSize = true,
                 Font = Typography.Caption,
                 BackColor = Color.Transparent,
@@ -863,8 +882,8 @@ namespace LumiShift
                 VisitedLinkColor = Colors.TextSecondary
             };
             githubLink.LinkClicked += (s, e) => System.Diagnostics.Process.Start("https://github.com/SummerRay160/LumiShift");
-            versionPanel.Controls.AddRange(new Control[] { versionLabel, versionHintLabel, githubLink });
-            sy += 70;
+            versionPanel.Controls.AddRange(new Control[] { versionLabel, githubLink });
+            sy += 50;
             
             _settingsTab.Controls.AddRange(new Control[] {
                 titleLabel, titleHint,
@@ -879,6 +898,7 @@ namespace LumiShift
                 _startMinimizedCheckBox, minimizedLbl,
                 _autoCheckUpdatesToggle, autoCheckUpdatesLbl,
                 restoreGammaSep, _restoreGammaToggle, restoreGammaLbl,
+                languageLbl, _languageComboBox,
                 notificationSep, _notificationsEnabledToggle, notificationLbl,
                 _notifyStartupToggle, notifyStartupLbl,
                 _notifyScheduleToggle, notifyScheduleLbl,
@@ -894,17 +914,17 @@ namespace LumiShift
         // ======================================================================
         private void BuildEyeProtectionTab()
         {
-            _eyeProtectionTab = new TabPage("护眼")
+            _eyeProtectionTab = new TabPage(Lang.Get("护眼"))
             {
                 BackColor = Colors.Background
             };
 
             int ey = 14;
 
-            var titleLabel = CreateTitleLabel("护眼模式", ey);
+            var titleLabel = CreateTitleLabel(Lang.Get("护眼模式"), ey);
             ey += 24;
 
-            var titleHint = CreateHintLabel("为窗口背景添加柔和色调，减少长时间阅读的刺眼感。", ey);
+            var titleHint = CreateHintLabel(Lang.Get("为窗口背景添加柔和色调，减少长时间阅读的刺眼感。"), ey);
             ey += 34;
 
             _eyeProtectionToggle = new ToggleSwitch { Location = new Point(Spacing.LG, ey), Checked = false };
@@ -912,7 +932,7 @@ namespace LumiShift
 
             var eyeLabel = new Label
             {
-                Text = "启用系统护眼色",
+                Text = Lang.Get("启用系统护眼色"),
                 Location = new Point(Spacing.LG + 48, ey + 1),
                 AutoSize = true,
                 Font = Typography.BodyBold
@@ -927,7 +947,7 @@ namespace LumiShift
 
             var presetHint = new Label
             {
-                Text = "护眼颜色",
+                Text = Lang.Get("护眼颜色"),
                 Location = new Point(Spacing.LG, ey + 2),
                 AutoSize = true,
                 Font = Typography.BodyBold
@@ -938,9 +958,9 @@ namespace LumiShift
 
             var presetColors = new (string text, int r, int g, int b)[]
             {
-                ("绿豆沙色", 204, 232, 207),
-                ("纸页黄", 255, 255, 224),
-                ("天空蓝", 199, 216, 237)
+                (Lang.Get("绿豆沙色"), 204, 232, 207),
+                (Lang.Get("纸页黄"), 255, 255, 224),
+                (Lang.Get("天空蓝"), 199, 216, 237)
             };
 
             int presetButtonWidth = 116;
@@ -957,7 +977,7 @@ namespace LumiShift
 
             _eyeProtectionCustomButton = new Button
             {
-                Text = "自定义颜色",
+                Text = Lang.Get("自定义颜色"),
                 Location = new Point(Spacing.LG, ey),
                 Width = 382,
                 Height = 30,
@@ -974,7 +994,7 @@ namespace LumiShift
 
             _eyeProtectionRestoreButton = new Button
             {
-                Text = "恢复默认",
+                Text = Lang.Get("恢复默认"),
                 Location = new Point(Spacing.LG, ey),
                 Width = 382,
                 Height = 30,

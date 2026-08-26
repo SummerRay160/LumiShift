@@ -42,10 +42,6 @@ namespace LumiShift.Services
             return GetSchemes().FirstOrDefault(s => s.Name == name);
         }
 
-        public bool IsMultiDisplayScheme(string name)
-        {
-            return Find(name)?.Kind == DisplaySchemeKind.MultiDisplay;
-        }
 
         public string GetDisplayName(string name)
         {
@@ -56,13 +52,17 @@ namespace LumiShift.Services
         public static string StripDisplayName(string displayName)
         {
             if (string.IsNullOrEmpty(displayName)) return displayName;
-            const string unified = " · 统一方案";
-            const string multi = " · 多屏方案";
+            string unified = " · " + Lang.Get("统一方案");
+            string multi = " · " + Lang.Get("多屏方案");
+            string stripped;
             if (displayName.EndsWith(unified))
-                return displayName.Substring(0, displayName.Length - unified.Length);
-            if (displayName.EndsWith(multi))
-                return displayName.Substring(0, displayName.Length - multi.Length);
-            return displayName.Replace("（多屏方案）", "");
+                stripped = displayName.Substring(0, displayName.Length - unified.Length);
+            else if (displayName.EndsWith(multi))
+                stripped = displayName.Substring(0, displayName.Length - multi.Length);
+            else
+                stripped = displayName.Replace("（多屏方案）", "");
+            // 显示名可能是翻译后的内置名，还原为数据键
+            return PresetDefinitions.FromDisplayName(stripped);
         }
 
         private static DisplayScheme FromPreset(GammaPreset preset)

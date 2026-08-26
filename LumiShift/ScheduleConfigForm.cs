@@ -51,7 +51,7 @@ namespace LumiShift
             _monitors = monitors ?? new List<MonitorInfo>();
             _hasMultipleMonitors = _monitors.Count > 1;
 
-            Text = "定时调度配置";
+            Text = Lang.Get("定时调度配置");
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
@@ -156,7 +156,7 @@ namespace LumiShift
 
             var titleLabel = new Label
             {
-                Text = "定时调度",
+                Text = Lang.Get("定时调度"),
                 Location = new Point(Spacing.LG, y),
                 AutoSize = true,
                 Font = Typography.H1,
@@ -168,8 +168,8 @@ namespace LumiShift
             var hintLabel = new Label
             {
                 Text = _hasMultipleMonitors
-                    ? "设置一天中什么时候切换到哪个显示方案；多屏方案会自动应用每台显示器的设置。"
-                    : "设置一天中什么时候切换到哪个显示方案；时段不可重叠。",
+                    ? Lang.Get("设置一天中什么时候切换到哪个显示方案；多屏方案会自动应用每台显示器的设置。")
+                    : Lang.Get("设置一天中什么时候切换到哪个显示方案；时段不可重叠。"),
                 Location = new Point(Spacing.LG, y),
                 Width = 572,
                 Height = 18,
@@ -203,7 +203,7 @@ namespace LumiShift
 
             var listTitle = new Label
             {
-                Text = "时段列表",
+                Text = Lang.Get("时段列表"),
                 Location = new Point(Spacing.LG, y),
                 AutoSize = true,
                 Font = Typography.BodyBold,
@@ -226,7 +226,7 @@ namespace LumiShift
 
             _addButton = new Button
             {
-                Text = "+ 添加时段",
+                Text = Lang.Get("+ 添加时段"),
                 Location = new Point(Spacing.LG, y),
                 Width = 124,
                 Height = 30,
@@ -259,7 +259,7 @@ namespace LumiShift
 
             _okButton = new Button
             {
-                Text = "确定",
+                Text = Lang.Get("确定"),
                 Location = new Point(432, y),
                 Width = 90,
                 Height = 30,
@@ -275,7 +275,7 @@ namespace LumiShift
 
             _cancelButton = new Button
             {
-                Text = "取消",
+                Text = Lang.Get("取消"),
                 Location = new Point(530, y),
                 Width = 70,
                 Height = 30,
@@ -297,7 +297,7 @@ namespace LumiShift
         {
             if (_segments.Count >= MaxSegments)
             {
-                MessageBox.Show($"最多支持 {MaxSegments} 个时段。", "提示",
+                MessageBox.Show(Lang.F("最多支持 {0} 个时段。", MaxSegments), Lang.Get("提示"),
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -328,20 +328,20 @@ namespace LumiShift
                 var seg = _segments[i];
                 if (!TryParseTime(seg.StartTime, out var start) || !TryParseTime(seg.EndTime, out var end))
                 {
-                    MessageBox.Show($"时段 {i + 1} 的时间格式无效（{seg.StartTime} → {seg.EndTime}），请使用 HH:mm 格式。",
-                        "无效时段", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(Lang.F("时段 {0} 的时间格式无效（{1} → {2}），请使用 HH:mm 格式。", i + 1, seg.StartTime, seg.EndTime),
+                        Lang.Get("无效时段"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
                 if (start == end)
                 {
-                    MessageBox.Show($"时段 {i + 1}（{seg.StartTime} → {seg.EndTime}）的起止时间相同，请修正。",
-                        "无效时段", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(Lang.F("时段 {0}（{1} → {2}）的起止时间相同，请修正。", i + 1, seg.StartTime, seg.EndTime),
+                        Lang.Get("无效时段"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
                 if (string.IsNullOrWhiteSpace(seg.PresetName))
                 {
-                    MessageBox.Show($"时段 {i + 1} 未选择显示方案，请选择后再保存。",
-                        "无效时段", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(Lang.F("时段 {0} 未选择显示方案，请选择后再保存。", i + 1),
+                        Lang.Get("无效时段"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
             }
@@ -353,7 +353,7 @@ namespace LumiShift
                 {
                     if (SegmentsOverlap(_segments[i], _segments[j]))
                     {
-                        MessageBox.Show($"时段 {i + 1}（{_segments[i].StartTime} → {_segments[i].EndTime}）与时段 {j + 1}（{_segments[j].StartTime} → {_segments[j].EndTime}）存在重叠，请调整。", "时段重叠",
+                        MessageBox.Show(Lang.F("时段 {0}（{1} → {2}）与时段 {3}（{4} → {5}）存在重叠，请调整。", i + 1, _segments[i].StartTime, _segments[i].EndTime, j + 1, _segments[j].StartTime, _segments[j].EndTime), Lang.Get("时段重叠"),
                             MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
@@ -442,9 +442,9 @@ namespace LumiShift
             {
                 int independentCount = _segments.Count(s => s.SyncMode == false);
                 string multiText = _hasMultipleMonitors
-                    ? $"独立多屏 {independentCount} 个"
-                    : "单显示器模式";
-                _summaryLabel.Text = $"已配置 {_segments.Count}/{MaxSegments} 个时段  {multiText}";
+                    ? Lang.F("独立多屏 {0} 个", independentCount)
+                    : Lang.Get("单显示器模式");
+                _summaryLabel.Text = Lang.F("已配置 {0}/{1} 个时段  {2}", _segments.Count, MaxSegments, multiText);
             }
 
             _timelinePanel?.Invalidate();
@@ -464,7 +464,7 @@ namespace LumiShift
             if (_segments.Count == 0)
             {
                 using (var brush = new SolidBrush(Colors.TextSecondary))
-                    g.DrawString("暂无时段，点击下方“添加时段”开始配置。", Typography.Caption, brush, new PointF(10, 17));
+                    g.DrawString(Lang.Get("暂无时段，点击下方“添加时段”开始配置。"), Typography.Caption, brush, new PointF(10, 17));
                 return;
             }
 
@@ -536,8 +536,8 @@ namespace LumiShift
         {
             if (segmentRect.Width < 28) return;
 
-            string mode = segment.SyncMode == false ? "逐台" : (IsMultiDisplayPreset(segment.PresetName) ? "多屏" : "统一");
-            string label = $"{segment.PresetName} · {mode}";
+            string mode = segment.SyncMode == false ? Lang.Get("逐台") : (IsMultiDisplayPreset(segment.PresetName) ? Lang.Get("多屏") : Lang.Get("统一"));
+            string label = $"{Lang.Get(GetPresetNameFromDisplay(segment.PresetName))} · {mode}";
             int maxChars = Math.Max(2, (segmentRect.Width - 8) / 7);
             if (label.Length > maxChars)
                 label = maxChars <= 3 ? label.Substring(0, Math.Min(label.Length, maxChars)) : label.Substring(0, maxChars - 1) + "…";
@@ -591,7 +591,7 @@ namespace LumiShift
         private void DeleteSegmentAt(int idx)
         {
             if (idx < 0 || idx >= _segments.Count) return;
-            if (MessageBox.Show($"确定删除此时段（{_segments[idx].StartTime} - {_segments[idx].EndTime}）？", "确认删除",
+            if (MessageBox.Show(Lang.F("确定删除此时段（{0} - {1}）？", _segments[idx].StartTime, _segments[idx].EndTime), Lang.Get("确认删除"),
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
 
@@ -647,7 +647,7 @@ namespace LumiShift
 
             var timeTitle = new Label
             {
-                Text = $"时段 {i + 1}    {segment.StartTime} → {segment.EndTime}" + (IsOvernight(segment) ? "  跨午夜" : ""),
+                Text = Lang.F("时段 {0}    {1} → {2}", i + 1, segment.StartTime, segment.EndTime) + (IsOvernight(segment) ? Lang.Get("  跨午夜") : ""),
                 Location = new Point(12, 8),
                 Width = 300,
                 Height = 20,
@@ -710,7 +710,7 @@ namespace LumiShift
             }
             catch { endPicker.Value = DateTime.Today.AddHours(18); }
 
-            var presetCombo = new ComboBox
+            var presetCombo = new BlurComboBox
             {
                 Location = new Point(226, 40),
                 Width = 138,
@@ -727,7 +727,7 @@ namespace LumiShift
             // overlapLabel 始终创建，通过 Visible 切换；避免 overlap 状态变化时重建行
             var overlapLabel = new Label
             {
-                Text = "此时段与其他时段重叠，请调整时间。",
+                Text = Lang.Get("此时段与其他时段重叠，请调整时间。"),
                 Location = new Point(12, 66),
                 Width = 420,
                 Height = 18,
@@ -749,7 +749,7 @@ namespace LumiShift
 
                 var monitorLabel = new Label
                 {
-                    Text = isIndependent ? "逐台" : "方案",
+                    Text = isIndependent ? Lang.Get("逐台") : Lang.Get("方案"),
                     Location = new Point(434, 45),
                     AutoSize = true,
                     Font = Typography.Caption,
@@ -759,25 +759,10 @@ namespace LumiShift
 
                 var modeTip = new ToolTip();
                 _activeToolTips.Add(modeTip);
-                modeTip.SetToolTip(monitorToggle, isIndependent ? "临时逐台配置：仅此时段为每台显示器选择方案" : "方案模式：此时段切换到一个显示方案");
-                modeTip.SetToolTip(monitorLabel, isIndependent ? "临时逐台配置：仅此时段为每台显示器选择方案" : "方案模式：此时段切换到一个显示方案");
+                modeTip.SetToolTip(monitorToggle, isIndependent ? Lang.Get("临时逐台配置：仅此时段为每台显示器选择方案") : Lang.Get("方案模式：此时段切换到一个显示方案"));
+                modeTip.SetToolTip(monitorLabel, isIndependent ? Lang.Get("临时逐台配置：仅此时段为每台显示器选择方案") : Lang.Get("方案模式：此时段切换到一个显示方案"));
 
-                var deleteBtn = new Button
-                {
-                    Text = "×",
-                    Location = new Point(510, 8),
-                    Width = 24,
-                    Height = 24,
-                    FlatStyle = FlatStyle.Flat,
-                    BackColor = Color.Transparent,
-                    ForeColor = Colors.TextSecondary,
-                    Font = Typography.Caption,
-                    FlatAppearance = { BorderSize = 0 },
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    Cursor = Cursors.Hand
-                };
-                deleteBtn.MouseEnter += (s, ev) => { deleteBtn.BackColor = Colors.Red; deleteBtn.ForeColor = Color.White; };
-                deleteBtn.MouseLeave += (s, ev) => { deleteBtn.BackColor = Color.Transparent; deleteBtn.ForeColor = Colors.TextSecondary; };
+                var deleteBtn = CreateDeleteButton();
 
                 monitorToggle.CheckedChanged += (s, ev) =>
                 {
@@ -808,7 +793,7 @@ namespace LumiShift
                             }
                             if (hasCustom)
                             {
-                                if (MessageBox.Show("切换到方案模式将清除此时段逐台配置，之后可选择统一方案或多屏方案。是否继续？", "确认",
+                                if (MessageBox.Show(Lang.Get("切换到方案模式将清除此时段逐台配置，之后可选择统一方案或多屏方案。是否继续？"), Lang.Get("确认"),
                                     MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                                 {
                                     _isUpdatingToggle = true;
@@ -833,7 +818,7 @@ namespace LumiShift
             {
                 var allScreensHint = new Label
                 {
-                    Text = "所有屏幕",
+                    Text = Lang.Get("所有屏幕"),
                     Location = new Point(386, 45),
                     AutoSize = true,
                     Font = Typography.Caption,
@@ -841,22 +826,7 @@ namespace LumiShift
                     BackColor = Color.Transparent
                 };
 
-                var deleteBtn = new Button
-                {
-                    Text = "×",
-                    Location = new Point(510, 8),
-                    Width = 24,
-                    Height = 24,
-                    FlatStyle = FlatStyle.Flat,
-                    BackColor = Color.Transparent,
-                    ForeColor = Colors.TextSecondary,
-                    Font = Typography.Caption,
-                    FlatAppearance = { BorderSize = 0 },
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    Cursor = Cursors.Hand
-                };
-                deleteBtn.MouseEnter += (s, ev) => { deleteBtn.BackColor = Colors.Red; deleteBtn.ForeColor = Color.White; };
-                deleteBtn.MouseLeave += (s, ev) => { deleteBtn.BackColor = Color.Transparent; deleteBtn.ForeColor = Colors.TextSecondary; };
+                var deleteBtn = CreateDeleteButton();
 
                 deleteBtn.Click += (s, ev) => DeleteSegmentAt(idx);
 
@@ -902,18 +872,7 @@ namespace LumiShift
             };
 
             // ComboBox 按 Enter 键时让父容器获得焦点（与 DateTimePickerEx 行为一致）
-            presetCombo.PreviewKeyDown += (s, ev) =>
-            {
-                if (ev.KeyCode == Keys.Enter) ev.IsInputKey = true;
-            };
-            presetCombo.KeyDown += (s, ev) =>
-            {
-                if (ev.KeyCode == Keys.Enter)
-                {
-                    container.Focus();
-                    ev.SuppressKeyPress = true;
-                }
-            };
+            WireComboEnterFocus(presetCombo, container);
 
             if (hasMonitorPresets)
             {
@@ -944,7 +903,7 @@ namespace LumiShift
                         BackColor = Color.Transparent
                     };
 
-                    var monCombo = new ComboBox
+                    var monCombo = new BlurComboBox
                     {
                         Location = new Point(322, my),
                         Width = 138,
@@ -968,18 +927,7 @@ namespace LumiShift
                     };
 
                     // ComboBox 按 Enter 键时让父容器获得焦点
-                    monCombo.PreviewKeyDown += (s, ev) =>
-                    {
-                        if (ev.KeyCode == Keys.Enter) ev.IsInputKey = true;
-                    };
-                    monCombo.KeyDown += (s, ev) =>
-                    {
-                        if (ev.KeyCode == Keys.Enter)
-                        {
-                            container.Focus();
-                            ev.SuppressKeyPress = true;
-                        }
-                    };
+                    WireComboEnterFocus(monCombo, container);
 
                     container.Controls.Add(monIndent);
                     container.Controls.Add(monLabel);
@@ -995,6 +943,40 @@ namespace LumiShift
         /// 行内轻量更新：仅刷新文本/颜色/可见性，不重建控件，保留焦点。
         /// 用于时间或方案变化时刷新行显示，避免 ReplaceSegmentRow 导致焦点丢失。
         /// </summary>
+        private Button CreateDeleteButton()
+        {
+            var btn = new Button
+            {
+                Text = "×",
+                Location = new Point(510, 8),
+                Width = 24,
+                Height = 24,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.Transparent,
+                ForeColor = Colors.TextSecondary,
+                Font = Typography.Caption,
+                FlatAppearance = { BorderSize = 0 },
+                TextAlign = ContentAlignment.MiddleCenter,
+                Cursor = Cursors.Hand
+            };
+            btn.MouseEnter += (s, ev) => { btn.BackColor = Colors.Red; btn.ForeColor = Color.White; };
+            btn.MouseLeave += (s, ev) => { btn.BackColor = Color.Transparent; btn.ForeColor = Colors.TextSecondary; };
+            return btn;
+        }
+
+        private static void WireComboEnterFocus(ComboBox combo, Control container)
+        {
+            combo.PreviewKeyDown += (s, ev) => { if (ev.KeyCode == Keys.Enter) ev.IsInputKey = true; };
+            combo.KeyDown += (s, ev) =>
+            {
+                if (ev.KeyCode == Keys.Enter)
+                {
+                    container.Focus();
+                    ev.SuppressKeyPress = true;
+                }
+            };
+        }
+
         private void UpdateRowLightweight(int idx, Label timeTitle, Label modeSummary, Label accent, Label overlapLabel)
         {
             var segment = _segments[idx];
@@ -1002,7 +984,7 @@ namespace LumiShift
             bool isIndependent = segment.SyncMode == false;
             bool hasOverlap = HasOverlap(idx);
 
-            timeTitle.Text = $"时段 {idx + 1}    {segment.StartTime} → {segment.EndTime}" + (IsOvernight(segment) ? "  跨午夜" : "");
+            timeTitle.Text = Lang.F("时段 {0}    {1} → {2}", idx + 1, segment.StartTime, segment.EndTime) + (IsOvernight(segment) ? Lang.Get("  跨午夜") : "");
             timeTitle.ForeColor = hasOverlap ? Colors.Red : Colors.TextPrimary;
             modeSummary.Text = GetModeSummaryText(segment);
             modeSummary.ForeColor = isIndependent || isMultiDisplayPreset ? Colors.Brand : Colors.TextSecondary;
@@ -1016,7 +998,7 @@ namespace LumiShift
         {
             cb.Items.Clear();
             foreach (var p in PresetDefinitions.GetNames())
-                cb.Items.Add($"{p} · 统一方案");
+                cb.Items.Add(GetPresetDisplayName(p));
             foreach (var cp in _customPresets)
                 cb.Items.Add(GetPresetDisplayName(cp.Name));
             if (cb.Items.Contains(selected))
@@ -1029,7 +1011,8 @@ namespace LumiShift
 
         private string GetPresetDisplayName(string presetName)
         {
-            return IsMultiDisplayPreset(presetName) ? $"{presetName} · 多屏方案" : $"{presetName} · 统一方案";
+            string key = GetPresetNameFromDisplay(presetName);
+            return Lang.Get(key) + " · " + Lang.Get(IsMultiDisplayPreset(key) ? "多屏方案" : "统一方案");
         }
 
         private string GetPresetNameFromDisplay(string displayName)
@@ -1047,8 +1030,8 @@ namespace LumiShift
         private string GetModeSummaryText(ScheduleSegment segment)
         {
             if (segment.SyncMode == false)
-                return "临时逐台配置";
-            return IsMultiDisplayPreset(segment.PresetName) ? "使用多屏方案" : "使用统一方案";
+                return Lang.Get("临时逐台配置");
+            return IsMultiDisplayPreset(segment.PresetName) ? Lang.Get("使用多屏方案") : Lang.Get("使用统一方案");
         }
 
         private static void DisposeControlTree(Control control)

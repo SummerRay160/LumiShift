@@ -25,9 +25,10 @@ namespace LumiShift.Infrastructure
             _displayName = displayName;
         }
 
+        /// <summary>读取当前亮度。失败时返回 -1（无效标记），调用方不得将 -1 写入 UI 或设置。</summary>
         public int GetBrightness()
         {
-            if (_disposed) return _cachedBrightness >= 0 ? _cachedBrightness : 50;
+            if (_disposed) return _cachedBrightness >= 0 ? _cachedBrightness : -1;
             try
             {
                 using (var searcher = new ManagementObjectSearcher("root/WMI",
@@ -50,7 +51,7 @@ namespace LumiShift.Infrastructure
             catch
             {
             }
-            return _cachedBrightness >= 0 ? _cachedBrightness : 50;
+            return _cachedBrightness >= 0 ? _cachedBrightness : -1;
         }
 
         public void SetBrightness(int percent)
@@ -93,6 +94,7 @@ namespace LumiShift.Infrastructure
         private uint _physicalMonitorCount;
         private bool _disposed;
         private int _cachedBrightness = -1;
+        private readonly object _ddcLock = new object();
 
         public string DeviceId => _deviceId;
         public string DisplayName => _displayName;
@@ -217,30 +219,35 @@ namespace LumiShift.Infrastructure
             }
         }
 
+        /// <summary>读取当前亮度。失败时返回 -1（无效标记），调用方不得将 -1 写入 UI 或设置。</summary>
         public int GetBrightness()
         {
             if (_physicalMonitor == IntPtr.Zero || !IsSupported)
-                return 50;
+                return -1;
 
             try
             {
-                if (NativeMethods.GetMonitorBrightness(_physicalMonitor,
-                    out uint min, out uint current, out uint max))
+                // 读取可能来自后台刷新线程，与 UI 线程的 SetBrightness 串行化访问
+                lock (_ddcLock)
                 {
-                    if (max > min)
+                    if (NativeMethods.GetMonitorBrightness(_physicalMonitor,
+                        out uint min, out uint current, out uint max))
                     {
-                        int brightness = (int)Math.Round((double)(current - min) / (max - min) * 100);
-                        _cachedBrightness = brightness;
-                        return brightness;
+                        if (max > min)
+                        {
+                            int brightness = (int)Math.Round((double)(current - min) / (max - min) * 100);
+                            _cachedBrightness = brightness;
+                            return brightness;
+                        }
+                        _cachedBrightness = (int)current;
+                        return (int)current;
                     }
-                    _cachedBrightness = (int)current;
-                    return (int)current;
                 }
             }
             catch
             {
             }
-            return _cachedBrightness >= 0 ? _cachedBrightness : 50;
+            return _cachedBrightness >= 0 ? _cachedBrightness : -1;
         }
 
         public void SetBrightness(int percent)
@@ -252,12 +259,15 @@ namespace LumiShift.Infrastructure
 
             try
             {
-                if (NativeMethods.GetMonitorBrightness(_physicalMonitor,
-                    out uint min, out uint _, out uint max))
+                lock (_ddcLock)
                 {
-                    uint newValue = min + (uint)Math.Round((double)percent / 100.0 * (max - min));
-                    NativeMethods.SetMonitorBrightness(_physicalMonitor, newValue);
-                    _cachedBrightness = percent;
+                    if (NativeMethods.GetMonitorBrightness(_physicalMonitor,
+                        out uint min, out uint _, out uint max))
+                    {
+                        uint newValue = min + (uint)Math.Round((double)percent / 100.0 * (max - min));
+                        NativeMethods.SetMonitorBrightness(_physicalMonitor, newValue);
+                        _cachedBrightness = percent;
+                    }
                 }
             }
             catch

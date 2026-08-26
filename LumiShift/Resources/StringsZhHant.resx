@@ -1,0 +1,693 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <!-- 内置预设名 -->
+  <data name="标准" xml:space="preserve">
+    <value>標準</value>
+  </data>
+  <data name="防蓝光" xml:space="preserve">
+    <value>防藍光</value>
+  </data>
+  <data name="护眼模式" xml:space="preserve">
+    <value>護眼模式</value>
+  </data>
+  <data name="游戏模式" xml:space="preserve">
+    <value>遊戲模式</value>
+  </data>
+  <data name="多屏方案" xml:space="preserve">
+    <value>多螢幕方案</value>
+  </data>
+  <data name="统一方案" xml:space="preserve">
+    <value>統一方案</value>
+  </data>
+  <!-- BackgroundService：通知 -->
+  <data name="LumiShift 定时切换" xml:space="preserve">
+    <value>LumiShift 定時切換</value>
+  </data>
+  <data name="已切换到 {0} {1}" xml:space="preserve">
+    <value>已切換到 {0} {1}</value>
+  </data>
+  <data name="（{0}-{1}）" xml:space="preserve">
+    <value>（{0}-{1}）</value>
+  </data>
+  <data name="LumiShift 显示器变更" xml:space="preserve">
+    <value>LumiShift 顯示器變更</value>
+  </data>
+  <data name="显示器配置已变更，当前 {0} 台，移除 {1} 台。" xml:space="preserve">
+    <value>顯示器設定已變更，目前 {0} 台，移除 {1} 台。</value>
+  </data>
+  <data name="显示器配置已变更，当前 {0} 台。" xml:space="preserve">
+    <value>顯示器設定已變更，目前 {0} 台。</value>
+  </data>
+  <data name="LumiShift 已启动" xml:space="preserve">
+    <value>LumiShift 已啟動</value>
+  </data>
+  <data name="定时调度已开启" xml:space="preserve">
+    <value>定時排程已開啟</value>
+  </data>
+  <data name="定时调度未开启" xml:space="preserve">
+    <value>定時排程未開啟</value>
+  </data>
+  <data name="显示调节已启用" xml:space="preserve">
+    <value>顯示調節已啟用</value>
+  </data>
+  <data name="显示调节未启用" xml:space="preserve">
+    <value>顯示調節未啟用</value>
+  </data>
+  <data name="显示调节已关闭" xml:space="preserve">
+    <value>顯示調節已關閉</value>
+  </data>
+  <data name="{0}，{1}。" xml:space="preserve">
+    <value>{0}，{1}。</value>
+  </data>
+  <data name="LumiShift 状态切换" xml:space="preserve">
+    <value>LumiShift 狀態切換</value>
+  </data>
+  <data name="{0} 已应用到当前显示器" xml:space="preserve">
+    <value>{0} 已套用至目前顯示器</value>
+  </data>
+  <data name="已切换到 {0}" xml:space="preserve">
+    <value>已切換到 {0}</value>
+  </data>
+  <!-- BackgroundService：托盘菜单与 tooltip -->
+  <data name="Gamma 校正: 已启用" xml:space="preserve">
+    <value>Gamma 校正: 已啟用</value>
+  </data>
+  <data name="Gamma 校正: 已禁用" xml:space="preserve">
+    <value>Gamma 校正: 已停用</value>
+  </data>
+  <data name="快速切换预设" xml:space="preserve">
+    <value>快速切換預設</value>
+  </data>
+  <data name="恢复定时控制" xml:space="preserve">
+    <value>恢復定時控制</value>
+  </data>
+  <data name="全部显示器" xml:space="preserve">
+    <value>所有顯示器</value>
+  </data>
+  <data name="检查更新" xml:space="preserve">
+    <value>檢查更新</value>
+  </data>
+  <data name="显示主界面" xml:space="preserve">
+    <value>顯示主視窗</value>
+  </data>
+  <data name="关闭显示器" xml:space="preserve">
+    <value>關閉顯示器</value>
+  </data>
+  <data name="退出" xml:space="preserve">
+    <value>結束</value>
+  </data>
+  <data name="自定义" xml:space="preserve">
+    <value>自訂</value>
+  </data>
+  <data name="手动调整" xml:space="preserve">
+    <value>手動調整</value>
+  </data>
+  <data name="手动调整 ({0}恢复)" xml:space="preserve">
+    <value>手動調整（{0}恢復）</value>
+  </data>
+  <data name="LumiShift - 定时: {0}" xml:space="preserve">
+    <value>LumiShift - 定時: {0}</value>
+  </data>
+  <!-- ScheduleEvaluator -->
+  <data name="{0}分钟后" xml:space="preserve">
+    <value>{0} 分鐘後</value>
+  </data>
+  <data name="{0}小时{1}分钟后" xml:space="preserve">
+    <value>{0} 小時 {1} 分鐘後</value>
+  </data>
+  <!-- Form1：主界面 -->
+  <data name="所有显示器" xml:space="preserve">
+    <value>所有顯示器</value>
+  </data>
+  <data name="定时" xml:space="preserve">
+    <value>定時</value>
+  </data>
+  <data name="手动" xml:space="preserve">
+    <value>手動</value>
+  </data>
+  <data name=" · 单独设置/{0}" xml:space="preserve">
+    <value> · 個別設定/{0}</value>
+  </data>
+  <data name=" · 跟随全部" xml:space="preserve">
+    <value> · 跟隨全部</value>
+  </data>
+  <data name="手动调整已覆盖定时设置，下次时段切换时恢复定时" xml:space="preserve">
+    <value>手動調整已覆寫定時設定，下次時段切換時恢復定時</value>
+  </data>
+  <data name="手动调整已覆盖定时设置，{0}恢复定时" xml:space="preserve">
+    <value>手動調整已覆寫定時設定，{0}恢復定時</value>
+  </data>
+  <data name="定时运行中: 当前方案 &quot;{0}&quot;" xml:space="preserve">
+    <value>定時執行中: 目前方案 &quot;{0}&quot;</value>
+  </data>
+  <data name="偏冷" xml:space="preserve">
+    <value>偏冷</value>
+  </data>
+  <data name="微冷" xml:space="preserve">
+    <value>微冷</value>
+  </data>
+  <data name="适中" xml:space="preserve">
+    <value>適中</value>
+  </data>
+  <data name="微暖" xml:space="preserve">
+    <value>微暖</value>
+  </data>
+  <data name="偏暖" xml:space="preserve">
+    <value>偏暖</value>
+  </data>
+  <data name=" (不支持硬件亮度调节)" xml:space="preserve">
+    <value> (不支援硬體亮度調節)</value>
+  </data>
+  <data name="已启用 (R:{0} G:{1} B:{2})" xml:space="preserve">
+    <value>已啟用 (R:{0} G:{1} B:{2})</value>
+  </data>
+  <data name="未启用" xml:space="preserve">
+    <value>未啟用</value>
+  </data>
+  <data name="护眼模式已启用" xml:space="preserve">
+    <value>護眼模式已啟用</value>
+  </data>
+  <data name="护眼模式已关闭" xml:space="preserve">
+    <value>護眼模式已關閉</value>
+  </data>
+  <data name="未设置" xml:space="preserve">
+    <value>未設定</value>
+  </data>
+  <data name="文件不存在" xml:space="preserve">
+    <value>檔案不存在</value>
+  </data>
+  <data name="加载失败: {0}" xml:space="preserve">
+    <value>載入失敗: {0}</value>
+  </data>
+  <data name="图片文件|*.jpg;*.jpeg;*.png;*.bmp;*.gif|所有文件|*.*" xml:space="preserve">
+    <value>圖片檔案|*.jpg;*.jpeg;*.png;*.bmp;*.gif|所有檔案|*.*</value>
+  </data>
+  <data name="选择背景图片" xml:space="preserve">
+    <value>選擇背景圖片</value>
+  </data>
+  <data name="设置背景图片失败: {0}" xml:space="preserve">
+    <value>設定背景圖片失敗: {0}</value>
+  </data>
+  <data name="错误" xml:space="preserve">
+    <value>錯誤</value>
+  </data>
+  <data name="该名称与内置方案冲突，请更换名称。" xml:space="preserve">
+    <value>此名稱與內建方案衝突，請更換名稱。</value>
+  </data>
+  <data name="提示" xml:space="preserve">
+    <value>提示</value>
+  </data>
+  <data name="显示方案 &quot;{0}&quot; 已存在，是否覆盖？" xml:space="preserve">
+    <value>顯示方案 &quot;{0}&quot; 已存在，是否覆寫？</value>
+  </data>
+  <data name="确认覆盖" xml:space="preserve">
+    <value>確認覆寫</value>
+  </data>
+  <data name="已保存多屏方案 &quot;{0}&quot;" xml:space="preserve">
+    <value>已儲存多螢幕方案 &quot;{0}&quot;</value>
+  </data>
+  <data name="已保存统一方案 &quot;{0}&quot;" xml:space="preserve">
+    <value>已儲存統一方案 &quot;{0}&quot;</value>
+  </data>
+  <data name="确定要删除显示方案 &quot;{0}&quot; 吗？" xml:space="preserve">
+    <value>確定要刪除顯示方案 &quot;{0}&quot; 嗎？</value>
+  </data>
+  <data name="确认删除" xml:space="preserve">
+    <value>確認刪除</value>
+  </data>
+  <data name="已删除显示方案 &quot;{0}&quot;" xml:space="preserve">
+    <value>已刪除顯示方案 &quot;{0}&quot;</value>
+  </data>
+  <data name="切换到“全部显示器”会把当前效果作为统一方案应用，并清除定时带来的单屏设置。" xml:space="preserve">
+    <value>切換到「所有顯示器」會將目前效果套用為統一方案，並清除定時產生的單螢幕設定。</value>
+  </data>
+  <data name="切换到“全部显示器”会把当前效果作为统一方案应用，并清除各显示器的独立设置。" xml:space="preserve">
+    <value>切換到「所有顯示器」會將目前效果套用為統一方案，並清除各顯示器的獨立設定。</value>
+  </data>
+  <data name="是否继续？" xml:space="preserve">
+    <value>是否繼續？</value>
+  </data>
+  <data name="同步确认" xml:space="preserve">
+    <value>同步確認</value>
+  </data>
+  <data name="此显示器当前由定时切换单独控制。恢复跟随后，它会先使用统一方案；下次时段切换时会再次按调度应用。" xml:space="preserve">
+    <value>此顯示器目前由定時切換個別控制。恢復跟隨後，它會先使用統一方案；下次時段切換時會再次依排程套用。</value>
+  </data>
+  <data name="恢复跟随统一方案" xml:space="preserve">
+    <value>恢復跟隨統一方案</value>
+  </data>
+  <data name="已恢复跟随统一方案；下次时段切换会继续按调度应用" xml:space="preserve">
+    <value>已恢復跟隨統一方案；下次時段切換會繼續依排程套用</value>
+  </data>
+  <data name="已恢复跟随统一方案" xml:space="preserve">
+    <value>已恢復跟隨統一方案</value>
+  </data>
+  <!-- Form1.Designer：静态 UI -->
+  <data name="调光" xml:space="preserve">
+    <value>調光</value>
+  </data>
+  <data name="屏幕显示调节" xml:space="preserve">
+    <value>螢幕顯示調節</value>
+  </data>
+  <data name="先选择全部显示器或单台显示器，调好后可保存为显示方案。" xml:space="preserve">
+    <value>先選擇所有顯示器或單一顯示器，調整後可儲存為顯示方案。</value>
+  </data>
+  <data name="启用显示调节" xml:space="preserve">
+    <value>啟用顯示調節</value>
+  </data>
+  <data name="范围" xml:space="preserve">
+    <value>範圍</value>
+  </data>
+  <data name="跟随全部" xml:space="preserve">
+    <value>跟隨全部</value>
+  </data>
+  <data name="全部显示器适合统一调节；选择单台可做独立调整。" xml:space="preserve">
+    <value>所有顯示器適合統一調節；選擇單台可做獨立調整。</value>
+  </data>
+  <data name="显示方案" xml:space="preserve">
+    <value>顯示方案</value>
+  </data>
+  <data name="保存方案" xml:space="preserve">
+    <value>儲存方案</value>
+  </data>
+  <data name="删除" xml:space="preserve">
+    <value>刪除</value>
+  </data>
+  <data name="定时切换" xml:space="preserve">
+    <value>定時切換</value>
+  </data>
+  <data name="配置..." xml:space="preserve">
+    <value>設定...</value>
+  </data>
+  <data name="简洁模式" xml:space="preserve">
+    <value>精簡模式</value>
+  </data>
+  <data name="亮度" xml:space="preserve">
+    <value>亮度</value>
+  </data>
+  <data name="硬件亮度" xml:space="preserve">
+    <value>硬體亮度</value>
+  </data>
+  <data name="调节显示器硬件亮度；不支持的设备会自动隐藏。" xml:space="preserve">
+    <value>調節顯示器硬體亮度；不支援的裝置會自動隱藏。</value>
+  </data>
+  <data name="设置" xml:space="preserve">
+    <value>設定</value>
+  </data>
+  <data name="偏好设置" xml:space="preserve">
+    <value>偏好設定</value>
+  </data>
+  <data name="管理定时、通知、启动和界面选项，默认保持轻量运行。" xml:space="preserve">
+    <value>管理定時、通知、啟動和介面選項，預設保持輕量執行。</value>
+  </data>
+  <data name="自动定时切换" xml:space="preserve">
+    <value>自動定時切換</value>
+  </data>
+  <data name="配置定时..." xml:space="preserve">
+    <value>設定定時...</value>
+  </data>
+  <data name="到指定时间自动切换显示方案，适合白天、夜间和办公场景。" xml:space="preserve">
+    <value>到指定時間自動切換顯示方案，適合白天、夜間和辦公情境。</value>
+  </data>
+  <data name="轻量背景图" xml:space="preserve">
+    <value>輕量背景圖</value>
+  </data>
+  <data name="选择图片" xml:space="preserve">
+    <value>選擇圖片</value>
+  </data>
+  <data name="清除" xml:space="preserve">
+    <value>清除</value>
+  </data>
+  <data name="透明度" xml:space="preserve">
+    <value>透明度</value>
+  </data>
+  <data name="开机自启动" xml:space="preserve">
+    <value>開機自動啟動</value>
+  </data>
+  <data name="启动时最小化到托盘" xml:space="preserve">
+    <value>啟動時最小化到系統匣</value>
+  </data>
+  <data name="启动时自动检查更新" xml:space="preserve">
+    <value>啟動時自動檢查更新</value>
+  </data>
+  <data name="退出时还原系统显示效果" xml:space="preserve">
+    <value>結束時還原系統顯示效果</value>
+  </data>
+  <data name="Windows 通知提醒" xml:space="preserve">
+    <value>Windows 通知提醒</value>
+  </data>
+  <data name="软件启动时通知" xml:space="preserve">
+    <value>軟體啟動時通知</value>
+  </data>
+  <data name="定时切换方案时通知" xml:space="preserve">
+    <value>定時切換方案時通知</value>
+  </data>
+  <data name="显示调节开关变化时通知" xml:space="preserve">
+    <value>顯示調節開關變化時通知</value>
+  </data>
+  <data name="显示器变更时通知" xml:space="preserve">
+    <value>顯示器變更時通知</value>
+  </data>
+  <data name="护眼" xml:space="preserve">
+    <value>護眼</value>
+  </data>
+  <data name="为窗口背景添加柔和色调，减少长时间阅读的刺眼感。" xml:space="preserve">
+    <value>為視窗背景添加柔和色調，減少長時間閱讀的刺眼感。</value>
+  </data>
+  <data name="启用系统护眼色" xml:space="preserve">
+    <value>啟用系統護眼色</value>
+  </data>
+  <data name="护眼颜色" xml:space="preserve">
+    <value>護眼顏色</value>
+  </data>
+  <data name="绿豆沙色" xml:space="preserve">
+    <value>綠豆沙色</value>
+  </data>
+  <data name="纸页黄" xml:space="preserve">
+    <value>紙頁黃</value>
+  </data>
+  <data name="天空蓝" xml:space="preserve">
+    <value>天空藍</value>
+  </data>
+  <data name="自定义颜色" xml:space="preserve">
+    <value>自訂顏色</value>
+  </data>
+  <data name="恢复默认" xml:space="preserve">
+    <value>恢復預設</value>
+  </data>
+  <!-- ScheduleConfigForm：定时调度配置 -->
+  <data name="定时调度配置" xml:space="preserve">
+    <value>定時排程設定</value>
+  </data>
+  <data name="设置一天中什么时候切换到哪个显示方案；多屏方案会自动应用每台显示器的设置。" xml:space="preserve">
+    <value>設定一天中什麼時候切換到哪個顯示方案；多螢幕方案會自動套用每台顯示器的設定。</value>
+  </data>
+  <data name="设置一天中什么时候切换到哪个显示方案；时段不可重叠。" xml:space="preserve">
+    <value>設定一天中什麼時候切換到哪個顯示方案；時段不可重疊。</value>
+  </data>
+  <data name="时段列表" xml:space="preserve">
+    <value>時段列表</value>
+  </data>
+  <data name="+ 添加时段" xml:space="preserve">
+    <value>+ 新增時段</value>
+  </data>
+  <data name="确定" xml:space="preserve">
+    <value>確定</value>
+  </data>
+  <data name="取消" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="最多支持 {0} 个时段。" xml:space="preserve">
+    <value>最多支援 {0} 個時段。</value>
+  </data>
+  <data name="时段 {0} 的时间格式无效（{1} → {2}），请使用 HH:mm 格式。" xml:space="preserve">
+    <value>時段 {0} 的時間格式無效（{1} → {2}），請使用 HH:mm 格式。</value>
+  </data>
+  <data name="无效时段" xml:space="preserve">
+    <value>無效時段</value>
+  </data>
+  <data name="时段 {0}（{1} → {2}）的起止时间相同，请修正。" xml:space="preserve">
+    <value>時段 {0}（{1} → {2}）的起訖時間相同，請修正。</value>
+  </data>
+  <data name="时段 {0} 未选择显示方案，请选择后再保存。" xml:space="preserve">
+    <value>時段 {0} 未選擇顯示方案，請選擇後再儲存。</value>
+  </data>
+  <data name="时段 {0}（{1} → {2}）与时段 {3}（{4} → {5}）存在重叠，请调整。" xml:space="preserve">
+    <value>時段 {0}（{1} → {2}）與時段 {3}（{4} → {5}）存在重疊，請調整。</value>
+  </data>
+  <data name="时段重叠" xml:space="preserve">
+    <value>時段重疊</value>
+  </data>
+  <data name="独立多屏 {0} 个" xml:space="preserve">
+    <value>獨立多螢幕 {0} 個</value>
+  </data>
+  <data name="单显示器模式" xml:space="preserve">
+    <value>單顯示器模式</value>
+  </data>
+  <data name="已配置 {0}/{1} 个时段  {2}" xml:space="preserve">
+    <value>已設定 {0}/{1} 個時段  {2}</value>
+  </data>
+  <data name="暂无时段，点击下方“添加时段”开始配置。" xml:space="preserve">
+    <value>目前沒有時段，點擊下方「新增時段」開始設定。</value>
+  </data>
+  <data name="逐台" xml:space="preserve">
+    <value>逐台</value>
+  </data>
+  <data name="多屏" xml:space="preserve">
+    <value>多螢幕</value>
+  </data>
+  <data name="统一" xml:space="preserve">
+    <value>統一</value>
+  </data>
+  <data name="确定删除此时段（{0} - {1}）？" xml:space="preserve">
+    <value>確定刪除此時段（{0} - {1}）？</value>
+  </data>
+  <data name="时段 {0}    {1} → {2}" xml:space="preserve">
+    <value>時段 {0}    {1} → {2}</value>
+  </data>
+  <data name="  跨午夜" xml:space="preserve">
+    <value>  跨午夜</value>
+  </data>
+  <data name="此时段与其他时段重叠，请调整时间。" xml:space="preserve">
+    <value>此時段與其他時段重疊，請調整時間。</value>
+  </data>
+  <data name="方案" xml:space="preserve">
+    <value>方案</value>
+  </data>
+  <data name="临时逐台配置：仅此时段为每台显示器选择方案" xml:space="preserve">
+    <value>臨時逐台設定：僅此時段為每台顯示器選擇方案</value>
+  </data>
+  <data name="方案模式：此时段切换到一个显示方案" xml:space="preserve">
+    <value>方案模式：此時段切換到一個顯示方案</value>
+  </data>
+  <data name="切换到方案模式将清除此时段逐台配置，之后可选择统一方案或多屏方案。是否继续？" xml:space="preserve">
+    <value>切換到方案模式將清除此時段逐台設定，之後可選擇統一方案或多螢幕方案。是否繼續？</value>
+  </data>
+  <data name="确认" xml:space="preserve">
+    <value>確認</value>
+  </data>
+  <data name="所有屏幕" xml:space="preserve">
+    <value>所有螢幕</value>
+  </data>
+  <data name="临时逐台配置" xml:space="preserve">
+    <value>臨時逐台設定</value>
+  </data>
+  <data name="使用多屏方案" xml:space="preserve">
+    <value>使用多螢幕方案</value>
+  </data>
+  <data name="使用统一方案" xml:space="preserve">
+    <value>使用統一方案</value>
+  </data>
+  <!-- UpdateDialog：更新对话框 -->
+  <data name="LumiShift 更新" xml:space="preserve">
+    <value>LumiShift 更新</value>
+  </data>
+  <data name="发现新版本 {0}" xml:space="preserve">
+    <value>發現新版本 {0}</value>
+  </data>
+  <data name="下载更新" xml:space="preserve">
+    <value>下載更新</value>
+  </data>
+  <data name="稍后提醒" xml:space="preserve">
+    <value>稍後提醒</value>
+  </data>
+  <data name="跳过版本" xml:space="preserve">
+    <value>略過此版本</value>
+  </data>
+  <!-- UpdateService：更新检查 -->
+  <data name="未找到可用更新。" xml:space="preserve">
+    <value>找不到可用的更新。</value>
+  </data>
+  <data name="当前已是最新版本。" xml:space="preserve">
+    <value>目前已是最新版本。</value>
+  </data>
+  <data name="检查更新超时，请检查网络连接后重试。" xml:space="preserve">
+    <value>檢查更新逾時，請檢查網路連線後重試。</value>
+  </data>
+  <data name="检查更新失败，请稍后重试。" xml:space="preserve">
+    <value>檢查更新失敗，請稍後重試。</value>
+  </data>
+  <data name="检查更新失败：API 访问频率限制，请稍后重试。" xml:space="preserve">
+    <value>檢查更新失敗：API 存取頻率限制，請稍後重試。</value>
+  </data>
+  <data name="检查更新失败：API 认证失败。" xml:space="preserve">
+    <value>檢查更新失敗：API 驗證失敗。</value>
+  </data>
+  <data name="检查更新失败：GitHub 服务器暂时不可用，请稍后重试。" xml:space="preserve">
+    <value>檢查更新失敗：GitHub 伺服器暫時無法使用，請稍後重試。</value>
+  </data>
+  <data name="检查更新失败：安全连接失败，请检查系统时间或网络环境。" xml:space="preserve">
+    <value>檢查更新失敗：安全連線失敗，請檢查系統時間或網路環境。</value>
+  </data>
+  <data name="检查更新失败：代理服务器验证失败，请检查代理设置。" xml:space="preserve">
+    <value>檢查更新失敗：Proxy 驗證失敗，請檢查 Proxy 設定。</value>
+  </data>
+  <data name="检查更新失败：服务器拒绝了请求（403），请检查代理或网络设置后重试。" xml:space="preserve">
+    <value>檢查更新失敗：伺服器拒絕了請求（403），請檢查 Proxy 或網路設定後重試。</value>
+  </data>
+  <data name="检查更新失败：连接超时，请检查网络连接后重试。" xml:space="preserve">
+    <value>檢查更新失敗：連線逾時，請檢查網路連線後重試。</value>
+  </data>
+  <data name="检查更新失败：网络请求失败，请检查网络连接后重试。" xml:space="preserve">
+    <value>檢查更新失敗：網路請求失敗，請檢查網路連線後重試。</value>
+  </data>
+  <data name="检查更新失败：未找到更新信息。" xml:space="preserve">
+    <value>檢查更新失敗：找不到更新資訊。</value>
+  </data>
+  <data name="检查更新失败：无法解析服务器地址，请检查网络连接。" xml:space="preserve">
+    <value>檢查更新失敗：無法解析伺服器位址，請檢查網路連線。</value>
+  </data>
+  <data name="检查更新失败：无法连接到服务器，请检查网络连接。" xml:space="preserve">
+    <value>檢查更新失敗：無法連線到伺服器，請檢查網路連線。</value>
+  </data>
+  <data name="服务器返回了无效的响应数据，请检查网络环境后重试。" xml:space="preserve">
+    <value>伺服器傳回了無效的回應資料，請檢查網路環境後重試。</value>
+  </data>
+  <!-- SaveDisplaySchemeDialog：保存方案对话框 -->
+  <data name="保存显示方案" xml:space="preserve">
+    <value>儲存顯示方案</value>
+  </data>
+  <data name="显示方案用于手动应用，也可以被定时调度自动切换。" xml:space="preserve">
+    <value>顯示方案可用於手動套用，也可以被定時排程自動切換。</value>
+  </data>
+  <data name="方案名称" xml:space="preserve">
+    <value>方案名稱</value>
+  </data>
+  <data name="我的多屏方案" xml:space="preserve">
+    <value>我的多螢幕方案</value>
+  </data>
+  <data name="我的统一方案" xml:space="preserve">
+    <value>我的統一方案</value>
+  </data>
+  <data name="所有显示器使用当前这套显示效果，适合大多数场景。" xml:space="preserve">
+    <value>所有顯示器使用目前這套顯示效果，適合大多數情境。</value>
+  </data>
+  <data name="保存每台显示器当前的独立设置，适合双屏或多屏工作流。" xml:space="preserve">
+    <value>儲存每台顯示器目前的獨立設定，適合雙螢幕或多螢幕工作流程。</value>
+  </data>
+  <data name="当前没有单独设置的显示器，请先为单台显示器设置独立效果。" xml:space="preserve">
+    <value>目前沒有個別設定的顯示器，請先為單台顯示器設定獨立效果。</value>
+  </data>
+  <data name="保存" xml:space="preserve">
+    <value>儲存</value>
+  </data>
+  <data name="请输入一个容易识别的方案名称。" xml:space="preserve">
+    <value>請輸入一個容易辨識的方案名稱。</value>
+  </data>
+  <!-- ScheduleConfigForm -->
+  <data name="定时调度" xml:space="preserve">
+    <value>定時排程</value>
+  </data>
+  <!-- 设置：界面语言 -->
+  <data name="界面语言" xml:space="preserve">
+    <value>介面語言</value>
+  </data>
+  <data name="跟随系统" xml:space="preserve">
+    <value>跟隨系統</value>
+  </data>
+  <data name="语言已保存，重启 LumiShift 后生效。请手动重启应用。" xml:space="preserve">
+    <value>語言已儲存，重新啟動 LumiShift 後生效。請手動重新啟動。</value>
+  </data>
+  <data name="重启确认" xml:space="preserve">
+    <value>重新啟動確認</value>
+  </data>
+  <!-- GammaController：状态消息 -->
+  <data name="Gamma: R×{0} G×{1} B×{2} γ{3} 亮度{4}%" xml:space="preserve">
+    <value>Gamma: R×{0} G×{1} B×{2} γ{3} 亮度{4}%</value>
+  </data>
+  <data name="Gamma: 按显示器独立应用" xml:space="preserve">
+    <value>Gamma: 按顯示器獨立套用</value>
+  </data>
+  <data name="Gamma: 部分显示器应用失败" xml:space="preserve">
+    <value>Gamma: 部分顯示器套用失敗</value>
+  </data>
+  <data name="Gamma 出错: {0}" xml:space="preserve">
+    <value>Gamma 發生錯誤: {0}</value>
+  </data>
+  <!-- MonitorManager：显示器名称 -->
+  <data name="内置显示器" xml:space="preserve">
+    <value>內建顯示器</value>
+  </data>
+  <data name="内置显示器 (主)" xml:space="preserve">
+    <value>內建顯示器 (主)</value>
+  </data>
+  <data name="外接显示器" xml:space="preserve">
+    <value>外接顯示器</value>
+  </data>
+  <data name="外接显示器 #{0} ({1})" xml:space="preserve">
+    <value>外接顯示器 #{0} ({1})</value>
+  </data>
+  <data name="主" xml:space="preserve">
+    <value>主</value>
+  </data>
+  <data name="左侧" xml:space="preserve">
+    <value>左側</value>
+  </data>
+  <data name="右侧" xml:space="preserve">
+    <value>右側</value>
+  </data>
+  <data name="上方" xml:space="preserve">
+    <value>上方</value>
+  </data>
+  <data name="下方" xml:space="preserve">
+    <value>下方</value>
+  </data>
+</root>

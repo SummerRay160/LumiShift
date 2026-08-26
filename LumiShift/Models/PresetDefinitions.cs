@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using LumiShift.Services;
 
 namespace LumiShift.Models
 {
@@ -49,46 +50,18 @@ namespace LumiShift.Models
             return BuiltIns.FirstOrDefault(p => p.Name == name);
         }
 
-        public static int IndexOf(string name)
+        /// <summary>把（可能已翻译的）显示名还原为内置预设的数据键；非内置名原样返回。</summary>
+        // ponytail: 用户自建预设若恰好与内置显示名同名会被误判为内置，概率极低，不处理
+        public static string FromDisplayName(string displayName)
         {
-            for (int i = 0; i < BuiltIns.Length; i++)
-            {
-                if (BuiltIns[i].Name == name)
-                    return i;
-            }
-            return -1;
+            foreach (var p in BuiltIns)
+                if (Lang.Get(p.Name) == displayName)
+                    return p.Name;
+            return displayName;
         }
 
-        public static bool TryResolveParams(string presetName, List<GammaPreset> customPresets,
-            out double r, out double g, out double b, out double gv, out int mb, out bool en)
-        {
-            r = 1.0; g = 1.0; b = 1.0; gv = 1.0; mb = 100; en = true;
 
-            var builtIn = GetByName(presetName);
-            if (builtIn != null)
-            {
-                r = builtIn.RScale;
-                g = builtIn.GScale;
-                b = builtIn.BScale;
-                gv = builtIn.GammaValue;
-                mb = builtIn.MasterBrightness;
-                en = builtIn.Enabled;
-                return true;
-            }
 
-            var custom = customPresets?.FirstOrDefault(cp => cp.Name == presetName);
-            if (custom != null)
-            {
-                r = custom.RScale;
-                g = custom.GScale;
-                b = custom.BScale;
-                gv = custom.GammaValue;
-                mb = custom.MasterBrightness;
-                en = custom.Enabled;
-                return true;
-            }
 
-            return false;
-        }
     }
 }

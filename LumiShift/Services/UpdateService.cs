@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 
 namespace LumiShift.Services
 {
@@ -119,7 +120,7 @@ namespace LumiShift.Services
                 if (result.blockedReason != null)
                 {
                     if (!silent)
-                        System.Windows.Forms.MessageBox.Show("未找到可用更新。", "LumiShift",
+                        System.Windows.Forms.MessageBox.Show(Lang.Get("未找到可用更新。"), "LumiShift",
                             System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
                     return null;
                 }
@@ -127,7 +128,7 @@ namespace LumiShift.Services
                 if (string.IsNullOrEmpty(result.version))
                 {
                     if (!silent)
-                        System.Windows.Forms.MessageBox.Show("当前已是最新版本。", "LumiShift",
+                        System.Windows.Forms.MessageBox.Show(Lang.Get("当前已是最新版本。"), "LumiShift",
                             System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
                     return null;
                 }
@@ -136,7 +137,7 @@ namespace LumiShift.Services
                 if (!Version.TryParse(result.version, out var remoteVersion))
                 {
                     if (!silent)
-                        System.Windows.Forms.MessageBox.Show("当前已是最新版本。", "LumiShift",
+                        System.Windows.Forms.MessageBox.Show(Lang.Get("当前已是最新版本。"), "LumiShift",
                             System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
                     return null;
                 }
@@ -144,7 +145,7 @@ namespace LumiShift.Services
                 if (remoteVersion <= currentVersion)
                 {
                     if (!silent)
-                        System.Windows.Forms.MessageBox.Show("当前已是最新版本。", "LumiShift",
+                        System.Windows.Forms.MessageBox.Show(Lang.Get("当前已是最新版本。"), "LumiShift",
                             System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
                     return null;
                 }
@@ -176,7 +177,7 @@ namespace LumiShift.Services
                     throw;
                 if (!silent)
                     System.Windows.Forms.MessageBox.Show(
-                        "检查更新超时，请检查网络连接后重试。",
+                        Lang.Get("检查更新超时，请检查网络连接后重试。"),
                         "LumiShift",
                         System.Windows.Forms.MessageBoxButtons.OK,
                         System.Windows.Forms.MessageBoxIcon.Warning);
@@ -197,7 +198,7 @@ namespace LumiShift.Services
             {
                 if (!silent)
                     System.Windows.Forms.MessageBox.Show(
-                        "检查更新失败，请稍后重试。",
+                        Lang.Get("检查更新失败，请稍后重试。"),
                         "LumiShift",
                         System.Windows.Forms.MessageBoxButtons.OK,
                         System.Windows.Forms.MessageBoxIcon.Warning);
@@ -229,7 +230,7 @@ namespace LumiShift.Services
             // 快速验证是否为 GitHub API 的有效 JSON 响应
             if (string.IsNullOrEmpty(body) || !body.Contains("\"tag_name\""))
             {
-                throw new HttpRequestException("服务器返回了无效的响应数据，请检查网络环境后重试。");
+                throw new HttpRequestException(Lang.Get("服务器返回了无效的响应数据，请检查网络环境后重试。"));
             }
 
             return body;
@@ -244,8 +245,6 @@ namespace LumiShift.Services
 
         private static string GetHttpErrorMessage(HttpRequestException ex)
         {
-            string baseMessage = "检查更新失败";
-
             string msg = ex.Message ?? "";
             if (ex.InnerException != null)
                 msg += " " + (ex.InnerException.Message ?? "");
@@ -254,28 +253,28 @@ namespace LumiShift.Services
             if (lowerMsg.Contains("403"))
             {
                 if (lowerMsg.Contains("rate limit") || lowerMsg.Contains("api rate"))
-                    return $"{baseMessage}：API 访问频率限制，请稍后重试。";
+                    return Lang.Get("检查更新失败：API 访问频率限制，请稍后重试。");
                 if (lowerMsg.Contains("proxy") || lowerMsg.Contains("407") || lowerMsg.Contains("require"))
-                    return $"{baseMessage}：代理服务器验证失败，请检查代理设置。";
-                return $"{baseMessage}：服务器拒绝了请求（403），请检查代理或网络设置后重试。";
+                    return Lang.Get("检查更新失败：代理服务器验证失败，请检查代理设置。");
+                return Lang.Get("检查更新失败：服务器拒绝了请求（403），请检查代理或网络设置后重试。");
             }
             if (msg.Contains("404"))
-                return $"{baseMessage}：未找到更新信息。";
+                return Lang.Get("检查更新失败：未找到更新信息。");
             if (msg.Contains("500") || msg.Contains("502") || msg.Contains("503"))
-                return $"{baseMessage}：GitHub 服务器暂时不可用，请稍后重试。";
+                return Lang.Get("检查更新失败：GitHub 服务器暂时不可用，请稍后重试。");
             if (msg.Contains("401"))
-                return $"{baseMessage}：API 认证失败。";
+                return Lang.Get("检查更新失败：API 认证失败。");
 
             if (lowerMsg.Contains("dns") || lowerMsg.Contains("resolve") || lowerMsg.Contains("name"))
-                return $"{baseMessage}：无法解析服务器地址，请检查网络连接。";
+                return Lang.Get("检查更新失败：无法解析服务器地址，请检查网络连接。");
             if (lowerMsg.Contains("refused") || lowerMsg.Contains("unreachable"))
-                return $"{baseMessage}：无法连接到服务器，请检查网络连接。";
+                return Lang.Get("检查更新失败：无法连接到服务器，请检查网络连接。");
             if (lowerMsg.Contains("tls") || lowerMsg.Contains("ssl") || lowerMsg.Contains("secure"))
-                return $"{baseMessage}：安全连接失败，请检查系统时间或网络环境。";
+                return Lang.Get("检查更新失败：安全连接失败，请检查系统时间或网络环境。");
             if (lowerMsg.Contains("timeout") || lowerMsg.Contains("timed out"))
-                return $"{baseMessage}：连接超时，请检查网络连接后重试。";
+                return Lang.Get("检查更新失败：连接超时，请检查网络连接后重试。");
 
-            return $"{baseMessage}：网络请求失败，请检查网络连接后重试。";
+            return Lang.Get("检查更新失败：网络请求失败，请检查网络连接后重试。");
         }
 
         private static string StripMarkdown(string text)
@@ -304,71 +303,50 @@ namespace LumiShift.Services
             return text.Trim();
         }
 
+        private class GitHubReleaseAsset
+        {
+            public string name { get; set; }
+            public string browser_download_url { get; set; }
+        }
+
+        private class GitHubReleaseInfo
+        {
+            public string tag_name { get; set; }
+            public string name { get; set; }
+            public string body { get; set; }
+            public bool prerelease { get; set; }
+            public bool draft { get; set; }
+            public List<GitHubReleaseAsset> assets { get; set; }
+        }
+
         private static (string version, string name, string body, string downloadUrl, string blockedReason) ParseGitHubRelease(string json)
         {
-            using (var reader = new LumiShift.Infrastructure.LightweightJsonReader(json))
+            var info = new JavaScriptSerializer().Deserialize<GitHubReleaseInfo>(json);
+            if (info == null) return (null, null, null, null, null);
+
+            if (info.draft) return (null, null, null, null, "draft");
+            if (info.prerelease) return (null, null, null, null, "prerelease");
+
+            string tagName = info.tag_name?.TrimStart('v');
+            if (string.IsNullOrEmpty(tagName)) return (null, null, null, null, null);
+
+            string downloadUrl = null;
+            if (info.assets != null)
             {
-                var root = reader.ReadObject();
-                if (root == null) return (null, null, null, null, null);
-
-                string tagName = GetString(root, "tag_name")?.TrimStart('v');
-                string name = GetString(root, "name");
-                string body = GetString(root, "body");
-                bool prerelease = GetBool(root, "prerelease");
-                bool draft = GetBool(root, "draft");
-
-                if (draft)
-                    return (null, null, null, null, "draft");
-                if (prerelease)
-                    return (null, null, null, null, "prerelease");
-                if (string.IsNullOrEmpty(tagName))
-                    return (null, null, null, null, null);
-
-                string downloadUrl = null;
-
-                if (root.TryGetValue("assets", out var assetsObj) && assetsObj is List<object>)
+                foreach (var asset in info.assets)
                 {
-                    var assets = (List<object>)assetsObj;
-                    foreach (var assetObj in assets)
+                    if (asset.name != null && asset.name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (assetObj is Dictionary<string, object> asset)
-                        {
-                            string assetNameStr = GetString(asset, "name");
-                            if (assetNameStr != null && assetNameStr.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                            {
-                                downloadUrl = GetString(asset, "browser_download_url");
-                                break;
-                            }
-                        }
+                        downloadUrl = asset.browser_download_url;
+                        break;
                     }
                 }
-
-                if (downloadUrl == null)
-                    return (null, null, null, null, null);
-
-                return (tagName, name, body, downloadUrl, null);
             }
+            if (downloadUrl == null) return (null, null, null, null, null);
+
+            return (tagName, info.name, info.body, downloadUrl, null);
         }
 
-        private static string GetString(Dictionary<string, object> dict, string key)
-        {
-            if (dict.TryGetValue(key, out var val))
-            {
-                if (val is string s) return s;
-                return val?.ToString();
-            }
-            return null;
-        }
-
-        private static bool GetBool(Dictionary<string, object> dict, string key)
-        {
-            if (dict.TryGetValue(key, out var val))
-            {
-                if (val is bool b) return b;
-                if (val is string s && bool.TryParse(s, out var sb)) return sb;
-            }
-            return false;
-        }
 
         #endregion
     }

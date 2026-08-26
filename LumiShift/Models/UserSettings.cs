@@ -36,6 +36,7 @@ namespace LumiShift.Models
 
     public class UserSettings
     {
+        public int _version { get; set; }
         public bool StartWithWindows { get; set; }
         public bool StartMinimized { get; set; }
 
@@ -73,6 +74,8 @@ namespace LumiShift.Models
         public bool AutoCheckUpdates { get; set; } = true;
 
         public bool RestoreGammaOnExit { get; set; } = true;
+        public string Language { get; set; } = "";
+
         public bool NotificationsEnabled { get; set; } = true;
         public bool NotifyStartup { get; set; } = true;
         public bool NotifyScheduleSwitch { get; set; } = true;

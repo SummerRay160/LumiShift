@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Management;
 using System.Windows.Forms;
+using LumiShift.Services;
 
 namespace LumiShift.Infrastructure
 {
@@ -126,7 +127,7 @@ namespace LumiShift.Infrastructure
         {
             if (isBuiltIn)
             {
-                return screen.Primary ? "内置显示器 (主)" : "内置显示器";
+                return screen.Primary ? Lang.Get("内置显示器 (主)") : Lang.Get("内置显示器");
             }
 
             string position = InferScreenPosition(screen, allScreens);
@@ -140,20 +141,20 @@ namespace LumiShift.Infrastructure
 
             if (!string.IsNullOrWhiteSpace(vendorName))
             {
-                return $"{vendorName} 外接显示器 ({position})";
+                return $"{vendorName} {Lang.Get("外接显示器")} ({position})";
             }
 
             int index = Array.IndexOf(allScreens, screen) + 1;
-            return $"外接显示器 #{index} ({position})";
+            return Lang.F("外接显示器 #{0} ({1})", index, position);
         }
 
         private static string InferScreenPosition(Screen screen, Screen[] allScreens)
         {
             if (screen.Primary)
-                return "主";
+                return Lang.Get("主");
 
             if (allScreens.Length <= 1)
-                return "主";
+                return Lang.Get("主");
 
             int centerX = screen.Bounds.X + screen.Bounds.Width / 2;
             int primaryCenterX = 0;
@@ -183,11 +184,11 @@ namespace LumiShift.Infrastructure
 
             if (leftRight)
             {
-                return centerX < primaryCenterX ? "左侧" : "右侧";
+                return centerX < primaryCenterX ? Lang.Get("左侧") : Lang.Get("右侧");
             }
             else
             {
-                return centerY < primaryCenterY ? "上方" : "下方";
+                return centerY < primaryCenterY ? Lang.Get("上方") : Lang.Get("下方");
             }
         }
 
@@ -668,8 +669,15 @@ namespace LumiShift.Infrastructure
         {
             try
             {
+                // 必须从 WmiMonitorBrightness（而非 BasicDisplayParams）枚举实例名：
+                // 1. 只有真正支持 WMI 亮度的显示器才会出现在该类中，其余自然回退 DDC
+                // 2. 返回的实例名与 Get/SetBrightness 查询的类一致，保证匹配
+                // deviceId 可能是 "MONITOR\CMM1234"（EDID 派生）等形态，
+                // 而 WMI 实例名形如 "DISPLAY\CMM1234\4&xxxx&0&UID4321_0"，需按硬件 ID 段匹配
+                string hardwareId = ExtractHardwareId(deviceId);
+
                 using (var searcher = new ManagementObjectSearcher("root\\WMI",
-                    "SELECT * FROM WmiMonitorBasicDisplayParams"))
+                    "SELECT * FROM WmiMonitorBrightness"))
                 {
                     using (var collection = searcher.Get())
                     {
@@ -678,9 +686,16 @@ namespace LumiShift.Infrastructure
                             try
                             {
                                 string instanceName = mo["InstanceName"]?.ToString();
-                                if (!string.IsNullOrEmpty(instanceName) && instanceName.StartsWith(deviceId))
-                                {
+                                if (string.IsNullOrEmpty(instanceName)) continue;
+
+                                if (instanceName.StartsWith(deviceId, StringComparison.OrdinalIgnoreCase))
                                     return instanceName;
+
+                                if (hardwareId != null)
+                                {
+                                    string instanceHwId = ExtractHardwareId(instanceName);
+                                    if (string.Equals(instanceHwId, hardwareId, StringComparison.OrdinalIgnoreCase))
+                                        return instanceName;
                                 }
                             }
                             finally
@@ -697,33 +712,26 @@ namespace LumiShift.Infrastructure
             return null;
         }
 
-        public MonitorInfo GetMonitorByDeviceId(string deviceId)
+        /// <summary>
+        /// 从 "MONITOR\CMM1234"、"DISPLAY\CMM1234\4&..." 等形态中提取硬件 ID 段（如 "CMM1234"），
+        /// 用于跨命名形态匹配同一台显示器。
+        /// </summary>
+        public static string ExtractHardwareId(string idOrInstance)
         {
-            return _monitors.FirstOrDefault(m =>
-                m.DeviceId.Equals(deviceId, StringComparison.OrdinalIgnoreCase));
+            if (string.IsNullOrEmpty(idOrInstance)) return null;
+
+            int first = idOrInstance.IndexOf('\\');
+            if (first < 0) return idOrInstance;
+
+            int second = idOrInstance.IndexOf('\\', first + 1);
+            string segment = second > first
+                ? idOrInstance.Substring(first + 1, second - first - 1)
+                : idOrInstance.Substring(first + 1);
+
+            return string.IsNullOrEmpty(segment) ? null : segment;
         }
 
-        public void ApplyBrightness(string deviceId, int brightness)
-        {
-            var monitor = GetMonitorByDeviceId(deviceId);
-            if (monitor?.Controller != null && monitor.Controller.IsSupported)
-            {
-                monitor.Controller.SetBrightness(brightness);
-            }
-        }
 
-        public Dictionary<string, int> GetCurrentBrightnessValues()
-        {
-            var result = new Dictionary<string, int>();
-            foreach (var monitor in _monitors)
-            {
-                if (monitor.Controller != null && monitor.Controller.IsSupported)
-                {
-                    result[monitor.DeviceId] = monitor.Controller.GetBrightness();
-                }
-            }
-            return result;
-        }
 
         internal void OnMonitorsChanged()
         {

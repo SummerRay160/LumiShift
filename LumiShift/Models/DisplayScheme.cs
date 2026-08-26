@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using LumiShift.Services;
 
 namespace LumiShift.Models
 {
@@ -16,7 +17,6 @@ namespace LumiShift.Models
         public Dictionary<string, GammaConfig> DisplayConfigs { get; set; }
         public bool IsBuiltIn { get; set; }
 
-        public string KindText => Kind == DisplaySchemeKind.MultiDisplay ? "多屏方案" : "统一方案";
-        public string DisplayName => $"{Name} · {KindText}";
+        public string DisplayName => $"{Lang.Get(Name)} · {(Kind == DisplaySchemeKind.MultiDisplay ? Lang.Get("多屏方案") : Lang.Get("统一方案"))}";
     }
 }

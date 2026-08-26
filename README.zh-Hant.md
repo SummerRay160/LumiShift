@@ -136,6 +136,7 @@ LumiShift/
 ├── Controls/                       # 自訂控制項
 │   ├── FlatTabControl.cs           # 扁平化索引標籤
 │   ├── DateTimePickerEx.cs         # DateTimePicker 擴充（Enter 鍵失焦）
+│   ├── BlurComboBox.cs            # ComboBox 擴充（下拉關閉後失焦，避免滾輪誤改）
 │   ├── FocusablePanel.cs           # 可取得焦點的 Panel（焦點吸收容器）
 │   ├── GdiCache.cs                 # GDI 物件快取池
 │   ├── ModernSlider.cs             # 現代風格滑桿
@@ -145,12 +146,9 @@ LumiShift/
 │   ├── GammaController.cs          # Gamma 校正 (SetDeviceGammaRamp)
 │   ├── GcHelper.cs                 # GC 回收與工作集修剪
 │   ├── EyeProtectionService.cs     # 護眼模式 (SetSysColors + 登錄檔)
-│   ├── NightLightController.cs     # Windows 夜間模式控制
 │   ├── MonitorManager.cs           # 顯示器管理 (EDID/熱插拔/位置推斷)
 │   ├── NativeMethods.cs            # Win32 API 宣告
 │   ├── ScheduleEvaluator.cs        # 定時排程時段評估與雜湊快取
-│   ├── WeakEvent.cs                # 弱事件模式實作
-│   ├── LightweightJson.cs          # 輕量級 JSON 解析器
 │   └── IBrightnessController.cs    # 亮度控制介面
 ├── Models/
 │   ├── DisplayScheme.cs            # 顯示方案模型（統一/多屏）
@@ -191,7 +189,6 @@ LumiShift/
 | **亮度控制** | WMI + DDC/CI (`dxva2.dll`) |
 | **Gamma 校正** | GDI32 `SetDeviceGammaRamp` |
 | **護眼模式** | User32 `SetSysColors` + 登錄檔 |
-| **夜間模式** | 登錄檔 `CloudStore` 讀寫 |
 | **顯示器管理** | EDID 解析 + Win32 API |
 | **自動更新** | GitHub Releases API |
 | **CI/CD** | GitHub Actions（自動編譯 + Release） |

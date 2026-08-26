@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using LumiShift.Services;
 
 namespace LumiShift.Infrastructure
 {
@@ -26,11 +27,6 @@ namespace LumiShift.Infrastructure
     public class GammaController : IDisposable
     {
         private bool _disposed;
-
-        private const int MaxCacheSize = 6;
-        private readonly Dictionary<int, RAMP> _rampCache = new Dictionary<int, RAMP>();
-        private readonly LinkedList<int> _cacheKeyOrder = new LinkedList<int>();
-        private readonly Dictionary<int, LinkedListNode<int>> _keyToNode = new Dictionary<int, LinkedListNode<int>>();
 
         private static readonly RAMP DefaultRamp;
         private readonly object _rampLock = new object();
@@ -123,7 +119,7 @@ namespace LumiShift.Infrastructure
                 RAMP ramp;
                 lock (_rampLock)
                 {
-                    ramp = GetOrBuildRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
+                    ramp = BuildRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
                 }
 
                 bool allSucceeded = true;
@@ -157,18 +153,20 @@ namespace LumiShift.Infrastructure
 
                 if (allSucceeded)
                 {
-                    StatusChanged?.Invoke(this, $"Gamma: R×{parameters.RScale:F2} G×{parameters.GScale:F2} B×{parameters.BScale:F2} γ{parameters.Gamma:F2} 亮度{parameters.MasterBrightness}%");
+                    StatusChanged?.Invoke(this, Lang.F("Gamma: R×{0} G×{1} B×{2} γ{3} 亮度{4}%",
+                        parameters.RScale.ToString("F2"), parameters.GScale.ToString("F2"), parameters.BScale.ToString("F2"),
+                        parameters.Gamma.ToString("F2"), parameters.MasterBrightness));
                 }
                 else
                 {
-                    StatusChanged?.Invoke(this, "Gamma: 部分显示器应用失败");
+                    StatusChanged?.Invoke(this, Lang.Get("Gamma: 部分显示器应用失败"));
                 }
 
                 return allSucceeded;
             }
             catch (Exception ex)
             {
-                StatusChanged?.Invoke(this, $"Gamma 出错: {ex.Message}");
+                StatusChanged?.Invoke(this, Lang.F("Gamma 出错: {0}", ex.Message));
                 return false;
             }
         }
@@ -238,7 +236,7 @@ namespace LumiShift.Infrastructure
                             RAMP ramp;
                             lock (_rampLock)
                             {
-                                ramp = GetOrBuildRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
+                                ramp = BuildRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
                             }
                             if (!SetDeviceGammaRamp(hdc, ref ramp))
                                 allSucceeded = false;
@@ -260,56 +258,17 @@ namespace LumiShift.Infrastructure
                 }
 
                 if (allSucceeded)
-                    StatusChanged?.Invoke(this, "Gamma: 按显示器独立应用");
+                    StatusChanged?.Invoke(this, Lang.Get("Gamma: 按显示器独立应用"));
                 else
-                    StatusChanged?.Invoke(this, "Gamma: 部分显示器应用失败");
+                    StatusChanged?.Invoke(this, Lang.Get("Gamma: 部分显示器应用失败"));
 
                 return allSucceeded;
             }
             catch (Exception ex)
             {
-                StatusChanged?.Invoke(this, $"Gamma 出错: {ex.Message}");
+                StatusChanged?.Invoke(this, Lang.F("Gamma 出错: {0}", ex.Message));
                 return false;
             }
-        }
-
-        private static int ComputeRampKey(double gamma, double rScale, double gScale, double bScale, double master)
-        {
-            int h = 17;
-            h = h * 31 + (int)(gamma * 1000);
-            h = h * 31 + (int)(rScale * 1000);
-            h = h * 31 + (int)(gScale * 1000);
-            h = h * 31 + (int)(bScale * 1000);
-            h = h * 31 + (int)(master * 1000);
-            return h;
-        }
-
-        private RAMP GetOrBuildRamp(double gamma, double rScale, double gScale, double bScale, double master)
-        {
-            int key = ComputeRampKey(gamma, rScale, gScale, bScale, master);
-
-            if (_rampCache.TryGetValue(key, out var cached))
-            {
-                var node = _keyToNode[key];
-                _cacheKeyOrder.Remove(node);
-                _cacheKeyOrder.AddLast(node);
-                return cached;
-            }
-
-            var ramp = BuildRamp(gamma, rScale, gScale, bScale, master);
-
-            if (_rampCache.Count >= MaxCacheSize && _cacheKeyOrder.First != null)
-            {
-                int oldestKey = _cacheKeyOrder.First.Value;
-                _cacheKeyOrder.RemoveFirst();
-                _rampCache.Remove(oldestKey);
-                _keyToNode.Remove(oldestKey);
-            }
-
-            _rampCache[key] = ramp;
-            var newNode = _cacheKeyOrder.AddLast(key);
-            _keyToNode[key] = newNode;
-            return ramp;
         }
 
         private static RAMP BuildRamp(double gamma, double rScale, double gScale, double bScale, double master)
@@ -343,19 +302,10 @@ namespace LumiShift.Infrastructure
             if (!_disposed)
             {
                 _disposed = true;
-                TrimCache();
                 StatusChanged = null;
             }
         }
 
-        public void TrimCache()
-        {
-            lock (_rampLock)
-            {
-                _rampCache.Clear();
-                _cacheKeyOrder.Clear();
-                _keyToNode.Clear();
-            }
-        }
+
     }
 }

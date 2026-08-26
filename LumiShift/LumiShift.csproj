@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <Import Project="$(MSBuildExtensionsPath)$(MSBuildToolsVersion)Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)$(MSBuildToolsVersion)Microsoft.Common.props')" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -12,7 +12,7 @@
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
-    <Version>1.6.2</Version>
+    <Version>1.6.3</Version>
     <Company>LumiShift</Company>
     <Description>屏幕亮度与Gamma校正工具</Description>
     <Copyright>Copyright © 2026</Copyright>
@@ -56,21 +56,20 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Management" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Data" />
+    <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Deployment" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Controls\FlatTabControl.cs">
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Controls\DateTimePickerEx.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Controls\BlurComboBox.cs">
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Controls\FocusablePanel.cs">
@@ -98,10 +97,8 @@
     <Compile Include="Infrastructure\GammaController.cs" />
     <Compile Include="Infrastructure\GcHelper.cs" />
     <Compile Include="Infrastructure\IBrightnessController.cs" />
-    <Compile Include="Infrastructure\LightweightJson.cs" />
     <Compile Include="Infrastructure\MonitorManager.cs" />
     <Compile Include="Infrastructure\NativeMethods.cs" />
-    <Compile Include="Infrastructure\NightLightController.cs" />
     <Compile Include="Infrastructure\ScheduleEvaluator.cs" />
     <Compile Include="Models\DisplayScheme.cs" />
     <Compile Include="Models\GammaConfig.cs" />
@@ -110,6 +107,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Resources\DesignConstants.cs" />
+    <Compile Include="Services\Lang.cs" />
     <Compile Include="Services\DisplaySchemeService.cs" />
     <Compile Include="Services\DisplayGammaStateService.cs" />
     <Compile Include="Services\PresetService.cs" />
@@ -128,6 +126,8 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="app.ico" />
+    <EmbeddedResource Include="Resources\StringsEn.resx" />
+    <EmbeddedResource Include="Resources\StringsZhHant.resx" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.8">

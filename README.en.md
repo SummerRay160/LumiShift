@@ -136,6 +136,7 @@ LumiShift/
 ├── Controls/                       # Custom controls
 │   ├── FlatTabControl.cs           # Flat tab control
 │   ├── DateTimePickerEx.cs         # DateTimePicker extension (Enter-key focus release)
+│   ├── BlurComboBox.cs            # ComboBox extension (blur on dropdown close, prevents wheel mis-edits)
 │   ├── FocusablePanel.cs           # Focusable Panel (focus-absorbing container)
 │   ├── GdiCache.cs                 # GDI object cache pool
 │   ├── ModernSlider.cs             # Modern-style slider
@@ -145,12 +146,9 @@ LumiShift/
 │   ├── GammaController.cs          # Gamma correction (SetDeviceGammaRamp)
 │   ├── GcHelper.cs                 # GC collection & working set trim
 │   ├── EyeProtectionService.cs     # Eye protection (SetSysColors + Registry)
-│   ├── NightLightController.cs     # Windows Night Light control
 │   ├── MonitorManager.cs           # Monitor management (EDID/hot-plug/position)
 │   ├── NativeMethods.cs            # Win32 API declarations
 │   ├── ScheduleEvaluator.cs        # Schedule time slot evaluation & hash caching
-│   ├── WeakEvent.cs                # Weak event pattern implementation
-│   ├── LightweightJson.cs          # Lightweight JSON parser
 │   └── IBrightnessController.cs    # Brightness control interface
 ├── Models/
 │   ├── DisplayScheme.cs            # Display scheme model (unified/multi-display)
@@ -191,7 +189,6 @@ LumiShift/
 | **Brightness Control** | WMI + DDC/CI (`dxva2.dll`) |
 | **Gamma Correction** | GDI32 `SetDeviceGammaRamp` |
 | **Eye Protection** | User32 `SetSysColors` + Registry |
-| **Night Light** | Registry `CloudStore` read/write |
 | **Monitor Management** | EDID parsing + Win32 API |
 | **Auto Update** | GitHub Releases API |
 | **CI/CD** | GitHub Actions (auto build + Release) |

@@ -17,7 +17,7 @@ namespace LumiShift.Services
 
         public SaveDisplaySchemeDialog(bool hasDisplayOverrides)
         {
-            Text = "保存显示方案";
+            Text = Lang.Get("保存显示方案");
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             ClientSize = new Size(420, 258);
@@ -28,7 +28,7 @@ namespace LumiShift.Services
 
             var title = new Label
             {
-                Text = "保存显示方案",
+                Text = Lang.Get("保存显示方案"),
                 Location = new Point(18, 16),
                 AutoSize = true,
                 Font = Typography.H1,
@@ -38,7 +38,7 @@ namespace LumiShift.Services
 
             var hint = new Label
             {
-                Text = "显示方案用于手动应用，也可以被定时调度自动切换。",
+                Text = Lang.Get("显示方案用于手动应用，也可以被定时调度自动切换。"),
                 Location = new Point(18, 42),
                 Width = 380,
                 Height = 18,
@@ -49,7 +49,7 @@ namespace LumiShift.Services
 
             var nameLabel = new Label
             {
-                Text = "方案名称",
+                Text = Lang.Get("方案名称"),
                 Location = new Point(18, 76),
                 AutoSize = true,
                 Font = Typography.Body,
@@ -59,7 +59,7 @@ namespace LumiShift.Services
 
             _nameTextBox = new TextBox
             {
-                Text = hasDisplayOverrides ? "我的多屏方案" : "我的统一方案",
+                Text = hasDisplayOverrides ? Lang.Get("我的多屏方案") : Lang.Get("我的统一方案"),
                 Location = new Point(92, 72),
                 Width = 300,
                 Font = Typography.Body,
@@ -69,7 +69,7 @@ namespace LumiShift.Services
 
             _unifiedRadioButton = new RadioButton
             {
-                Text = "统一方案",
+                Text = Lang.Get("统一方案"),
                 Location = new Point(22, 112),
                 Width = 120,
                 Height = 22,
@@ -81,7 +81,7 @@ namespace LumiShift.Services
 
             var unifiedHint = new Label
             {
-                Text = "所有显示器使用当前这套显示效果，适合大多数场景。",
+                Text = Lang.Get("所有显示器使用当前这套显示效果，适合大多数场景。"),
                 Location = new Point(42, 136),
                 Width = 350,
                 Height = 18,
@@ -92,7 +92,7 @@ namespace LumiShift.Services
 
             _multiDisplayRadioButton = new RadioButton
             {
-                Text = "多屏方案",
+                Text = Lang.Get("多屏方案"),
                 Location = new Point(22, 164),
                 Width = 120,
                 Height = 22,
@@ -106,8 +106,8 @@ namespace LumiShift.Services
             var multiHint = new Label
             {
                 Text = hasDisplayOverrides
-                    ? "保存每台显示器当前的独立设置，适合双屏或多屏工作流。"
-                    : "当前没有单独设置的显示器，请先为单台显示器设置独立效果。",
+                    ? Lang.Get("保存每台显示器当前的独立设置，适合双屏或多屏工作流。")
+                    : Lang.Get("当前没有单独设置的显示器，请先为单台显示器设置独立效果。"),
                 Location = new Point(42, 188),
                 Width = 350,
                 Height = 18,
@@ -118,7 +118,7 @@ namespace LumiShift.Services
 
             var saveButton = new Button
             {
-                Text = "保存",
+                Text = Lang.Get("保存"),
                 DialogResult = DialogResult.OK,
                 Location = new Point(232, 218),
                 Width = 76,
@@ -132,7 +132,7 @@ namespace LumiShift.Services
 
             var cancelButton = new Button
             {
-                Text = "取消",
+                Text = Lang.Get("取消"),
                 DialogResult = DialogResult.Cancel,
                 Location = new Point(316, 218),
                 Width = 76,
@@ -161,7 +161,7 @@ namespace LumiShift.Services
         {
             if (DialogResult == DialogResult.OK && string.IsNullOrWhiteSpace(SchemeName))
             {
-                MessageBox.Show(this, "请输入一个容易识别的方案名称。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, Lang.Get("请输入一个容易识别的方案名称。"), Lang.Get("提示"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 e.Cancel = true;
             }
 

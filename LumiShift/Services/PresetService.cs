@@ -39,15 +39,6 @@ namespace LumiShift.Services
             return _settings.CustomGammaPresets?.FirstOrDefault(cp => cp.Name == presetName);
         }
 
-        public IEnumerable<string> GetPresetNames()
-        {
-            foreach (var name in PresetDefinitions.GetNames())
-                yield return name;
-
-            if (_settings.CustomGammaPresets == null) yield break;
-            foreach (var preset in _settings.CustomGammaPresets)
-                yield return preset.Name;
-        }
 
         public bool IsMultiDisplayPreset(string presetName)
         {

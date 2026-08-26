@@ -56,6 +56,7 @@ namespace LumiShift
         private ToggleSwitch _startMinimizedCheckBox;
         private ToggleSwitch _autoCheckUpdatesToggle;
         private ToggleSwitch _restoreGammaToggle;
+        private ComboBox _languageComboBox;
         private ToggleSwitch _notificationsEnabledToggle;
         private ToggleSwitch _notifyStartupToggle;
         private ToggleSwitch _notifyScheduleToggle;
@@ -82,11 +83,15 @@ namespace LumiShift
         private bool _formDisposed;
 
         private Timer _resizeDebounceTimer;
+        private Timer _brightnessRefreshTimer;
+        private int _brightnessRefreshBusy;
+        private DateTime _lastBrightnessUserChange = DateTime.MinValue;
 
         private bool _isUpdatingGammaSliders;
         private bool _isUpdatingBrightness;
         private bool _isPopulatingComboBox;
         private bool _isUpdatingSchedule;
+        private bool _isUpdatingLanguage;
         private string _currentPresetName;
         private int _previousMonitorSelectedIndex;
         private Timer _initTimer;
@@ -113,11 +118,6 @@ namespace LumiShift
             _debounceTimer.Start();
         }
 
-        private static Icon LoadAppIcon()
-        {
-            return Program.AppIcon;
-        }
-
         public Form1(BackgroundService bgService)
         {
             DoubleBuffered = true;
@@ -136,18 +136,19 @@ namespace LumiShift
             _bgService.GammaController.StatusChanged += OnGammaStatusChanged;
             _bgService.MonitorsChanged += OnMonitorsChanged;
             _bgService.ScheduleStateChanged += OnScheduleStateChanged;
+            _bgService.BrightnessChanged += OnBrightnessChanged;
 
             PopulatePresetComboBox();
             UpdateGammaUI();
             _bgService.ApplyGammaToSystem();
             UpdateBrightnessUI();
+            StartBrightnessRefreshTimer();
             UpdateScheduleUI();
             UpdateStartupUI();
             UpdateEyeProtectionUI();
             UpdateBgImageUI();
             LoadBackgroundImage();
             SyncBackgroundStaticFields();
-            SubscribeBackgroundPaintEvents();
             ClientSizeChanged += OnFormClientSizeChanged;
 
             _initTimer = new Timer { Interval = 100 };
@@ -238,18 +239,18 @@ namespace LumiShift
         {
             int prevIndex = _monitorSelectorComboBox.SelectedIndex;
             _monitorSelectorComboBox.Items.Clear();
-            _monitorSelectorComboBox.Items.Add("所有显示器");
+            _monitorSelectorComboBox.Items.Add(Lang.Get("所有显示器"));
             foreach (var monitor in MonitorMgr.Monitors)
             {
                 string label = monitor.DisplayName;
                 if (_bgService.HasDisplayGammaOverride(monitor.DeviceId))
                 {
-                    string sourceTag = _bgService.GetDisplayGammaSource(monitor.DeviceId) == GammaSourceNames.Schedule ? "定时" : "手动";
-                    label += $" · 单独设置/{sourceTag}";
+                    string sourceTag = _bgService.GetDisplayGammaSource(monitor.DeviceId) == GammaSourceNames.Schedule ? Lang.Get("定时") : Lang.Get("手动");
+                    label += Lang.F(" · 单独设置/{0}", sourceTag);
                 }
                 else
                 {
-                    label += " · 跟随全部";
+                    label += Lang.Get(" · 跟随全部");
                 }
                 _monitorSelectorComboBox.Items.Add(label);
             }
@@ -341,13 +342,13 @@ namespace LumiShift
             {
                 string nextInfo = _bgService.GetNextScheduleInfo();
                 _gammaStatusLabel.Text = string.IsNullOrEmpty(nextInfo)
-                    ? "手动调整已覆盖定时设置，下次时段切换时恢复定时"
-                    : $"手动调整已覆盖定时设置，{nextInfo}恢复定时";
+                    ? Lang.Get("手动调整已覆盖定时设置，下次时段切换时恢复定时")
+                    : Lang.F("手动调整已覆盖定时设置，{0}恢复定时", nextInfo);
             }
             else
             {
-                string currentPreset = GetCurrentPresetName() ?? "自定义";
-                _gammaStatusLabel.Text = $"定时运行中: 当前方案 \"{currentPreset}\"";
+                string currentPreset = GetCurrentPresetName() ?? Lang.Get("自定义");
+                _gammaStatusLabel.Text = Lang.F("定时运行中: 当前方案 \"{0}\"", Lang.Get(currentPreset));
             }
 
             UpdateTitleBar();
@@ -355,26 +356,7 @@ namespace LumiShift
 
         private void UpdateTitleBar()
         {
-            if (!Settings.ScheduleEnabled)
-            {
-                Text = "LumiShift";
-                return;
-            }
-
-            string currentPreset = GetCurrentPresetName() ?? "自定义";
-
-            if (_bgService.ScheduleManualOverride)
-            {
-                string nextInfo = _bgService.GetNextScheduleInfo();
-                string overrideText = string.IsNullOrEmpty(nextInfo)
-                    ? "手动调整"
-                    : $"手动调整 ({nextInfo}恢复)";
-                Text = $"LumiShift - {overrideText}";
-            }
-            else
-            {
-                Text = $"LumiShift - 定时: {currentPreset}";
-            }
+            Text = _bgService.GetScheduleStatusText();
         }
 
         private void UpdateColorTempFromSliders()
@@ -405,11 +387,11 @@ namespace LumiShift
         private void UpdateColorTempLabel()
         {
             int val = _gammaColorTempSlider.Value;
-            if (val <= 20) _gammaColorTempLabel.Text = "偏冷";
-            else if (val <= 40) _gammaColorTempLabel.Text = "微冷";
-            else if (val <= 60) _gammaColorTempLabel.Text = "适中";
-            else if (val <= 80) _gammaColorTempLabel.Text = "微暖";
-            else _gammaColorTempLabel.Text = "偏暖";
+            if (val <= 20) _gammaColorTempLabel.Text = Lang.Get("偏冷");
+            else if (val <= 40) _gammaColorTempLabel.Text = Lang.Get("微冷");
+            else if (val <= 60) _gammaColorTempLabel.Text = Lang.Get("适中");
+            else if (val <= 80) _gammaColorTempLabel.Text = Lang.Get("微暖");
+            else _gammaColorTempLabel.Text = Lang.Get("偏暖");
         }
 
         private GammaConfig BuildColorTempConfig(int colorTemp, int brightness)
@@ -485,9 +467,16 @@ namespace LumiShift
                 }
                 else if (monitor.Controller != null && monitor.Controller.IsSupported)
                 {
-                    try { currentBrightness = monitor.Controller.GetBrightness(); }
+                    try
+                    {
+                        int hardware = monitor.Controller.GetBrightness();
+                        if (hardware >= 0)
+                        {
+                            currentBrightness = hardware;
+                            Settings.BrightnessPerDisplay[deviceId] = currentBrightness;
+                        }
+                    }
                     catch { }
-                    Settings.BrightnessPerDisplay[deviceId] = currentBrightness;
                 }
 
                 if (_brightnessRows.TryGetValue(deviceId, out var row))
@@ -498,7 +487,7 @@ namespace LumiShift
 
                     nameLabel.Text = monitor.DisplayName;
                     if (!(monitor.Controller?.IsSupported ?? true))
-                        nameLabel.Text = monitor.DisplayName + " (不支持硬件亮度调节)";
+                        nameLabel.Text = monitor.DisplayName + Lang.Get(" (不支持硬件亮度调节)");
                     row.Width = _brightnessPanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 2;
                     nameLabel.Width = row.Width - row.Padding.Horizontal;
                     slider.Maximum = 100;
@@ -533,7 +522,7 @@ namespace LumiShift
                         ForeColor = Colors.TextSecondary
                     };
                     if (!(monitor.Controller?.IsSupported ?? true))
-                        nameLabel.Text = monitor.DisplayName + " (不支持硬件亮度调节)";
+                        nameLabel.Text = monitor.DisplayName + Lang.Get(" (不支持硬件亮度调节)");
                     nameLabel.Location = new Point(row.Padding.Left, row.Padding.Top);
 
                     int sliderWidth = Math.Max(210, row.Width - row.Padding.Horizontal - 66);
@@ -563,6 +552,7 @@ namespace LumiShift
                     EventHandler handler = (s, ev) =>
                     {
                         if (_isUpdatingBrightness) return;
+                        _lastBrightnessUserChange = DateTime.Now;
                         valLabel.Text = $"{tb.Value}%";
                         Settings.BrightnessPerDisplay[deviceId] = tb.Value;
                         monitor.Controller?.SetBrightness(tb.Value);
@@ -599,6 +589,128 @@ namespace LumiShift
                 _brightnessRows.Remove(id);
         }
 
+        #region 亮度实时刷新
+
+        /// <summary>把单个显示器的亮度写回 UI（滑块+百分比标签），返回值是否真的改变。
+        /// 仅更新 UI，不碰 Settings/持久化（由调用方决定是否写盘）。row 缺失或正在更新时返回 false。</summary>
+        private bool TrySetBrightnessSlider(string deviceId, int value, out bool changed)
+        {
+            changed = false;
+            if (_formDisposed || IsDisposed || _isUpdatingBrightness) return false;
+            if (!_brightnessRows.TryGetValue(deviceId, out var row) || row.Controls.Count < 3) return false;
+
+            var slider = row.Controls[1] as ModernSlider;
+            var valLabel = row.Controls[2] as Label;
+            if (slider == null || valLabel == null) return false;
+
+            changed = slider.Value != value;
+            if (changed)
+            {
+                _isUpdatingBrightness = true;
+                try { slider.Value = value; }
+                catch { }
+                finally { _isUpdatingBrightness = false; }
+            }
+            valLabel.Text = $"{value}%";
+            return true;
+        }
+
+        /// <summary>系统亮度被外部修改（Fn 键/系统设置等）时同步 UI（事件来自 WMI，在 UI 线程触发）。</summary>
+        private void OnBrightnessChanged(string deviceId, int brightness)
+        {
+            if (!TrySetBrightnessSlider(deviceId, brightness, out _)) return;
+            // 外部快速连续调节（如按住 Fn 键）时避免频繁写盘
+            DebounceAction(() => SettingsStore.SaveSettings(Settings));
+        }
+
+        private void StartBrightnessRefreshTimer()
+        {
+            if (_brightnessRefreshTimer != null) return;
+            _brightnessRefreshTimer = new Timer { Interval = 2000 };
+            _brightnessRefreshTimer.Tick += BrightnessRefreshTimer_Tick;
+            _brightnessRefreshTimer.Start();
+        }
+
+        private void StopBrightnessRefreshTimer()
+        {
+            if (_brightnessRefreshTimer == null) return;
+            _brightnessRefreshTimer.Stop();
+            _brightnessRefreshTimer.Dispose();
+            _brightnessRefreshTimer = null;
+        }
+
+        private void BrightnessRefreshTimer_Tick(object sender, EventArgs e)
+        {
+            if (_formDisposed || IsDisposed || !Visible) return;
+            if (_isUpdatingBrightness) return;
+            // 用户刚拖动过滑块时暂不刷新，避免打断操作
+            if ((DateTime.Now - _lastBrightnessUserChange).TotalMilliseconds < 3000) return;
+            if (System.Threading.Interlocked.CompareExchange(ref _brightnessRefreshBusy, 1, 0) != 0) return;
+
+            // 在 UI 线程先快照显示器列表，避免后台枚举时集合被并发修改
+            var snapshot = new List<MonitorInfo>();
+            foreach (var m in MonitorMgr.Monitors)
+            {
+                if (m != null && m.Controller != null && m.Controller.IsSupported)
+                    snapshot.Add(m);
+            }
+            if (snapshot.Count == 0)
+            {
+                System.Threading.Interlocked.Exchange(ref _brightnessRefreshBusy, 0);
+                return;
+            }
+
+            // 硬件亮度查询（WMI/DDC）可能较慢，放到后台线程执行
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                var values = new List<KeyValuePair<string, int>>();
+                foreach (var monitor in snapshot)
+                {
+                    try
+                    {
+                        int brightness = monitor.Controller.GetBrightness();
+                        values.Add(new KeyValuePair<string, int>(monitor.DeviceId, brightness));
+                    }
+                    catch { }
+                }
+
+                try
+                {
+                    BeginInvoke(new Action(() => ApplyRefreshedBrightness(values)));
+                }
+                catch
+                {
+                    System.Threading.Interlocked.Exchange(ref _brightnessRefreshBusy, 0);
+                }
+            });
+        }
+
+        private void ApplyRefreshedBrightness(List<KeyValuePair<string, int>> values)
+        {
+            System.Threading.Interlocked.Exchange(ref _brightnessRefreshBusy, 0);
+
+            if (_formDisposed || IsDisposed || _isUpdatingBrightness || !Visible) return;
+
+            bool changed = false;
+            foreach (var kvp in values)
+            {
+                // 读取失败（返回 -1）的显示器不更新，避免假值刷掉真实状态
+                if (kvp.Value < 0) continue;
+
+                if (TrySetBrightnessSlider(kvp.Key, kvp.Value, out var rowChanged) && rowChanged)
+                {
+                    // 外部（Fn 键/系统设置等）修改了亮度：同步滑块与设置
+                    changed = true;
+                    Settings.BrightnessPerDisplay[kvp.Key] = kvp.Value;
+                }
+            }
+
+            if (changed)
+                SettingsStore.SaveSettings(Settings);
+        }
+
+        #endregion
+
         private void UpdateScheduleUI()
         {
             _isUpdatingSchedule = true;
@@ -615,7 +727,31 @@ namespace LumiShift
             _startMinimizedCheckBox.Checked = Settings.StartMinimized;
             _autoCheckUpdatesToggle.Checked = Settings.AutoCheckUpdates;
             _restoreGammaToggle.Checked = Settings.RestoreGammaOnExit;
+
+            _isUpdatingLanguage = true;
+            _languageComboBox.SelectedIndex =
+                string.Equals(Settings.Language, "zh", StringComparison.OrdinalIgnoreCase) ? 1 :
+                string.Equals(Settings.Language, "zh-Hant", StringComparison.OrdinalIgnoreCase) ? 2 :
+                string.Equals(Settings.Language, "en", StringComparison.OrdinalIgnoreCase) ? 3 : 0;
+            _isUpdatingLanguage = false;
+
             UpdateNotificationUI();
+        }
+
+        private void LanguageComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_isUpdatingLanguage) return;
+
+            int idx = _languageComboBox.SelectedIndex;
+            Settings.Language = idx == 1 ? "zh" : idx == 2 ? "zh-Hant" : idx == 3 ? "en" : "";
+            SettingsStore.SaveSettings(Settings);
+
+            // ponytail: 不用 Application.Restart()——它与 Program 的单实例 Mutex 零超时探测竞态，
+            // 新进程起在旧进程释放锁之前必被判定为重复实例而自退。改为提示用户手动重启。
+            MessageBox.Show(this,
+                Lang.Get("语言已保存，重启 LumiShift 后生效。请手动重启应用。"),
+                Lang.Get("重启确认"),
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void AutoCheckUpdatesToggle_CheckedChanged(object sender, EventArgs e)
@@ -650,36 +786,30 @@ namespace LumiShift
             DebounceAction(() => SettingsStore.SaveSettings(Settings));
         }
 
-        private void NotifyScheduleToggle_CheckedChanged(object sender, EventArgs e)
+        private void ApplyToggleSetting(ToggleSwitch toggle, Action<bool> apply)
         {
-            Settings.NotifyScheduleSwitch = _notifyScheduleToggle.Checked;
+            apply(toggle.Checked);
             DebounceAction(() => SettingsStore.SaveSettings(Settings));
         }
+
+        private void NotifyScheduleToggle_CheckedChanged(object sender, EventArgs e)
+            => ApplyToggleSetting(_notifyScheduleToggle, v => Settings.NotifyScheduleSwitch = v);
 
         private void NotifyStartupToggle_CheckedChanged(object sender, EventArgs e)
-        {
-            Settings.NotifyStartup = _notifyStartupToggle.Checked;
-            DebounceAction(() => SettingsStore.SaveSettings(Settings));
-        }
+            => ApplyToggleSetting(_notifyStartupToggle, v => Settings.NotifyStartup = v);
 
         private void NotifyStatusToggle_CheckedChanged(object sender, EventArgs e)
-        {
-            Settings.NotifyStatusSwitch = _notifyStatusToggle.Checked;
-            DebounceAction(() => SettingsStore.SaveSettings(Settings));
-        }
+            => ApplyToggleSetting(_notifyStatusToggle, v => Settings.NotifyStatusSwitch = v);
 
         private void NotifyMonitorToggle_CheckedChanged(object sender, EventArgs e)
-        {
-            Settings.NotifyMonitorChange = _notifyMonitorToggle.Checked;
-            DebounceAction(() => SettingsStore.SaveSettings(Settings));
-        }
+            => ApplyToggleSetting(_notifyMonitorToggle, v => Settings.NotifyMonitorChange = v);
 
         private void UpdateEyeProtectionUI()
         {
             _eyeProtectionToggle.Checked = Settings.EyeProtectionEnabled;
             _eyeProtectionStatusLabel.Text = Settings.EyeProtectionEnabled
-                ? $"已启用 (R:{Settings.EyeProtectionRed} G:{Settings.EyeProtectionGreen} B:{Settings.EyeProtectionBlue})"
-                : "未启用";
+                ? Lang.F("已启用 (R:{0} G:{1} B:{2})", Settings.EyeProtectionRed, Settings.EyeProtectionGreen, Settings.EyeProtectionBlue)
+                : Lang.Get("未启用");
 
             if (Settings.EyeProtectionEnabled)
             {
@@ -699,7 +829,7 @@ namespace LumiShift
                 else
                     EyeProtectionService.RestoreDefault();
                 SettingsStore.SaveSettings(Settings);
-                _bgService.NotifyStatusSwitch("LumiShift 状态切换", enabled ? "护眼模式已启用" : "护眼模式已关闭");
+                _bgService.NotifyStatusSwitch(Lang.Get("LumiShift 状态切换"), enabled ? Lang.Get("护眼模式已启用") : Lang.Get("护眼模式已关闭"));
             });
         }
 
@@ -760,7 +890,7 @@ namespace LumiShift
             }
             else
             {
-                _bgImageStatusLabel.Text = "未设置";
+                _bgImageStatusLabel.Text = Lang.Get("未设置");
             }
         }
 
@@ -775,7 +905,7 @@ namespace LumiShift
 
             if (!Settings.UseBackgroundImage || string.IsNullOrEmpty(Settings.BackgroundImageFile))
             {
-                _bgImageStatusLabel.Text = "未设置";
+                _bgImageStatusLabel.Text = Lang.Get("未设置");
                 SyncBackgroundStaticFields();
                 RebuildBackgroundCache();
                 InvalidateBackgroundDisplay();
@@ -817,12 +947,12 @@ namespace LumiShift
                 }
                 else
                 {
-                    _bgImageStatusLabel.Text = "文件不存在";
+                    _bgImageStatusLabel.Text = Lang.Get("文件不存在");
                 }
             }
             catch (Exception ex)
             {
-                _bgImageStatusLabel.Text = $"加载失败: {ex.Message}";
+                _bgImageStatusLabel.Text = Lang.F("加载失败: {0}", ex.Message);
             }
 
             SyncBackgroundStaticFields();
@@ -845,8 +975,8 @@ namespace LumiShift
         {
             using (var ofd = new OpenFileDialog())
             {
-                ofd.Filter = "图片文件|*.jpg;*.jpeg;*.png;*.bmp;*.gif|所有文件|*.*";
-                ofd.Title = "选择背景图片";
+                ofd.Filter = Lang.Get("图片文件|*.jpg;*.jpeg;*.png;*.bmp;*.gif|所有文件|*.*");
+                ofd.Title = Lang.Get("选择背景图片");
                 ofd.RestoreDirectory = true;
 
                 if (ofd.ShowDialog() == DialogResult.OK)
@@ -894,7 +1024,7 @@ namespace LumiShift
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show($"设置背景图片失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show(Lang.F("设置背景图片失败: {0}", ex.Message), Lang.Get("错误"), MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                 }
             }
@@ -1104,7 +1234,7 @@ namespace LumiShift
                 SettingsStore.SaveSettings(Settings);
                 _bgService.UpdateTrayMenu();
                 UpdateScheduleOverrideStatus();
-                _bgService.NotifyStatusSwitch("LumiShift 状态切换", enabled ? "显示调节已启用" : "显示调节已关闭");
+                _bgService.NotifyStatusSwitch(Lang.Get("LumiShift 状态切换"), enabled ? Lang.Get("显示调节已启用") : Lang.Get("显示调节已关闭"));
             });
         }
 
@@ -1250,7 +1380,7 @@ namespace LumiShift
 
             if (PresetDefinitions.IsBuiltIn(name))
             {
-                MessageBox.Show("该名称与内置方案冲突，请更换名称。", "提示",
+                MessageBox.Show(Lang.Get("该名称与内置方案冲突，请更换名称。"), Lang.Get("提示"),
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -1258,7 +1388,7 @@ namespace LumiShift
             var existing = Settings.CustomGammaPresets.FirstOrDefault(cp => cp.Name == name);
             if (existing != null)
             {
-                if (MessageBox.Show($"显示方案 \"{name}\" 已存在，是否覆盖？", "确认覆盖",
+                if (MessageBox.Show(Lang.F("显示方案 \"{0}\" 已存在，是否覆盖？", name), Lang.Get("确认覆盖"),
                     MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                     return;
                 Settings.CustomGammaPresets.Remove(existing);
@@ -1303,8 +1433,8 @@ namespace LumiShift
             RefreshCustomPresetButtons();
 
             _gammaStatusLabel.Text = saveMultiDisplay
-                ? $"已保存多屏方案 \"{name}\""
-                : $"已保存统一方案 \"{name}\"";
+                ? Lang.F("已保存多屏方案 \"{0}\"", name)
+                : Lang.F("已保存统一方案 \"{0}\"", name);
         }
 
         private void GammaDeleteCustomButton_Click(object sender, EventArgs e)
@@ -1313,7 +1443,7 @@ namespace LumiShift
             string selected = DisplaySchemeService.StripDisplayName(selectedDisplay);
             if (PresetDefinitions.IsBuiltIn(selected)) return;
 
-            if (MessageBox.Show($"确定要删除显示方案 \"{selected}\" 吗？", "确认删除",
+            if (MessageBox.Show(Lang.F("确定要删除显示方案 \"{0}\" 吗？", selected), Lang.Get("确认删除"),
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
 
@@ -1334,7 +1464,7 @@ namespace LumiShift
             _bgService.UpdateTrayMenu();
             RefreshCustomPresetButtons();
 
-            _gammaStatusLabel.Text = $"已删除显示方案 \"{selected}\"";
+            _gammaStatusLabel.Text = Lang.F("已删除显示方案 \"{0}\"", selected);
         }
 
         private void MonitorSelectorComboBox_SelectedIndexChanged(object sender, EventArgs e)
@@ -1351,11 +1481,13 @@ namespace LumiShift
 
                 if (hasManual || hasSchedule)
                 {
-                    string msg = hasSchedule && Settings.ScheduleEnabled
-                        ? "切换到“全部显示器”会把当前效果作为统一方案应用，并清除定时带来的单屏设置。\n\n是否继续？"
-                        : "切换到“全部显示器”会把当前效果作为统一方案应用，并清除各显示器的独立设置。\n\n是否继续？";
+                    // ponytail: resx 属性无法存真实换行，\n\n 在代码侧拼接
+                    string msg = (hasSchedule && Settings.ScheduleEnabled
+                            ? Lang.Get("切换到“全部显示器”会把当前效果作为统一方案应用，并清除定时带来的单屏设置。")
+                            : Lang.Get("切换到“全部显示器”会把当前效果作为统一方案应用，并清除各显示器的独立设置。"))
+                        + "\n\n" + Lang.Get("是否继续？");
 
-                    if (MessageBox.Show(msg, "同步确认", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                    if (MessageBox.Show(msg, Lang.Get("同步确认"), MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                     {
                         _isUpdatingGammaSliders = true;
                         _monitorSelectorComboBox.SelectedIndex = prevIndex;
@@ -1396,8 +1528,9 @@ namespace LumiShift
             if (isFromSchedule && Settings.ScheduleEnabled)
             {
                 if (MessageBox.Show(
-                    "此显示器当前由定时切换单独控制。恢复跟随后，它会先使用统一方案；下次时段切换时会再次按调度应用。\n\n是否继续？",
-                    "恢复跟随统一方案", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
+                    Lang.Get("此显示器当前由定时切换单独控制。恢复跟随后，它会先使用统一方案；下次时段切换时会再次按调度应用。")
+                    + "\n\n" + Lang.Get("是否继续？"),
+                    Lang.Get("恢复跟随统一方案"), MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
                     return;
             }
 
@@ -1415,8 +1548,8 @@ namespace LumiShift
             _bgService.UpdateTrayMenu();
 
             _gammaStatusLabel.Text = isFromSchedule && Settings.ScheduleEnabled
-                ? "已恢复跟随统一方案；下次时段切换会继续按调度应用"
-                : "已恢复跟随统一方案";
+                ? Lang.Get("已恢复跟随统一方案；下次时段切换会继续按调度应用")
+                : Lang.Get("已恢复跟随统一方案");
         }
 
         private void GammaScheduleToggle_CheckedChanged(object sender, EventArgs e)
@@ -1509,14 +1642,6 @@ namespace LumiShift
             PopulateMonitorSelector();
         }
 
-        private void RefreshAllMonitorUI()
-        {
-            if (_formDisposed || IsDisposed) return;
-            UpdateBrightnessUI();
-            UpdateGammaUI();
-            _bgService.ApplyGammaToSystem();
-        }
-
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             if (e.CloseReason == CloseReason.UserClosing && !_bgService.IsExiting)
@@ -1525,6 +1650,7 @@ namespace LumiShift
                 _resizeDebounceTimer?.Stop();
                 _initTimer?.Stop();
                 _debounceTimer?.Stop();
+                StopBrightnessRefreshTimer();
                 UnsubscribeEvents();
                 _bgService.OnFormClosing(this);
                 e.Cancel = true;
@@ -1540,6 +1666,7 @@ namespace LumiShift
             _resizeDebounceTimer?.Stop();
             _initTimer?.Stop();
             _debounceTimer?.Stop();
+            StopBrightnessRefreshTimer();
             UnsubscribeEvents();
             _bgService.OnFormClosing(this);
             base.OnFormClosing(e);
@@ -1550,6 +1677,7 @@ namespace LumiShift
             _bgService.GammaController.StatusChanged -= OnGammaStatusChanged;
             _bgService.MonitorsChanged -= OnMonitorsChanged;
             _bgService.ScheduleStateChanged -= OnScheduleStateChanged;
+            _bgService.BrightnessChanged -= OnBrightnessChanged;
             ClientSizeChanged -= OnFormClientSizeChanged;
             if (_tabControl != null)
                 _tabControl.TabSelected -= OnTabSelected;
@@ -1570,6 +1698,31 @@ namespace LumiShift
             StaticFormClientSize = default;
         }
 
+        private static void DrawOpacityBlit(Graphics g, Image src, int w, int h, float opacity)
+        {
+            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            using (var attributes = new System.Drawing.Imaging.ImageAttributes())
+            {
+                var matrix = new System.Drawing.Imaging.ColorMatrix(new float[][]
+                {
+                    new float[] { 1, 0, 0, 0, 0 },
+                    new float[] { 0, 1, 0, 0, 0 },
+                    new float[] { 0, 0, 1, 0, 0 },
+                    new float[] { 0, 0, 0, opacity, 0 },
+                    new float[] { 0, 0, 0, 0, 1 }
+                });
+                attributes.SetColorMatrix(matrix, System.Drawing.Imaging.ColorMatrixFlag.Default, System.Drawing.Imaging.ColorAdjustType.Bitmap);
+                int imgW = src.Width;
+                int imgH = src.Height;
+                float scale = Math.Max((float)w / imgW, (float)h / imgH);
+                int drawW = (int)(imgW * scale);
+                int drawH = (int)(imgH * scale);
+                int x = (w - drawW) / 2;
+                int y = (h - drawH) / 2;
+                g.DrawImage(src, new Rectangle(x, y, drawW, drawH), 0, 0, imgW, imgH, GraphicsUnit.Pixel, attributes);
+            }
+        }
+
         internal static Bitmap CreateBackgroundBitmap(Size targetSize)
         {
             if (StaticBackgroundImage == null || !StaticUseBackgroundImage)
@@ -1584,32 +1737,7 @@ namespace LumiShift
             var bmp = new Bitmap(w, h);
             using (var g = Graphics.FromImage(bmp))
             {
-                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-
-                using (var attributes = new System.Drawing.Imaging.ImageAttributes())
-                {
-                    var matrix = new System.Drawing.Imaging.ColorMatrix(new float[][]
-                    {
-                        new float[] { 1, 0, 0, 0, 0 },
-                        new float[] { 0, 1, 0, 0, 0 },
-                        new float[] { 0, 0, 1, 0, 0 },
-                        new float[] { 0, 0, 0, opacity, 0 },
-                        new float[] { 0, 0, 0, 0, 1 }
-                    });
-                    attributes.SetColorMatrix(matrix, System.Drawing.Imaging.ColorMatrixFlag.Default, System.Drawing.Imaging.ColorAdjustType.Bitmap);
-
-                    int imgW = StaticBackgroundImage.Width;
-                    int imgH = StaticBackgroundImage.Height;
-
-                    float scale = Math.Max((float)w / imgW, (float)h / imgH);
-                    int drawW = (int)(imgW * scale);
-                    int drawH = (int)(imgH * scale);
-                    int x = (w - drawW) / 2;
-                    int y = (h - drawH) / 2;
-
-                    g.DrawImage(StaticBackgroundImage, new Rectangle(x, y, drawW, drawH),
-                        0, 0, imgW, imgH, GraphicsUnit.Pixel, attributes);
-                }
+                DrawOpacityBlit(g, StaticBackgroundImage, w, h, opacity);
             }
 
             return bmp;
@@ -1664,32 +1792,7 @@ namespace LumiShift
                 newCached = new Bitmap(formW, formH);
                 using (var g = Graphics.FromImage(newCached))
                 {
-                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-
-                    using (var attributes = new System.Drawing.Imaging.ImageAttributes())
-                    {
-                        var matrix = new System.Drawing.Imaging.ColorMatrix(new float[][]
-                        {
-                            new float[] { 1, 0, 0, 0, 0 },
-                            new float[] { 0, 1, 0, 0, 0 },
-                            new float[] { 0, 0, 1, 0, 0 },
-                            new float[] { 0, 0, 0, opacity, 0 },
-                            new float[] { 0, 0, 0, 0, 1 }
-                        });
-                        attributes.SetColorMatrix(matrix, System.Drawing.Imaging.ColorMatrixFlag.Default, System.Drawing.Imaging.ColorAdjustType.Bitmap);
-
-                        int imgW = _backgroundImage.Width;
-                        int imgH = _backgroundImage.Height;
-
-                        float scale = Math.Max((float)formW / imgW, (float)formH / imgH);
-                        int drawW = (int)(imgW * scale);
-                        int drawH = (int)(imgH * scale);
-                        int x = (formW - drawW) / 2;
-                        int y = (formH - drawH) / 2;
-
-                        g.DrawImage(_backgroundImage, new Rectangle(x, y, drawW, drawH),
-                            0, 0, imgW, imgH, GraphicsUnit.Pixel, attributes);
-                    }
+                    DrawOpacityBlit(g, _backgroundImage, formW, formH, opacity);
                 }
             }
             catch
@@ -1758,32 +1861,7 @@ namespace LumiShift
                 _sharedTabPageBg = new Bitmap(pageW, pageH);
                 using (var g = Graphics.FromImage(_sharedTabPageBg))
                 {
-                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-
-                    using (var attributes = new System.Drawing.Imaging.ImageAttributes())
-                    {
-                        var matrix = new System.Drawing.Imaging.ColorMatrix(new float[][]
-                        {
-                            new float[] { 1, 0, 0, 0, 0 },
-                            new float[] { 0, 1, 0, 0, 0 },
-                            new float[] { 0, 0, 1, 0, 0 },
-                            new float[] { 0, 0, 0, opacity, 0 },
-                            new float[] { 0, 0, 0, 0, 1 }
-                        });
-                        attributes.SetColorMatrix(matrix, System.Drawing.Imaging.ColorMatrixFlag.Default, System.Drawing.Imaging.ColorAdjustType.Bitmap);
-
-                        int imgW = _backgroundImage.Width;
-                        int imgH = _backgroundImage.Height;
-
-                        float scale = Math.Max((float)pageW / imgW, (float)pageH / imgH);
-                        int drawW = (int)(imgW * scale);
-                        int drawH = (int)(imgH * scale);
-                        int x = (pageW - drawW) / 2;
-                        int y = (pageH - drawH) / 2;
-
-                        g.DrawImage(_backgroundImage, new Rectangle(x, y, drawW, drawH),
-                            0, 0, imgW, imgH, GraphicsUnit.Pixel, attributes);
-                    }
+                    DrawOpacityBlit(g, _backgroundImage, pageW, pageH, opacity);
                 }
 
                 _lastTabPageBgOpacity = opacity;
@@ -1799,10 +1877,6 @@ namespace LumiShift
                 page.BackgroundImage = _sharedTabPageBg;
                 page.BackgroundImageLayout = ImageLayout.None;
             }
-        }
-
-        private void SubscribeBackgroundPaintEvents()
-        {
         }
 
         private void OnFormClientSizeChanged(object sender, EventArgs e)
@@ -1844,12 +1918,6 @@ namespace LumiShift
             StaticFormClientSize = ClientSize;
         }
 
-        internal static void DrawBackgroundOnGraphics(Graphics g, Rectangle bounds, Point offset)
-        {
-            if (StaticCachedBackground == null) return;
-            g.DrawImage(StaticCachedBackground, -offset.X, -offset.Y);
-        }
-
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
@@ -1859,6 +1927,13 @@ namespace LumiShift
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
+
+            // 首次显示后立即刷新一次硬件亮度（窗体打开前外部可能有修改）
+            BeginInvoke(new Action(() =>
+            {
+                if (!IsDisposed && _brightnessRefreshTimer != null)
+                    BrightnessRefreshTimer_Tick(null, EventArgs.Empty);
+            }));
 
             BeginInvoke(new Action(() =>
             {

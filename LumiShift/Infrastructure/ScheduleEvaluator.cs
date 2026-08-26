@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using LumiShift.Models;
+using LumiShift.Services;
 
 namespace LumiShift.Infrastructure
 {
@@ -66,8 +67,8 @@ namespace LumiShift.Infrastructure
 
             var minDiff = TimeSpan.FromMinutes(minutes);
             if (minDiff.TotalHours < 1)
-                return $"{Math.Max(1, (int)Math.Ceiling(minDiff.TotalMinutes))}分钟后";
-            return $"{(int)minDiff.TotalHours}小时{(int)minDiff.Minutes}分钟后";
+                return Lang.F("{0}分钟后", Math.Max(1, (int)Math.Ceiling(minDiff.TotalMinutes)));
+            return Lang.F("{0}小时{1}分钟后", (int)minDiff.TotalHours, (int)minDiff.Minutes);
         }
 
         /// <summary>

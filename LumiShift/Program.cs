@@ -43,6 +43,9 @@ namespace LumiShift
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            // 多语言初始化必须在任何 UI 创建之前
+            Lang.Init(SettingsStore.LoadSettings().Language);
+
             bool startMinimized = false;
             foreach (var arg in args)
             {

@@ -11,11 +11,31 @@ namespace LumiShift.Infrastructure
 
         public const uint WM_SHOW_LUMISHIFT = 0x8FFF;
 
+        // 显示器变更需要刷新缓存（投递到 UI 线程处理）
+        public const uint WM_APP_DISPLAY_REFRESH = 0x8FFE;
+
+        // 电源广播：显示器电源状态通知（电源计划关闭/开启屏幕）
+        public const uint WM_POWERBROADCAST = 0x0218;
+        public const uint PBT_POWERSETTINGCHANGE = 0x8013;
+        public static readonly Guid GUID_MONITOR_POWER_ON = new Guid("02731015-852C-4A48-9A72-1F5E4B1467A2");
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POWERBROADCAST_SETTING
+        {
+            public Guid PowerSetting;
+            public uint DataLength;
+            public uint Data;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr RegisterPowerSettingNotification(IntPtr hWnd, ref Guid powerSettingGuid, uint flags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool UnregisterPowerSettingNotification(IntPtr handle);
+
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll")]
-        public static extern bool ReleaseCapture();
 
         [DllImport("user32.dll")]
         public static extern IntPtr GetSystemMenu(IntPtr hWnd, bool bRevert);
@@ -76,9 +96,6 @@ namespace LumiShift.Infrastructure
         public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
         public const uint MONITOR_DEFAULTTONULL = 0;
-        public const uint MONITOR_DEFAULTTOPRIMARY = 1;
-        public const uint MONITOR_DEFAULTTONEAREST = 2;
-        public const uint MONITORINFOF_PRIMARY = 1;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT
@@ -113,19 +130,6 @@ namespace LumiShift.Infrastructure
             public string szPhysicalMonitorDescription;
         }
 
-        public const uint WM_SETTINGCHANGE = 0x001A;
-        public const uint SMTO_ABORTIFHUNG = 0x0002;
-
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam,
-            uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
-
-        [DllImport("user32.dll")]
-        public static extern IntPtr GetForegroundWindow();
-
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetProcessWorkingSetSize(IntPtr hProcess, IntPtr dwMinimumWorkingSetSize, IntPtr dwMaximumWorkingSetSize);
@@ -153,12 +157,5 @@ namespace LumiShift.Infrastructure
         }
 
         public const uint DISPLAY_DEVICE_ATTACHED_TO_DESKTOP = 0x1;
-        public const uint DISPLAY_DEVICE_PRIMARY_DEVICE = 0x4;
-
-        public const uint GR_GDIOBJECTS = 0;
-        public const uint GR_USEROBJECTS = 1;
-
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern int GetGuiResources(IntPtr hProcess, uint uiFlags);
     }
 }
