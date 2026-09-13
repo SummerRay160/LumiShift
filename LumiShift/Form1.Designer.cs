@@ -246,9 +246,11 @@ namespace LumiShift
                 Text = text,
                 Location = new Point(Spacing.LG, y),
                 Width = width,
-                Height = 18,
                 Font = Typography.Caption
             };
+            // 英文等较长译文会超出一行：按实际换行高度撑高，避免文字被截断
+            lbl.Height = Math.Max(18, TextRenderer.MeasureText(text, lbl.Font,
+                new Size(width, 0), TextFormatFlags.WordBreak).Height + 2);
             SetLabelTheme(lbl, 's');
             return lbl;
         }
@@ -345,7 +347,7 @@ namespace LumiShift
             {
                 Text = Lang.Get("全部显示器适合统一调节；选择单台可做独立调整。"),
                 Location = new Point(Spacing.LG, gy),
-                Width = 360,
+                Width = 382,
                 Height = 18,
                 Font = Typography.Caption,
                 ForeColor = Colors.TextSecondary,
@@ -522,7 +524,8 @@ namespace LumiShift
                 Location = new Point(Spacing.LG, gy),
                 Width = 380,
                 Height = 18,
-                Font = Typography.Caption
+                Font = Typography.Caption,
+                AutoEllipsis = true
             };
             SetLabelTheme(_gammaStatusLabel, 's');
 
@@ -589,7 +592,7 @@ namespace LumiShift
             sy += 24;
 
             var titleHint = CreateHintLabel(Lang.Get("管理定时、通知、启动和界面选项，默认保持轻量运行。"), sy, settingsContentWidth);
-            sy += 34;
+            sy += titleHint.Height + 16;
 
             _scheduleEnabledCheckBox = new ToggleSwitch { Location = new Point(Spacing.LG, sy), Checked = false };
             _scheduleEnabledCheckBox.CheckedChanged += ScheduleEnabledCheckBox_CheckedChanged;
@@ -621,17 +624,20 @@ namespace LumiShift
 
             sy += 30;
 
+            // 不能用 AutoSize：长英文文案会超出窗口宽度撑出横向滚动条；固定宽度让其换行
             var scheduleHint = new Label
             {
                 Text = Lang.Get("到指定时间自动切换显示方案，适合白天、夜间和办公场景。"),
                 Location = new Point(Spacing.LG, sy),
-                AutoSize = true,
+                Width = settingsContentWidth,
                 Font = Typography.Caption,
                 ForeColor = Colors.TextSecondary,
                 BackColor = Color.Transparent
             };
+            scheduleHint.Height = Math.Max(18, TextRenderer.MeasureText(scheduleHint.Text, scheduleHint.Font,
+                new Size(scheduleHint.Width, 0), TextFormatFlags.WordBreak).Height + 2);
 
-            sy += 20;
+            sy += scheduleHint.Height + 2;
 
             var sepLine1 = CreateSeparator(sy, settingsContentWidth);
             sy += 10;
@@ -710,7 +716,8 @@ namespace LumiShift
                 Location = new Point(Spacing.LG, sy),
                 Width = settingsContentWidth,
                 Height = 16,
-                Font = Typography.Caption
+                Font = Typography.Caption,
+                AutoEllipsis = true
             };
             SetLabelTheme(_bgImageStatusLabel, 's');
 
@@ -1015,7 +1022,8 @@ namespace LumiShift
                 Location = new Point(Spacing.LG, ey),
                 Width = 382,
                 Height = 18,
-                Font = Typography.Caption
+                Font = Typography.Caption,
+                AutoEllipsis = true
             };
             SetLabelTheme(_eyeProtectionStatusLabel, 's');
 

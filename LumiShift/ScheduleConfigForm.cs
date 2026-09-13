@@ -171,7 +171,7 @@ namespace LumiShift
                     ? Lang.Get("设置一天中什么时候切换到哪个显示方案；多屏方案会自动应用每台显示器的设置。")
                     : Lang.Get("设置一天中什么时候切换到哪个显示方案；时段不可重叠。"),
                 Location = new Point(Spacing.LG, y),
-                Width = 572,
+                Width = 588,
                 Height = 18,
                 Font = Typography.Caption,
                 ForeColor = Colors.TextSecondary,
