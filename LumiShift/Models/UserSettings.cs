@@ -36,7 +36,8 @@ namespace LumiShift.Models
 
     public class UserSettings
     {
-        public int _version { get; set; }
+        /// <summary>设置文件格式版本。旧版键名为 "_version"，反序列化后为 0，会触发一次性迁移重存。</summary>
+        public int Version { get; set; }
         public bool StartWithWindows { get; set; }
         public bool StartMinimized { get; set; }
 
@@ -75,6 +76,12 @@ namespace LumiShift.Models
 
         public bool RestoreGammaOnExit { get; set; } = true;
         public string Language { get; set; } = "";
+
+        /// <summary>诊断文件日志开关，默认关闭；开启后写 %LocalAppData%\LumiShift\log.txt。</summary>
+        public bool DiagnosticsLoggingEnabled { get; set; }
+
+        /// <summary>内存维护开关（实验性），默认关闭；开启后周期性检查并压缩托管堆、修剪工作集。</summary>
+        public bool MemoryMaintenanceEnabled { get; set; }
 
         public bool NotificationsEnabled { get; set; } = true;
         public bool NotifyStartup { get; set; } = true;

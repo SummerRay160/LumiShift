@@ -337,9 +337,6 @@
   <data name="配置..." xml:space="preserve">
     <value>設定...</value>
   </data>
-  <data name="简洁模式" xml:space="preserve">
-    <value>精簡模式</value>
-  </data>
   <data name="亮度" xml:space="preserve">
     <value>亮度</value>
   </data>
@@ -390,6 +387,18 @@
   </data>
   <data name="退出时还原系统显示效果" xml:space="preserve">
     <value>結束時還原系統顯示效果</value>
+  </data>
+  <data name="诊断日志" xml:space="preserve">
+    <value>診斷日誌</value>
+  </data>
+  <data name="将运行记录写入本地日志文件，用于问题排查" xml:space="preserve">
+    <value>將執行記錄寫入本地日誌檔案，用於問題排查</value>
+  </data>
+  <data name="内存维护" xml:space="preserve">
+    <value>記憶體維護</value>
+  </data>
+  <data name="定期检查并修剪内存占用（实验性）" xml:space="preserve">
+    <value>定期檢查並修剪記憶體佔用（實驗性）</value>
   </data>
   <data name="Windows 通知提醒" xml:space="preserve">
     <value>Windows 通知提醒</value>
@@ -689,5 +698,44 @@
   </data>
   <data name="下方" xml:space="preserve">
     <value>下方</value>
+  </data>
+  <data name="正在调整所有屏幕" xml:space="preserve">
+    <value>正在調整所有螢幕</value>
+  </data>
+  <data name="正在调整「{0}」· 只对这台生效" xml:space="preserve">
+    <value>正在調整「{0}」· 僅對此螢幕生效</value>
+  </data>
+  <data name="「{0}」正由定时切换单独控制" xml:space="preserve">
+    <value>「{0}」正由定時切換單獨控制</value>
+  </data>
+  <data name="「{0}」正在单独设置 · 点“跟随全部”恢复一致" xml:space="preserve">
+    <value>「{0}」正在單獨設定 · 點「跟隨全部」恢復一致</value>
+  </data>
+  <data name="进阶调参 · R/G/B/γ 与显示方案" xml:space="preserve">
+    <value>進階調參 · R/G/B/γ 與顯示方案</value>
+  </data>
+  <data name="将删除 AppData 下的全部配置（设置、备份与日志），并恢复默认设置。" xml:space="preserve">
+    <value>將刪除 AppData 下的全部設定（設定、備份與日誌），並恢復預設值。</value>
+  </data>
+  <data name="删除配置" xml:space="preserve">
+    <value>刪除設定</value>
+  </data>
+  <data name="已删除配置并恢复默认设置。界面语言将在重启后生效。" xml:space="preserve">
+    <value>已刪除設定並恢復預設值。介面語言將在重啟後生效。</value>
+  </data>
+  <data name="部分配置文件删除失败（可能被其他程序占用），已恢复默认设置。界面语言将在重启后生效。" xml:space="preserve">
+    <value>部分設定檔刪除失敗（可能被其他程式佔用），已恢復預設值。介面語言將在重啟後生效。</value>
+  </data>
+  <data name="色温" xml:space="preserve">
+    <value>色溫</value>
+  </data>
+  <data name="调“所有显示器”时，每块屏幕都会变；单独选某一块时，改动只对它生效，其他屏幕不动。" xml:space="preserve">
+    <value>調「所有螢幕」時，每塊螢幕都會變；單獨選某塊螢幕時，改動只對它生效，其他螢幕不動。</value>
+  </data>
+  <data name="方案就是把当前调好的效果存个名字，以后选中就能直接用，定时切换也会用到它。" xml:space="preserve">
+    <value>方案就是把目前調好的效果存個名字，以後選中就能直接用，定時切換也會用到它。</value>
+  </data>
+  <data name="删除本地全部配置并恢复默认" xml:space="preserve">
+    <value>刪除本機全部設定並恢復預設</value>
   </data>
 </root>

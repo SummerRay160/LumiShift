@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 using LumiShift.Infrastructure;
@@ -46,6 +47,8 @@ namespace LumiShift
             // 多语言初始化必须在任何 UI 创建之前
             Lang.Init(SettingsStore.LoadSettings().Language);
 
+            // 命令行 --minimized 只影响本次启动，不回写配置
+            // （持久化的"最小化启动"由设置界面控制，注册表启动项自身已带 --minimized）
             bool startMinimized = false;
             foreach (var arg in args)
             {
@@ -56,20 +59,13 @@ namespace LumiShift
                 }
             }
 
-            if (startMinimized)
-            {
-                var settings = Services.SettingsStore.LoadSettings();
-                settings.StartMinimized = true;
-                Services.SettingsStore.SaveSettings(settings);
-            }
-
             var context = new ApplicationContext();
             var bgService = new BackgroundService();
 
-            if (!bgService.Settings.StartMinimized)
-                bgService.ShowMainWindow();
-            else
+            if (startMinimized || bgService.Settings.StartMinimized)
                 bgService.ScheduleLightweightModeEntry();
+            else
+                bgService.ShowMainWindow();
 
             try
             {

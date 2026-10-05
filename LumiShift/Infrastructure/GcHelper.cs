@@ -32,6 +32,7 @@ namespace LumiShift.Infrastructure
             catch { }
         }
 
+        /// <summary>托管堆超过阈值（默认 100MB）时判定为需要内存维护。</summary>
         public static bool DetectLeakSuspect(long thresholdBytes = 100 * 1024 * 1024)
         {
             return GC.GetTotalMemory(false) > thresholdBytes;

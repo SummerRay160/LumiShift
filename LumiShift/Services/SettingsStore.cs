@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Web.Script.Serialization;
+using LumiShift.Infrastructure;
 using LumiShift.Models;
 
 namespace LumiShift.Services
@@ -33,14 +34,23 @@ namespace LumiShift.Services
                 if (settings == null)
                     return CreateDefaultSettings();
 
-                // 旧格式（无 _version）：备份原文件后按当前格式重存
-                if (settings._version < CurrentSettingsVersion)
-                    MigrateFromLegacy(settings);
+                // 拿到配置后立即同步日志开关，使本次读取/迁移过程本身也能留痕
+                Log.SetEnabled(settings.DiagnosticsLoggingEnabled);
 
+                // 旧格式（旧版版本键名为 "_version"，反序列化后 Version 为 0）：备份原文件后按当前格式重存
+                if (settings.Version < CurrentSettingsVersion)
+                {
+                    Log.Info("Settings", $"检测到旧格式配置 (v{settings.Version})，执行迁移");
+                    MigrateFromLegacy(settings);
+                }
+
+                Log.Info("Settings", $"配置加载成功 (v{settings.Version})");
                 return settings;
             }
-            catch
+            catch (Exception ex)
             {
+                // 读取失败会回退默认值并在下次保存时覆盖原配置，属关键故障：绕过开关强制留痕
+                Log.Critical("Settings", ex);
                 return CreateDefaultSettings();
             }
         }
@@ -52,12 +62,21 @@ namespace LumiShift.Services
                 if (!Directory.Exists(SettingsDir))
                     Directory.CreateDirectory(SettingsDir);
 
-                settings._version = CurrentSettingsVersion;
+                settings.Version = CurrentSettingsVersion;
                 string json = new JavaScriptSerializer().Serialize(settings);
-                File.WriteAllText(SettingsPath, json);
+
+                // 先写临时文件再原子替换：进程中断最多留下 .tmp，不会损坏 settings.json
+                string tmpPath = SettingsPath + ".tmp";
+                File.WriteAllText(tmpPath, json);
+                if (File.Exists(SettingsPath))
+                    File.Replace(tmpPath, SettingsPath, null);
+                else
+                    File.Move(tmpPath, SettingsPath);
             }
-            catch
+            catch (Exception ex)
             {
+                // 配置保存失败必须留痕，否则用户设置静默丢失无从排查
+                Log.Error("Settings", ex);
             }
         }
 
@@ -71,12 +90,29 @@ namespace LumiShift.Services
 
                 SaveSettings(settings);
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Error("Settings", ex);
             }
         }
 
-        private static UserSettings CreateDefaultSettings()
+        /// <summary>删除 AppData 下的全部配置（目录连同 settings.json/.tmp/.bak 与 log.txt）。返回是否完整删除。</summary>
+        public static bool DeleteAllConfig()
+        {
+            try
+            {
+                if (Directory.Exists(SettingsDir))
+                    Directory.Delete(SettingsDir, true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("SettingsStore", ex);
+                return false;
+            }
+        }
+
+        internal static UserSettings CreateDefaultSettings()
         {
             return new UserSettings
             {

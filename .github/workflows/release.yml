@@ -61,24 +61,6 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Extract changelog for release
-        id: changelog
-        shell: pwsh
-        run: |
-          $version = "${{ steps.version.outputs.version }}"
-          $changelog = Get-Content -Raw CHANGELOG.md
-          # 匹配 ## [版本号] 到下一个 ## [ 或 ---
-          $pattern = "## \[$([regex]::Escape($version))\][\s\S]*?(?=\n## \[|\n---|\Z)"
-          $match = [regex]::Match($changelog, $pattern)
-          if ($match.Success) {
-            $body = $match.Value.Trim()
-            $body | Set-Content -Path changelog_body.txt -Encoding UTF8
-            Write-Host "Extracted changelog for v$version"
-          } else {
-            Write-Host "::warning::Changelog for v$version not found, using tag as body"
-            "Release ${{ steps.version.outputs.tag }}" | Set-Content -Path changelog_body.txt -Encoding UTF8
-          }
-
       - name: Delete existing release (if any)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -102,7 +84,8 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: LumiShift ${{ steps.version.outputs.tag }}
           draft: false
-          body_path: changelog_body.txt
+          # 已废弃 CHANGELOG.md：发布说明由 GitHub 依据提交/PR 自动生成
+          generate_release_notes: true
           files: |
             staging/LumiShift.exe
             staging/LumiShift.exe.config

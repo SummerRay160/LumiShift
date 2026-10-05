@@ -60,6 +60,7 @@ namespace LumiShift
         private Timer _updateCheckTimer;
         private Timer _lightweightEntryTimer;
         private Timer _healthCheckTimer;
+        private Timer _lightweightGcTimer;
         private Timer _gammaReapplyTimer;
         private Timer _gammaWatchdogTimer;
         private Timer _displayChangeDebounceTimer;
@@ -70,7 +71,12 @@ namespace LumiShift
         private bool _lightweightMode;
         private bool _displayChangedInLightweight;
         private bool _scheduleChangedInLightweight;
-        private Timer _lightweightGcTimer;
+
+        // 内存维护（可选，默认关闭）：轻量模式周期 GC 的节奏控制
+        private int _lightweightGcTickCount;
+        private const int LightweightGcMs = 30000;
+        private const int FullCompactEveryNTicks = 20;   // 约每 10 分钟一次全量压缩
+        private const int Gen1CollectEveryNTicks = 5;
 
         private Form1 MainForm
         {
@@ -100,12 +106,6 @@ namespace LumiShift
         private ToolStripMenuItem _trayQuickMenu;
         private ToolStripMenuItem _trayAllMonitorsItem;
         private ToolStripMenuItem _trayRestoreItem;
-        private Timer _microGcTimer;
-        private Timer _menuCleanupTimer;
-        private int _lightweightGcTickCount;
-        private const int LightweightGcMs = 30000;
-        private const int FullCompactEveryNTicks = 20;
-        private const int Gen1CollectEveryNTicks = 5;
 
         private ScheduleEvaluator _scheduleEvaluator;
         private int _parsedSegmentsHash;
@@ -174,6 +174,10 @@ namespace LumiShift
         public BackgroundService()
         {
             Settings = SettingsStore.LoadSettings();
+
+            // 日志开关已由 SettingsStore.LoadSettings 依配置同步；此处补写会话头，便于把日志切分到具体一次运行
+            Log.WriteSessionHeader("应用启动");
+
             GammaController = new GammaController();
             _presetService = new PresetService(Settings);
             _displayGammaState = new DisplayGammaStateService(Settings, _presetService);
@@ -229,9 +233,8 @@ namespace LumiShift
                 _updateCheckTimer.Start();
             }
 
-            _healthCheckTimer = new Timer { Interval = 5 * 60 * 1000 };
-            _healthCheckTimer.Tick += HealthCheckTimer_Tick;
-            _healthCheckTimer.Start();
+            if (Settings.MemoryMaintenanceEnabled)
+                StartMemoryMaintenance();
 
             StartGammaWatchdog();
             StartBrightnessEventWatcher();
@@ -252,7 +255,9 @@ namespace LumiShift
             _trayMenu.Opening += OnTrayMenuOpening;
             _trayMenu.Closed += OnTrayMenuClosed;
             _trayIcon.ContextMenuStrip = _trayMenu;
-            _trayIcon.DoubleClick += OnTrayIconDoubleClick;
+            // 用 MouseDoubleClick 过滤鼠标按键：NotifyIcon 的 DoubleClick 对右键双击同样触发，
+            // 快速右键托盘图标会被识别为右键双击而反复弹出主窗口
+            _trayIcon.MouseDoubleClick += OnTrayIconMouseDoubleClick;
         }
 
         private void OnTrayMenuOpening(object sender, System.ComponentModel.CancelEventArgs e)
@@ -275,11 +280,13 @@ namespace LumiShift
                 _trayMenuNeedsRebuild = false;
                 RebuildTrayMenu();
             }
-            ScheduleMenuCleanupGc();
         }
 
-        private void OnTrayIconDoubleClick(object sender, EventArgs e)
+        private void OnTrayIconMouseDoubleClick(object sender, MouseEventArgs e)
         {
+            // 仅左键双击打开主界面；快速右键产生的右键双击不触发，
+            // 否则会与右键菜单叠加导致窗口反复弹出
+            if (e.Button != MouseButtons.Left) return;
             ShowMainWindow();
         }
 
@@ -294,7 +301,6 @@ namespace LumiShift
             if (!Form1IsOpen())
             {
                 RefreshDynamicTraySection();
-                ScheduleMicroGc();
             }
             else
             {
@@ -341,8 +347,6 @@ namespace LumiShift
                 ClearDynamicTraySection();
                 BuildDynamicTraySection();
             }
-
-            ScheduleMenuCleanupGc();
         }
 
         private void ClearDynamicTraySection()
@@ -421,7 +425,8 @@ namespace LumiShift
             foreach (var p in PresetDefinitions.GetNames())
             {
                 bool isActive = !anyMonitorOverride && Settings.GammaEnabled && globalPresetName == p;
-                var item = new ToolStripMenuItem(Lang.Get(p)) { Checked = isActive };
+                // Tag 存原始预设名：勾选刷新按 Tag 比较，不受 Lang.Get 本地化文本影响
+                var item = new ToolStripMenuItem(Lang.Get(p)) { Checked = isActive, Tag = p };
                 string cp = p;
                 item.Click += (s, ev) => ExecuteTrayAction(() => QuickPreset(cp));
                 _trayAllMonitorsItem.DropDownItems.Add(item);
@@ -432,7 +437,7 @@ namespace LumiShift
                 foreach (var cp in Settings.CustomGammaPresets)
                 {
                     bool isActive = !anyMonitorOverride && Settings.GammaEnabled && globalPresetName == cp.Name;
-                    var item = new ToolStripMenuItem(Lang.Get(cp.Name)) { Checked = isActive };
+                    var item = new ToolStripMenuItem(Lang.Get(cp.Name)) { Checked = isActive, Tag = cp.Name };
                     string name = cp.Name;
                     item.Click += (s, ev) => ExecuteTrayAction(() => QuickPreset(name));
                     _trayAllMonitorsItem.DropDownItems.Add(item);
@@ -546,10 +551,11 @@ namespace LumiShift
 
             foreach (ToolStripItem item in _trayAllMonitorsItem.DropDownItems)
             {
-                if (item is ToolStripMenuItem menuItem && item != null && !(item is ToolStripSeparator))
+                if (item is ToolStripMenuItem menuItem)
                 {
-                    string presetName = menuItem.Text;
-                    bool shouldCheck = !anyMonitorOverride && Settings.GammaEnabled && globalPresetName == presetName;
+                    // 与构建时的 Tag（原始预设名）比较；Text 已被 Lang.Get 本地化，不能用作匹配键
+                    bool shouldCheck = !anyMonitorOverride && Settings.GammaEnabled
+                                       && globalPresetName == menuItem.Tag as string;
                     menuItem.Checked = shouldCheck;
                 }
             }
@@ -839,6 +845,8 @@ namespace LumiShift
 
                 if (targetScheduleKey == _lastScheduleMode) return;
 
+                Log.Info("Schedule", $"定时切换：{(_lastScheduleMode.Length == 0 ? "(初始)" : _lastScheduleMode)} → {targetScheduleKey}（{targetMode}）");
+
                 var savedR = Settings.GammaRScale;
                 var savedG = Settings.GammaGScale;
                 var savedB = Settings.GammaBScale;
@@ -897,8 +905,9 @@ namespace LumiShift
                 NotifyScheduleSwitch(targetMode, targetSegment);
                 ScheduleStateChanged?.Invoke();
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Error("ScheduleTimer", ex);
             }
             finally
             {
@@ -943,6 +952,8 @@ namespace LumiShift
             // 从睡眠/休眠恢复：Windows 会重置 Gamma 渐变，无论是否开启定时调度都必须重新应用
             if (Settings.ScheduleEnabled)
                 _lastScheduleMode = "";
+
+            Log.Info("Power", "系统从睡眠/休眠恢复，重新应用显示效果");
 
             InvokeOnUIThread(() =>
             {
@@ -1175,7 +1186,8 @@ namespace LumiShift
                 catch { }
             }
             // 无主窗体或调用失败：直接执行（事件回调可能在任意线程，但 ScheduleTimer_Tick 内部逻辑线程安全）
-            try { action(); } catch { }
+            try { action(); }
+            catch (Exception ex) { Log.Error("InvokeOnUIThread", ex); }
         }
 
         private void ApplyScheduleMonitorPresets(ScheduleSegment segment)
@@ -1312,6 +1324,51 @@ namespace LumiShift
 
         #endregion
 
+        /// <summary>
+        /// 删除 AppData 下的全部配置并把内存设置重置为默认值后重新应用。
+        /// Settings 实例被 Form1 与各服务共同持有，因此原地复制默认值而非替换引用；
+        /// 硬件亮度不受影响（重置配置不等于冲击显示器状态）。
+        /// 返回配置文件是否完整删除；删除失败时默认值恢复照常进行。
+        /// </summary>
+        internal bool ResetToDefaults()
+        {
+            bool deleted = SettingsStore.DeleteAllConfig();
+            if (deleted)
+                Log.Info("Reset", "配置目录已删除，开始恢复默认设置");
+            else
+                Log.Warn("Reset", "配置目录删除失败（文件可能被占用），仍恢复默认设置");
+
+            var defaults = SettingsStore.CreateDefaultSettings();
+            foreach (var prop in typeof(UserSettings).GetProperties())
+            {
+                // 过滤索引器：带索引参数的属性不能这样复制，否则 SetValue 抛 TargetParameterCountException
+                if (prop.CanRead && prop.CanWrite && prop.GetIndexParameters().Length == 0)
+                    prop.SetValue(Settings, prop.GetValue(defaults, null), null);
+            }
+
+            // 重置后回到默认值（日志/内存维护关闭），此处切换动作本身会留痕
+            Log.SetEnabled(Settings.DiagnosticsLoggingEnabled);
+            SetMemoryMaintenance(Settings.MemoryMaintenanceEnabled);
+
+            _lastScheduleMode = "";
+            _scheduleManualOverride = false;
+            _scheduleEvaluator = null;
+            _parsedSegmentsHash = 0;
+            if (_scheduleTimer != null)
+                _scheduleTimer.Enabled = Settings.ScheduleEnabled;
+
+            if (!Settings.EyeProtectionEnabled)
+                EyeProtectionService.RestoreDefault();
+
+            ApplyGammaToSystem();
+            UpdateStartupRegistry();
+            SettingsStore.SaveSettings(Settings);
+            UpdateTrayMenu();
+            UpdateTrayText();
+            ScheduleStateChanged?.Invoke();
+            return deleted;
+        }
+
         #region System Events
 
         private void OnDisplaySettingsChanged(object sender, EventArgs e)
@@ -1384,6 +1441,8 @@ namespace LumiShift
             }
 
             var removedIds = _monitorManager.RefreshMonitors();
+            Log.Info("Display", $"显示器配置变更：当前 {_monitorManager.Monitors.Count} 台" +
+                (removedIds != null && removedIds.Count > 0 ? $"，失效 {removedIds.Count} 台（{string.Join(", ", removedIds)}）" : ""));
             bool cleaned = CleanupStaleSettings(removedIds);
             NotifyMonitorChange(_monitorManager.Monitors.Count, removedIds == null ? 0 : removedIds.Count);
             if (!Form1IsOpen())
@@ -1397,7 +1456,6 @@ namespace LumiShift
                 {
                     ClearDynamicTraySection();
                     BuildDynamicTraySection();
-                    ScheduleMicroGc();
                 }
             }
             else if (cleaned)
@@ -1492,12 +1550,6 @@ namespace LumiShift
                 _lightweightMode = false;
                 var displayChanged = _displayChangedInLightweight;
                 _displayChangedInLightweight = false;
-                _lightweightGcTimer?.Stop();
-                _lightweightGcTimer?.Dispose();
-                _lightweightGcTimer = null;
-                _microGcTimer?.Stop();
-                _microGcTimer?.Dispose();
-                _microGcTimer = null;
                 if (_monitorManager != null)
                 {
                     if (displayChanged)
@@ -1516,8 +1568,8 @@ namespace LumiShift
                     _scheduleTimer.Interval = ScheduleTimerIntervalNormal;
                 if (_messageWindow == null)
                     _messageWindow = new MessageWindow(this);
-                _healthCheckTimer?.Start();
                 GcHelper.CollectFull();
+                DisposeTimer(ref _lightweightGcTimer);
                 if (_scheduleChangedInLightweight)
                 {
                     _scheduleChangedInLightweight = false;
@@ -1548,7 +1600,6 @@ namespace LumiShift
             _parsedSegmentsHash = 0;
             // 消息窗口保留不销毁：轻量（托盘）模式下仍需接收电源广播，
             // 以便休眠唤醒/屏幕重新上电后重新应用 Gamma
-            _healthCheckTimer?.Stop();
             if (_monitorManager != null)
                 _monitorManager.EnterLightweightMode();
             if (_scheduleTimer != null)
@@ -1561,80 +1612,8 @@ namespace LumiShift
             }
             catch { }
             GcHelper.TrimWorkingSet();
-
-            _lightweightGcTickCount = 0;
-            _lightweightGcTimer = new Timer { Interval = LightweightGcMs };
-            _lightweightGcTimer.Tick += LightweightGcTimer_Tick;
-            _lightweightGcTimer.Start();
-        }
-
-        private void LightweightGcTimer_Tick(object sender, EventArgs e)
-        {
-            _lightweightGcTickCount++;
-
-            if (_lightweightGcTickCount % FullCompactEveryNTicks == 0)
-            {
-                GcHelper.CollectFull();
-                GcHelper.TrimWorkingSet();
-            }
-            else if (_lightweightGcTickCount % Gen1CollectEveryNTicks == 0)
-            {
-                GC.Collect(1, GCCollectionMode.Forced, false);
-                GC.WaitForPendingFinalizers();
-                GcHelper.TrimWorkingSet();
-            }
-            else
-            {
-                GC.Collect(0, GCCollectionMode.Forced);
-            }
-
-        }
-
-        private void HealthCheckTimer_Tick(object sender, EventArgs e)
-        {
-            if (_exiting || _lightweightMode) return;
-
-            try
-            {
-                if (GcHelper.DetectLeakSuspect())
-                {
-                    GcHelper.CollectFull();
-                    GcHelper.TrimWorkingSet();
-                }
-            }
-            catch { }
-        }
-
-        private void ScheduleMicroGc()
-        {
-            if (_microGcTimer != null) return;
-
-            _microGcTimer = new Timer { Interval = 2000 };
-            _microGcTimer.Tick += (s, e) =>
-            {
-                _microGcTimer?.Stop();
-                _microGcTimer?.Dispose();
-                _microGcTimer = null;
-                GC.Collect(0, GCCollectionMode.Forced);
-                GcHelper.TrimWorkingSet();
-            };
-            _microGcTimer.Start();
-        }
-
-        private void ScheduleMenuCleanupGc()
-        {
-            if (_menuCleanupTimer != null) return;
-
-            _menuCleanupTimer = new Timer { Interval = 1500 };
-            _menuCleanupTimer.Tick += (s, e) =>
-            {
-                _menuCleanupTimer?.Stop();
-                _menuCleanupTimer?.Dispose();
-                _menuCleanupTimer = null;
-                GcHelper.CollectFull();
-                GcHelper.TrimWorkingSet();
-            };
-            _menuCleanupTimer.Start();
+            if (Settings.MemoryMaintenanceEnabled)
+                StartLightweightGcTimer();
         }
 
         internal void ScheduleLightweightModeEntry()
@@ -1654,6 +1633,91 @@ namespace LumiShift
             };
             _lightweightEntryTimer.Start();
         }
+
+        #region Memory Maintenance（可选，默认关闭）
+
+        /// <summary>
+        /// 内存维护（实验性）：正常模式下每 5 分钟健康检查（托管堆超阈值才全量压缩），
+        /// 轻量（托盘）模式下 30 秒周期 GC。由设置 MemoryMaintenanceEnabled 控制，默认关闭。
+        /// </summary>
+        internal void SetMemoryMaintenance(bool enabled)
+        {
+            if (enabled)
+                StartMemoryMaintenance();
+            else
+                StopMemoryMaintenance();
+        }
+
+        private void StartMemoryMaintenance()
+        {
+            if (_healthCheckTimer == null)
+            {
+                _healthCheckTimer = new Timer { Interval = 5 * 60 * 1000 };
+                _healthCheckTimer.Tick += HealthCheckTimer_Tick;
+                _healthCheckTimer.Start();
+            }
+            if (_lightweightMode && _lightweightGcTimer == null)
+                StartLightweightGcTimer();
+        }
+
+        private void StopMemoryMaintenance()
+        {
+            DisposeTimer(ref _healthCheckTimer);
+            DisposeTimer(ref _lightweightGcTimer);
+        }
+
+        private void StartLightweightGcTimer()
+        {
+            _lightweightGcTickCount = 0;
+            _lightweightGcTimer = new Timer { Interval = LightweightGcMs };
+            _lightweightGcTimer.Tick += LightweightGcTimer_Tick;
+            _lightweightGcTimer.Start();
+        }
+
+        private void HealthCheckTimer_Tick(object sender, EventArgs e)
+        {
+            if (_exiting || _disposed || _lightweightMode) return;
+            try
+            {
+                // 托管堆超阈值才压缩，常规状态下不额外 GC
+                if (GcHelper.DetectLeakSuspect())
+                {
+                    GcHelper.CollectFull();
+                    GcHelper.TrimWorkingSet();
+                    Log.Info("Memory", "健康检查：托管堆超阈值，已全量压缩并修剪工作集");
+                }
+            }
+            catch { }
+        }
+
+        private void LightweightGcTimer_Tick(object sender, EventArgs e)
+        {
+            if (_exiting || _disposed || !_lightweightMode) return;
+            try
+            {
+                _lightweightGcTickCount++;
+
+                if (_lightweightGcTickCount % FullCompactEveryNTicks == 0)
+                {
+                    GcHelper.CollectFull();
+                    GcHelper.TrimWorkingSet();
+                    Log.Info("Memory", "轻量模式：全量压缩并修剪工作集");
+                }
+                else if (_lightweightGcTickCount % Gen1CollectEveryNTicks == 0)
+                {
+                    GC.Collect(1, GCCollectionMode.Forced, false);
+                    GC.WaitForPendingFinalizers();
+                    GcHelper.TrimWorkingSet();
+                }
+                else
+                {
+                    GC.Collect(0, GCCollectionMode.Forced);
+                }
+            }
+            catch { }
+        }
+
+        #endregion
 
         private void ActivateExistingForm()
         {
@@ -1773,6 +1837,7 @@ namespace LumiShift
             DisposeTimer(ref _updateCheckTimer);
             DisposeTimer(ref _lightweightEntryTimer);
             DisposeTimer(ref _healthCheckTimer);
+            DisposeTimer(ref _lightweightGcTimer);
             DisposeTimer(ref _gammaReapplyTimer);
             DisposeTimer(ref _gammaWatchdogTimer);
             DisposeTimer(ref _displayChangeDebounceTimer);
@@ -1807,12 +1872,6 @@ namespace LumiShift
             }
 
             try { _scheduleTimer?.Stop(); _scheduleTimer?.Dispose(); _scheduleTimer = null; } catch { }
-
-            try { _lightweightGcTimer?.Stop(); _lightweightGcTimer?.Dispose(); _lightweightGcTimer = null; } catch { }
-
-            try { _microGcTimer?.Stop(); _microGcTimer?.Dispose(); _microGcTimer = null; } catch { }
-
-            try { _menuCleanupTimer?.Stop(); _menuCleanupTimer?.Dispose(); _menuCleanupTimer = null; } catch { }
 
             _scheduleEvaluator = null;
             _parsedSegmentsHash = 0;
@@ -1850,7 +1909,7 @@ namespace LumiShift
             {
                 try
                 {
-                    _trayIcon.DoubleClick -= OnTrayIconDoubleClick;
+                    _trayIcon.MouseDoubleClick -= OnTrayIconMouseDoubleClick;
                     _trayIcon.Icon = null;
                     _trayIcon.Visible = false;
                     _trayIcon.Dispose();
@@ -1875,6 +1934,7 @@ namespace LumiShift
             DisposeTimer(ref _updateCheckTimer);
             DisposeTimer(ref _lightweightEntryTimer);
             DisposeTimer(ref _healthCheckTimer);
+            DisposeTimer(ref _lightweightGcTimer);
             DisposeTimer(ref _gammaReapplyTimer);
             DisposeTimer(ref _gammaWatchdogTimer);
             DisposeTimer(ref _displayChangeDebounceTimer);
@@ -1892,9 +1952,6 @@ namespace LumiShift
             }
 
             try { _scheduleTimer?.Stop(); _scheduleTimer?.Dispose(); } catch { }
-            try { _lightweightGcTimer?.Stop(); _lightweightGcTimer?.Dispose(); } catch { }
-            try { _microGcTimer?.Stop(); _microGcTimer?.Dispose(); } catch { }
-            try { _menuCleanupTimer?.Stop(); _menuCleanupTimer?.Dispose(); } catch { }
 
             _scheduleEvaluator = null;
             _parsedSegmentsHash = 0;
@@ -1920,7 +1977,7 @@ namespace LumiShift
             {
                 try
                 {
-                    _trayIcon.DoubleClick -= OnTrayIconDoubleClick;
+                    _trayIcon.MouseDoubleClick -= OnTrayIconMouseDoubleClick;
                     _trayIcon.Dispose();
                 }
                 catch { }
