@@ -59,8 +59,12 @@ namespace LumiShift
             ClientSize = new Size(620, 560);
             BackColor = Colors.Background;
             DoubleBuffered = true;
+            AutoScaleMode = AutoScaleMode.None;
 
             BuildUI();
+            // 静态控件按 96 DPI 布局，这里整体放大到当前 DPI；
+            // 之后动态创建的时段行需自行调用 DpiScale.Apply（见 CreateSegmentRow）
+            DpiScale.Apply(this);
             ApplyBackgroundImage();
             EnablePanelDoubleBuffered();
             RebuildSegmentPanel();
@@ -454,8 +458,9 @@ namespace LumiShift
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            var bounds = new Rectangle(0, 8, _timelinePanel.Width - 1, 46);
-            var barBounds = new Rectangle(8, 18, _timelinePanel.Width - 17, 24);
+            // 面板已按 DPI 缩放，绘制坐标需用同一比例换算
+            var bounds = new Rectangle(0, DpiScale.S(8), _timelinePanel.Width - 1, DpiScale.S(46));
+            var barBounds = new Rectangle(DpiScale.S(8), DpiScale.S(18), _timelinePanel.Width - DpiScale.S(17), DpiScale.S(24));
             using (var bg = new SolidBrush(Colors.Surface))
                 g.FillRectangle(bg, bounds);
             using (var pen = new Pen(Colors.BorderLight))
@@ -464,7 +469,7 @@ namespace LumiShift
             if (_segments.Count == 0)
             {
                 using (var brush = new SolidBrush(Colors.TextSecondary))
-                    g.DrawString(Lang.Get("暂无时段，点击下方“添加时段”开始配置。"), Typography.Caption, brush, new PointF(10, 17));
+                    g.DrawString(Lang.Get("暂无时段，点击下方“添加时段”开始配置。"), Typography.Caption, brush, new PointF(DpiScale.S(10), DpiScale.S(17)));
                 return;
             }
 
@@ -495,9 +500,9 @@ namespace LumiShift
 
             using (var brush = new SolidBrush(Colors.TextSecondary))
             {
-                g.DrawString("00:00", Typography.Caption, brush, new PointF(0, 62));
-                g.DrawString("12:00", Typography.Caption, brush, new PointF((_timelinePanel.Width - 34) / 2f, 62));
-                g.DrawString("24:00", Typography.Caption, brush, new PointF(_timelinePanel.Width - 38, 62));
+                g.DrawString("00:00", Typography.Caption, brush, new PointF(0, DpiScale.S(62)));
+                g.DrawString("12:00", Typography.Caption, brush, new PointF((_timelinePanel.Width - DpiScale.S(34)) / 2f, DpiScale.S(62)));
+                g.DrawString("24:00", Typography.Caption, brush, new PointF(_timelinePanel.Width - DpiScale.S(38), DpiScale.S(62)));
             }
         }
 
@@ -507,7 +512,7 @@ namespace LumiShift
             float endRatio = (float)end.TotalMinutes / 1440f;
             int x = left + (int)Math.Round(timelineWidth * startRatio);
             int right = left + (int)Math.Round(timelineWidth * endRatio);
-            int segmentWidth = Math.Max(3, right - x);
+            int segmentWidth = Math.Max(DpiScale.S(3), right - x);
             Color color = HasOverlap(index) ? Colors.Red : (segment.SyncMode == false || IsMultiDisplayPreset(segment.PresetName) ? Colors.Brand : Colors.Green);
 
             var segmentRect = new Rectangle(x, barBounds.Y, segmentWidth, barBounds.Height);
@@ -534,17 +539,17 @@ namespace LumiShift
 
         private void DrawTimelineSegmentLabel(Graphics g, ScheduleSegment segment, Rectangle segmentRect)
         {
-            if (segmentRect.Width < 28) return;
+            if (segmentRect.Width < DpiScale.S(28)) return;
 
             string mode = segment.SyncMode == false ? Lang.Get("逐台") : (IsMultiDisplayPreset(segment.PresetName) ? Lang.Get("多屏") : Lang.Get("统一"));
             string label = $"{Lang.Get(GetPresetNameFromDisplay(segment.PresetName))} · {mode}";
-            int maxChars = Math.Max(2, (segmentRect.Width - 8) / 7);
+            int maxChars = Math.Max(2, (segmentRect.Width - DpiScale.S(8)) / DpiScale.S(7));
             if (label.Length > maxChars)
                 label = maxChars <= 3 ? label.Substring(0, Math.Min(label.Length, maxChars)) : label.Substring(0, maxChars - 1) + "…";
 
             var textSize = g.MeasureString(label, Typography.Caption);
-            float textX = segmentRect.X + Math.Max(4, (segmentRect.Width - textSize.Width) / 2f);
-            float textY = segmentRect.Y + (segmentRect.Height - textSize.Height) / 2f + 1;
+            float textX = segmentRect.X + Math.Max(DpiScale.S(4), (segmentRect.Width - textSize.Width) / 2f);
+            float textY = segmentRect.Y + (segmentRect.Height - textSize.Height) / 2f + DpiScale.S(1);
             using (var brush = new SolidBrush(Color.White))
                 g.DrawString(label, Typography.Caption, brush, new PointF(textX, textY));
         }
@@ -936,6 +941,8 @@ namespace LumiShift
                 }
             }
 
+            // 行内坐标均为 96 DPI 设计值，容器整体按当前 DPI 缩放
+            DpiScale.Apply(container);
             return container;
         }
 

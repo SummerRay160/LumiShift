@@ -18,8 +18,9 @@
   </compatibility>
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
+      <!-- .NET Framework WinForms 不支持 PerMonitorV2（不处理 WM_DPICHANGED），
+           声明为系统 DPI 感知 + 代码内统一缩放，才能在 150%/200% 缩放下保持布局正确 -->
       <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
-      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
     </windowsSettings>
   </application>
 </assembly>

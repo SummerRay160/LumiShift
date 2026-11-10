@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using LumiShift.Infrastructure;
 using LumiShift.Resources;
 
 namespace LumiShift.Services
@@ -108,6 +109,9 @@ namespace LumiShift.Services
             _downloadButton.FlatAppearance.MouseOverBackColor = Colors.BrandHover;
             _laterButton.FlatAppearance.MouseOverBackColor = Colors.SurfaceLight;
             _skipButton.FlatAppearance.MouseOverBackColor = Colors.SurfaceLight;
+
+            AutoScaleMode = AutoScaleMode.None;
+            DpiScale.Apply(this);
         }
 
         protected override void OnShown(EventArgs e)

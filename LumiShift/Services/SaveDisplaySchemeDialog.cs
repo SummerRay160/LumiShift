@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using LumiShift.Infrastructure;
 using LumiShift.Models;
 using LumiShift.Resources;
 
@@ -155,6 +156,9 @@ namespace LumiShift.Services
             AcceptButton = saveButton;
             CancelButton = cancelButton;
             Shown += (s, e) => { _nameTextBox.SelectAll(); _nameTextBox.Focus(); };
+
+            AutoScaleMode = AutoScaleMode.None;
+            DpiScale.Apply(this);
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)

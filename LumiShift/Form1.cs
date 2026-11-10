@@ -382,27 +382,29 @@ namespace LumiShift
             _gammaAdvancedPanel.Visible = adv;
             _advToggleLabel.Text = (adv ? "▾ " : "▸ ") + Lang.Get("进阶调参 · R/G/B/γ 与显示方案");
 
-            int y = _gammaAdvBaseY + (adv ? _gammaAdvancedPanel.Height + 8 : 0);
+            // 这里的坐标是 96 DPI 设计值，运行时需按当前 DPI 换算（窗体已整体缩放）
+            int lg = DpiScale.S(Spacing.LG);
+            int y = _gammaAdvBaseY + (adv ? _gammaAdvancedPanel.Height + DpiScale.S(8) : 0);
 
-            _gammaSep2.Location = new Point(Spacing.LG, y);
-            y += 12;
+            _gammaSep2.Location = new Point(lg, y);
+            y += DpiScale.S(12);
 
-            _monitorLabel.Location = new Point(Spacing.LG, y + 2);
-            _monitorSelectorComboBox.Location = new Point(72, y);
-            _resetDisplayGammaButton.Location = new Point(262, y);
-            y += 30;
+            _monitorLabel.Location = new Point(lg, y + DpiScale.S(2));
+            _monitorSelectorComboBox.Location = new Point(DpiScale.S(72), y);
+            _resetDisplayGammaButton.Location = new Point(DpiScale.S(262), y);
+            y += DpiScale.S(30);
 
-            _scheduleQuickLabel.Location = new Point(Spacing.LG, y + 2);
-            _gammaScheduleToggle.Location = new Point(92, y);
-            _gammaScheduleConfigButton.Location = new Point(146, y);
-            y += 30;
+            _scheduleQuickLabel.Location = new Point(lg, y + DpiScale.S(2));
+            _gammaScheduleToggle.Location = new Point(DpiScale.S(92), y);
+            _gammaScheduleConfigButton.Location = new Point(DpiScale.S(146), y);
+            y += DpiScale.S(30);
 
-            _gammaTargetLabel.Location = new Point(Spacing.LG, y);
-            y += 20;
-            _gammaGuideLabel.Location = new Point(Spacing.LG, y);
+            _gammaTargetLabel.Location = new Point(lg, y);
+            y += DpiScale.S(20);
+            _gammaGuideLabel.Location = new Point(lg, y);
             // 说明文字高度按文本换行动态计算（多语言长度不同），不能用固定步进
-            y += _gammaGuideLabel.Height + 2;
-            _gammaStatusLabel.Location = new Point(Spacing.LG, y);
+            y += _gammaGuideLabel.Height + DpiScale.S(2);
+            _gammaStatusLabel.Location = new Point(lg, y);
         }
 
         private void AdvToggleLabel_Click(object sender, EventArgs e)
@@ -579,26 +581,26 @@ namespace LumiShift
                     nameLabel.Text = monitor.DisplayName;
                     if (!(monitor.Controller?.IsSupported ?? true))
                         nameLabel.Text = monitor.DisplayName + Lang.Get(" (不支持硬件亮度调节)");
-                    row.Width = _brightnessPanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 2;
+                    row.Width = _brightnessPanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - DpiScale.S(2);
                     nameLabel.Width = row.Width - row.Padding.Horizontal;
                     slider.Maximum = 100;
                     slider.Minimum = 0;
                     slider.Value = currentBrightness;
                     slider.Enabled = monitor.Controller?.IsSupported ?? false;
                     valLabel.Text = $"{currentBrightness}%";
-                    int sliderWidth = Math.Max(210, row.Width - row.Padding.Horizontal - 66);
+                    int sliderWidth = Math.Max(DpiScale.S(210), row.Width - row.Padding.Horizontal - DpiScale.S(66));
                     slider.Width = sliderWidth;
                     int sliderX = row.Padding.Left;
-                    slider.Location = new Point(sliderX, row.Padding.Top + 32);
-                    valLabel.Location = new Point(sliderX + slider.Width + 12, row.Padding.Top + 36);
+                    slider.Location = new Point(sliderX, row.Padding.Top + DpiScale.S(32));
+                    valLabel.Location = new Point(sliderX + slider.Width + DpiScale.S(12), row.Padding.Top + DpiScale.S(36));
                 }
                 else
                 {
                     row = new Panel
                     {
-                        Width = _brightnessPanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 2,
-                        Height = 74,
-                        Padding = new Padding(0, 10, Spacing.SM, 8),
+                        Width = _brightnessPanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - DpiScale.S(2),
+                        Height = DpiScale.S(74),
+                        Padding = new Padding(0, DpiScale.S(10), DpiScale.S(Spacing.SM), DpiScale.S(8)),
                         BackColor = Color.Transparent,
                         Tag = deviceId
                     };
@@ -608,7 +610,7 @@ namespace LumiShift
                         Text = monitor.DisplayName,
                         AutoSize = false,
                         Width = row.Width - row.Padding.Horizontal,
-                        Height = 20,
+                        Height = DpiScale.S(20),
                         Font = Typography.BodyBold,
                         ForeColor = Colors.TextSecondary
                     };
@@ -616,7 +618,7 @@ namespace LumiShift
                         nameLabel.Text = monitor.DisplayName + Lang.Get(" (不支持硬件亮度调节)");
                     nameLabel.Location = new Point(row.Padding.Left, row.Padding.Top);
 
-                    int sliderWidth = Math.Max(210, row.Width - row.Padding.Horizontal - 66);
+                    int sliderWidth = Math.Max(DpiScale.S(210), row.Width - row.Padding.Horizontal - DpiScale.S(66));
 
                     var tb = new ModernSlider
                     {
@@ -637,8 +639,8 @@ namespace LumiShift
                     };
 
                     int sliderX = row.Padding.Left;
-                    tb.Location = new Point(sliderX, row.Padding.Top + 32);
-                    valLabel.Location = new Point(sliderX + tb.Width + 12, row.Padding.Top + 36);
+                    tb.Location = new Point(sliderX, row.Padding.Top + DpiScale.S(32));
+                    valLabel.Location = new Point(sliderX + tb.Width + DpiScale.S(12), row.Padding.Top + DpiScale.S(36));
 
                     EventHandler handler = (s, ev) =>
                     {
@@ -1988,9 +1990,9 @@ namespace LumiShift
                 return;
             }
 
-            int tabHeaderHeight = _tabControl.ItemSize.Height + 5;
+            int tabHeaderHeight = _tabControl.ItemSize.Height + DpiScale.S(5);
             int controlW = _tabControl.ClientSize.Width;
-            int controlH = Math.Max(_tabControl.ClientSize.Height - tabHeaderHeight, 100);
+            int controlH = Math.Max(_tabControl.ClientSize.Height - tabHeaderHeight, DpiScale.S(100));
 
             float opacity = Settings.BackgroundImageOpacity / 100f;
             Size tabPageSize = new Size(controlW, controlH);
@@ -2117,7 +2119,7 @@ namespace LumiShift
 
                 if (clientPoint.Y < 0)
                 {
-                    int btnW = 50;
+                    int btnW = DpiScale.S(50);
                     int rightEdge = ClientSize.Width;
 
                     if (clientPoint.X >= rightEdge - btnW)

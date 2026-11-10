@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using LumiShift.Infrastructure;
 using LumiShift.Resources;
 
 namespace LumiShift.Controls
@@ -73,35 +74,41 @@ namespace LumiShift.Controls
         {
             var g = e.Graphics;
 
+            // 控件本身由 DpiScale 整体缩放，内部绘制尺寸需按同一比例换算
+            int trackHeight = DpiScale.S(TrackHeight);
+            int thumbSize = DpiScale.S(ThumbSize);
+            float edge = DpiScale.S(1);
+            float gap = DpiScale.S(2);
+
             // 计算位置
-            float trackY = (Height - TrackHeight) / 2f;
-            float trackX = 1f;
-            float trackW = Width - 2f;
-            float thumbY = (Height - ThumbSize) / 2f;
-            float thumbX = _checked ? (trackX + trackW - ThumbSize - 1f) : (trackX + 1f);
+            float trackY = (Height - trackHeight) / 2f;
+            float trackX = edge;
+            float trackW = Width - gap;
+            float thumbY = (Height - thumbSize) / 2f;
+            float thumbX = _checked ? (trackX + trackW - thumbSize - edge) : (trackX + edge);
 
             // 轨道颜色
             Color trackColor = _checked ? Colors.Green : Colors.BorderLight;
-            float radius = TrackHeight / 2f;
+            float radius = trackHeight / 2f;
 
             // 绘制轨道（使用缓存画笔）
             var trackBrush = GdiCache.GetBrush(trackColor);
-            g.FillEllipse(trackBrush, trackX, trackY, TrackHeight, TrackHeight);
-            g.FillEllipse(trackBrush, trackX + trackW - TrackHeight, trackY, TrackHeight, TrackHeight);
-            g.FillRectangle(trackBrush, trackX + radius, trackY, trackW - TrackHeight, TrackHeight);
+            g.FillEllipse(trackBrush, trackX, trackY, trackHeight, trackHeight);
+            g.FillEllipse(trackBrush, trackX + trackW - trackHeight, trackY, trackHeight, trackHeight);
+            g.FillRectangle(trackBrush, trackX + radius, trackY, trackW - trackHeight, trackHeight);
 
             // 绘制滑块阴影
             var shadowBrush = GdiCache.GetBrush(ShadowColor);
-            g.FillEllipse(shadowBrush, thumbX + 1, thumbY + 1, ThumbSize, ThumbSize);
+            g.FillEllipse(shadowBrush, thumbX + edge, thumbY + edge, thumbSize, thumbSize);
 
             // 绘制滑块
             Color thumbColor = _hovered ? HoverThumbColor : Color.White;
             var thumbBrush = GdiCache.GetBrush(thumbColor);
-            g.FillEllipse(thumbBrush, thumbX, thumbY, ThumbSize, ThumbSize);
+            g.FillEllipse(thumbBrush, thumbX, thumbY, thumbSize, thumbSize);
 
             // 滑块边框
             var thumbPen = GdiCache.GetPen(ThumbBorderColor);
-            g.DrawEllipse(thumbPen, thumbX, thumbY, ThumbSize, ThumbSize);
+            g.DrawEllipse(thumbPen, thumbX, thumbY, thumbSize, thumbSize);
         }
     }
 }

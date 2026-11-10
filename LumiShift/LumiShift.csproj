@@ -93,6 +93,7 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Infrastructure\BrightnessController.cs" />
+    <Compile Include="Infrastructure\DpiScale.cs" />
     <Compile Include="Infrastructure\EyeProtectionService.cs" />
     <Compile Include="Infrastructure\GammaController.cs" />
     <Compile Include="Infrastructure\GcHelper.cs" />

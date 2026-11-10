@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using LumiShift.Infrastructure;
 using LumiShift.Resources;
 
 namespace LumiShift.Controls
@@ -70,15 +71,17 @@ namespace LumiShift.Controls
 
         private float GetThumbCenter()
         {
-            if (_maximum <= _minimum) return 8f;
+            float margin = DpiScale.S(8);
+            if (_maximum <= _minimum) return margin;
             float ratio = (_value - _minimum) / (float)(_maximum - _minimum);
-            return 8f + ratio * (Width - 16f);
+            return margin + ratio * (Width - margin * 2);
         }
 
         private int GetValueFromX(float x)
         {
+            float margin = DpiScale.S(8);
             if (_maximum <= _minimum) return _minimum;
-            float ratio = (x - 8f) / (Width - 16f);
+            float ratio = (x - margin) / (Width - margin * 2);
             ratio = Math.Max(0, Math.Min(1, ratio));
             return (int)(_minimum + ratio * (_maximum - _minimum));
         }
@@ -91,10 +94,12 @@ namespace LumiShift.Controls
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            float trackY = Height / 2f - 2f;
-            float trackH = 4f;
+            // 控件本身由 DpiScale 整体缩放，内部绘制尺寸需按同一比例换算
+            float margin = DpiScale.S(8);
+            float trackH = DpiScale.S(4);
+            float trackY = Height / 2f - trackH / 2f;
             float thumbCenter = GetThumbCenter();
-            float thumbSize = _hoveredThumb ? 16f : 14f;
+            float thumbSize = DpiScale.S(_hoveredThumb ? 16 : 14);
 
             bool isActive = Enabled;
 
@@ -104,13 +109,13 @@ namespace LumiShift.Controls
                 ? (_hoveredThumb ? Colors.BrandGlow : Colors.Brand)
                 : Colors.TextDisabled;
 
-            using (var trackPath = CreateRoundRect(8f, trackY, Width - 16f, trackH, trackH / 2f))
+            using (var trackPath = CreateRoundRect(margin, trackY, Width - margin * 2, trackH, trackH / 2f))
                 g.FillPath(GdiCache.GetBrush(inactiveTrack), trackPath);
 
-            float filledW = thumbCenter - 8f;
+            float filledW = thumbCenter - margin;
             if (filledW > 0 && isActive)
             {
-                using (var fillPath = CreateRoundRect(8f, trackY, filledW, trackH, trackH / 2f))
+                using (var fillPath = CreateRoundRect(margin, trackY, filledW, trackH, trackH / 2f))
                     g.FillPath(GdiCache.GetBrush(activeTrack), fillPath);
             }
 
@@ -123,7 +128,8 @@ namespace LumiShift.Controls
 
             if (_hoveredThumb && isActive)
             {
-                g.FillEllipse(GdiCache.GetBrush(HighlightColor), thumbX + 3, thumbY + 3, thumbSize / 2f, thumbSize / 2f);
+                float highlight = DpiScale.S(3);
+                g.FillEllipse(GdiCache.GetBrush(HighlightColor), thumbX + highlight, thumbY + highlight, thumbSize / 2f, thumbSize / 2f);
             }
         }
 
@@ -140,8 +146,8 @@ namespace LumiShift.Controls
         protected override void OnMouseMove(MouseEventArgs e)
         {
             float thumbCenter = GetThumbCenter();
-            float thumbSize = 14f;
-            bool overThumb = Math.Abs(e.X - thumbCenter) <= thumbSize / 2f + 3;
+            float thumbSize = DpiScale.S(14);
+            bool overThumb = Math.Abs(e.X - thumbCenter) <= thumbSize / 2f + DpiScale.S(3);
 
             if (_hoveredThumb != overThumb)
             {

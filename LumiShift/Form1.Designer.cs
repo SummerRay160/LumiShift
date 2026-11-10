@@ -176,14 +176,21 @@ namespace LumiShift
             ClientSize = new Size(430, 540);
             Controls.Add(_tabControl);
             Text = "LumiShift";
-            MinimumSize = new Size(430, 540);
-            MaximumSize = new Size(430, 540);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             Icon = Program.AppIcon;
 
             ResumeLayout(false);
+
+            // 高分屏适配：整套布局按 96 DPI 编写，这里整体放大到当前 DPI；
+            // 之后运行时再计算坐标的地方（如亮度的动态行）需用 DpiScale.S 换算。
+            AutoScaleMode = AutoScaleMode.None;
+            DpiScale.Apply(this);
+            // 固定窗口尺寸（窗口尺寸而非客户区尺寸，与旧版表现保持一致），按当前 DPI 换算
+            MinimumSize = MaximumSize = new Size(DpiScale.S(430), DpiScale.S(540));
+            _gammaAdvBaseY = DpiScale.S(_gammaAdvBaseY);
+            ApplyGammaAdvancedLayout();
         }
 
         private void RefreshTabTheme()
@@ -533,8 +540,8 @@ namespace LumiShift
             };
 
             // 与设置页相同：按实际文本换行计算高度，多语言下长度不同也不会溢出（+6 渲染余量防英文末行被裁）
-            _gammaGuideLabel.Height = Math.Max(18, TextRenderer.MeasureText(_gammaGuideLabel.Text, _gammaGuideLabel.Font,
-                new Size(_gammaGuideLabel.Width, 0), TextFormatFlags.WordBreak).Height + 6);
+            _gammaGuideLabel.Height = DpiScale.MeasureWrappedHeight(_gammaGuideLabel.Text, _gammaGuideLabel.Font,
+                _gammaGuideLabel.Width, 18, 6);
             my += _gammaGuideLabel.Height + 2;
 
             _gammaStatusLabel = new Label
@@ -567,7 +574,7 @@ namespace LumiShift
             _gammaTab.AutoScroll = true;
             _gammaTab.AutoScrollMargin = new Size(0, 8);
 
-            ApplyGammaAdvancedLayout();
+            // 折叠/展开后的位置在整体 DPI 缩放之后再计算（见 InitializeComponent 末尾）
         }
 
         // ======================================================================
@@ -657,8 +664,8 @@ namespace LumiShift
                 ForeColor = Colors.TextSecondary,
                 BackColor = Color.Transparent
             };
-            scheduleHint.Height = Math.Max(18, TextRenderer.MeasureText(scheduleHint.Text, scheduleHint.Font,
-                new Size(scheduleHint.Width, 0), TextFormatFlags.WordBreak).Height + 2);
+            scheduleHint.Height = DpiScale.MeasureWrappedHeight(scheduleHint.Text, scheduleHint.Font,
+                scheduleHint.Width, 18, 2);
 
             sy += scheduleHint.Height + 2;
 

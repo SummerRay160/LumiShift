@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using LumiShift.Infrastructure;
 using LumiShift.Resources;
 
 namespace LumiShift.Controls
@@ -14,7 +15,8 @@ namespace LumiShift.Controls
         {
             SetStyle(ControlStyles.ResizeRedraw | ControlStyles.DoubleBuffer |
                      ControlStyles.OptimizedDoubleBuffer, true);
-            ItemSize = new Size(0, 30);
+            // 选项卡高度不随控件缩放自动变化，需按当前 DPI 直接换算
+            ItemSize = new Size(0, DpiScale.S(30));
             SizeMode = TabSizeMode.FillToRight;
             Alignment = TabAlignment.Top;
             DrawMode = TabDrawMode.OwnerDrawFixed;
@@ -41,8 +43,8 @@ namespace LumiShift.Controls
 
             if (selected)
             {
-                g.FillRectangle(GdiCache.GetBrush(Colors.Brand), tabBounds.X + 8, tabBounds.Bottom - 2,
-                    tabBounds.Width - 16, 2);
+                g.FillRectangle(GdiCache.GetBrush(Colors.Brand), tabBounds.X + DpiScale.S(8), tabBounds.Bottom - DpiScale.S(2),
+                    tabBounds.Width - DpiScale.S(16), DpiScale.S(2));
             }
 
             string text = TabPages[e.Index].Text;
