@@ -104,6 +104,7 @@ namespace LumiShift
         private bool _isPopulatingComboBox;
         private bool _isUpdatingSchedule;
         private bool _isUpdatingLanguage;
+        private bool _isApplyingEyeProtectionColor;
         private string _currentPresetName;
         private int _previousMonitorSelectedIndex;
         private Timer _initTimer;
@@ -937,6 +938,7 @@ namespace LumiShift
         private void EyeProtectionToggle_CheckedChanged(object sender, EventArgs e)
         {
             bool enabled = _eyeProtectionToggle.Checked;
+            bool suppressNotification = _isApplyingEyeProtectionColor;
             Settings.EyeProtectionEnabled = _eyeProtectionToggle.Checked;
             UpdateEyeProtectionUI();
             DebounceAction(() =>
@@ -946,7 +948,8 @@ namespace LumiShift
                 else
                     EyeProtectionService.RestoreDefault();
                 SettingsStore.SaveSettings(Settings);
-                _bgService.NotifyStatusSwitch(Lang.Get("LumiShift 状态切换"), enabled ? Lang.Get("护眼模式已启用") : Lang.Get("护眼模式已关闭"));
+                if (!suppressNotification)
+                    _bgService.NotifyStatusSwitch(Lang.Get("LumiShift 状态切换"), enabled ? Lang.Get("护眼模式已启用") : Lang.Get("护眼模式已关闭"));
             });
         }
 
@@ -988,10 +991,26 @@ namespace LumiShift
             Settings.EyeProtectionBlue = b;
             Settings.EyeProtectionEnabled = true;
 
-            _eyeProtectionToggle.Checked = true;
-            EyeProtectionService.ApplyColor(r, g, b);
+            _isApplyingEyeProtectionColor = true;
+            try
+            {
+                _eyeProtectionToggle.Checked = true;
+            }
+            finally
+            {
+                _isApplyingEyeProtectionColor = false;
+            }
+
+            bool applied = EyeProtectionService.ApplyColor(r, g, b);
             UpdateEyeProtectionUI();
             SettingsStore.SaveSettings(Settings);
+
+            // 仅在系统颜色配置确实生效后才提示，避免修改失败时误触发通知
+            if (applied)
+            {
+                string colorCode = $"#{r:X2}{g:X2}{b:X2}";
+                _bgService.NotifyStatusSwitch(Lang.Get("LumiShift 状态切换"), Lang.F("设置护眼色为 {0} 成功", colorCode));
+            }
         }
 
         private void UpdateBgImageUI()

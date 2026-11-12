@@ -228,6 +228,9 @@
   <data name="护眼模式已关闭" xml:space="preserve">
     <value>Eye care mode disabled</value>
   </data>
+  <data name="设置护眼色为 {0} 成功" xml:space="preserve">
+    <value>Eye protection color set to {0} successfully</value>
+  </data>
   <data name="未设置" xml:space="preserve">
     <value>Not set</value>
   </data>
