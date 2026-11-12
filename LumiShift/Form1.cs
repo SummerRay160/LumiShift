@@ -104,6 +104,7 @@ namespace LumiShift
         private bool _isPopulatingComboBox;
         private bool _isUpdatingSchedule;
         private bool _isUpdatingLanguage;
+        private bool _isUpdatingStartupUI;
         private bool _isApplyingEyeProtectionColor;
         private string _currentPresetName;
         private int _previousMonitorSelectedIndex;
@@ -817,21 +818,29 @@ namespace LumiShift
 
         private void UpdateStartupUI()
         {
-            _startWithWindowsCheckBox.Checked = Settings.StartWithWindows;
-            _startMinimizedCheckBox.Checked = Settings.StartMinimized;
-            _autoCheckUpdatesToggle.Checked = Settings.AutoCheckUpdates;
-            _restoreGammaToggle.Checked = Settings.RestoreGammaOnExit;
-            _diagnosticsLoggingToggle.Checked = Settings.DiagnosticsLoggingEnabled;
-            _memoryMaintenanceToggle.Checked = Settings.MemoryMaintenanceEnabled;
+            _isUpdatingStartupUI = true;
+            try
+            {
+                _startWithWindowsCheckBox.Checked = Settings.StartWithWindows;
+                _startMinimizedCheckBox.Checked = Settings.StartMinimized;
+                _autoCheckUpdatesToggle.Checked = Settings.AutoCheckUpdates;
+                _restoreGammaToggle.Checked = Settings.RestoreGammaOnExit;
+                _diagnosticsLoggingToggle.Checked = Settings.DiagnosticsLoggingEnabled;
+                _memoryMaintenanceToggle.Checked = Settings.MemoryMaintenanceEnabled;
 
-            _isUpdatingLanguage = true;
-            _languageComboBox.SelectedIndex =
-                string.Equals(Settings.Language, "zh", StringComparison.OrdinalIgnoreCase) ? 1 :
-                string.Equals(Settings.Language, "zh-Hant", StringComparison.OrdinalIgnoreCase) ? 2 :
-                string.Equals(Settings.Language, "en", StringComparison.OrdinalIgnoreCase) ? 3 : 0;
-            _isUpdatingLanguage = false;
+                _isUpdatingLanguage = true;
+                _languageComboBox.SelectedIndex =
+                    string.Equals(Settings.Language, "zh", StringComparison.OrdinalIgnoreCase) ? 1 :
+                    string.Equals(Settings.Language, "zh-Hant", StringComparison.OrdinalIgnoreCase) ? 2 :
+                    string.Equals(Settings.Language, "en", StringComparison.OrdinalIgnoreCase) ? 3 : 0;
+                _isUpdatingLanguage = false;
 
-            UpdateNotificationUI();
+                UpdateNotificationUI();
+            }
+            finally
+            {
+                _isUpdatingStartupUI = false;
+            }
         }
 
         private void LanguageComboBox_SelectedIndexChanged(object sender, EventArgs e)
@@ -877,14 +886,54 @@ namespace LumiShift
 
         private void DiagnosticsLoggingToggle_CheckedChanged(object sender, EventArgs e)
         {
-            Settings.DiagnosticsLoggingEnabled = _diagnosticsLoggingToggle.Checked;
+            bool enabled = _diagnosticsLoggingToggle.Checked;
+            Settings.DiagnosticsLoggingEnabled = enabled;
 
             // 即时生效，无需重启；开启动作与会话头会立刻落盘
-            Log.SetEnabled(Settings.DiagnosticsLoggingEnabled);
-            if (Settings.DiagnosticsLoggingEnabled)
+            Log.SetEnabled(enabled);
+            if (enabled)
                 Log.WriteSessionHeader("手动开启");
 
             DebounceAction(() => SettingsStore.SaveSettings(Settings));
+
+            // 仅用户手动开启时打开日志目录；初始化/重置配置时的程序化赋值不触发
+            if (enabled && !_isUpdatingStartupUI)
+                OpenDiagnosticsLogFolder();
+        }
+
+        private void OpenDiagnosticsLogFolder()
+        {
+            string folder = Log.FolderPath;
+            try
+            {
+                if (!Directory.Exists(folder))
+                {
+                    MessageBox.Show(this,
+                        Lang.Get("日志目录不存在，无法打开。"),
+                        Lang.Get("诊断日志"),
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // 主动枚举一次，目录无访问权限时在此抛出，便于给出准确提示
+                Directory.GetFileSystemEntries(folder);
+
+                System.Diagnostics.Process.Start("explorer.exe", $"\"{folder}\"");
+            }
+            catch (UnauthorizedAccessException)
+            {
+                MessageBox.Show(this,
+                    Lang.Get("没有权限访问日志目录，无法打开。"),
+                    Lang.Get("诊断日志"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this,
+                    Lang.F("打开日志目录失败：{0}", ex.Message),
+                    Lang.Get("诊断日志"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         private void MemoryMaintenanceToggle_CheckedChanged(object sender, EventArgs e)

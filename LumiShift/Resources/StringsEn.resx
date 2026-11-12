@@ -397,6 +397,15 @@
   <data name="将运行记录写入本地日志文件，用于问题排查" xml:space="preserve">
     <value>Writes operation records to a local log file for troubleshooting</value>
   </data>
+  <data name="日志目录不存在，无法打开。" xml:space="preserve">
+    <value>The log folder does not exist and cannot be opened.</value>
+  </data>
+  <data name="没有权限访问日志目录，无法打开。" xml:space="preserve">
+    <value>Access to the log folder was denied and it cannot be opened.</value>
+  </data>
+  <data name="打开日志目录失败：{0}" xml:space="preserve">
+    <value>Failed to open the log folder: {0}</value>
+  </data>
   <data name="内存维护" xml:space="preserve">
     <value>Memory maintenance</value>
   </data>

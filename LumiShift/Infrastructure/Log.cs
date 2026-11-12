@@ -22,6 +22,9 @@ namespace LumiShift.Infrastructure
 
         private static bool _enabled;
 
+        /// <summary>日志文件所在目录（%LocalAppData%\LumiShift）。</summary>
+        public static string FolderPath => Path.GetDirectoryName(FilePath);
+
         /// <summary>写日志事件本身绕过开关：开关切换动作必须在文件里留痕。</summary>
         public static void SetEnabled(bool value)
         {
