@@ -178,7 +178,10 @@ namespace LumiShift
             // 日志开关已由 SettingsStore.LoadSettings 依配置同步；此处补写会话头，便于把日志切分到具体一次运行
             Log.WriteSessionHeader("应用启动");
 
-            GammaController = new GammaController();
+            GammaController = new GammaController
+            {
+                DisplayNameResolver = ResolveDisplayName
+            };
             _presetService = new PresetService(Settings);
             _displayGammaState = new DisplayGammaStateService(Settings, _presetService);
 
@@ -737,79 +740,120 @@ namespace LumiShift
 
         internal void ApplyGammaToSystem()
         {
-            bool hasOverrides = Settings.GammaPerDisplay != null &&
-                                Settings.GammaPerDisplay.Count > 0;
+            string parameters =
+                $"enabled={Settings.GammaEnabled}, r={Settings.GammaRScale:F2}, g={Settings.GammaGScale:F2}, b={Settings.GammaBScale:F2}, " +
+                $"gamma={Settings.GammaValue:F2}, brightness={Settings.MasterBrightness}, overrides={Settings.GammaPerDisplay?.Count ?? 0}";
 
-            if (!hasOverrides)
+            using (var op = Log.BeginOperation("GammaApply", parameters, LogLevel.Debug))
             {
-                if (Settings.GammaEnabled)
+                try
                 {
-                    var parameters = new Infrastructure.GammaParameters(
-                        Settings.GammaRScale,
-                        Settings.GammaGScale,
-                        Settings.GammaBScale,
-                        Settings.GammaValue,
-                        Settings.MasterBrightness);
-                    GammaController.ApplyGamma(Screen.AllScreens, parameters);
-                }
-                else
-                {
-                    GammaController.ResetGamma(Screen.AllScreens);
-                }
-                return;
-            }
+                    bool hasOverrides = Settings.GammaPerDisplay != null &&
+                                        Settings.GammaPerDisplay.Count > 0;
+                    bool succeeded;
 
-            var perScreenParams = new Dictionary<string, Infrastructure.GammaParameters>();
-            var coveredDeviceNames = new HashSet<string>();
-
-            foreach (var monitor in MonitorManager.Monitors)
-            {
-                var screen = monitor.Screen;
-                if (screen == null) continue;
-
-                coveredDeviceNames.Add(screen.DeviceName);
-
-                if (Settings.GammaPerDisplay.TryGetValue(monitor.DeviceId, out var overrideGamma))
-                {
-                    if (overrideGamma.Enabled)
+                    if (!hasOverrides)
                     {
-                        perScreenParams[screen.DeviceName] = new Infrastructure.GammaParameters(
-                            overrideGamma.RScale,
-                            overrideGamma.GScale,
-                            overrideGamma.BScale,
-                            overrideGamma.GammaValue,
-                            overrideGamma.MasterBrightness);
+                        if (Settings.GammaEnabled)
+                        {
+                            var applyParams = new Infrastructure.GammaParameters(
+                                Settings.GammaRScale,
+                                Settings.GammaGScale,
+                                Settings.GammaBScale,
+                                Settings.GammaValue,
+                                Settings.MasterBrightness);
+                            succeeded = GammaController.ApplyGamma(Screen.AllScreens, applyParams);
+                        }
+                        else
+                        {
+                            succeeded = GammaController.ResetGamma(Screen.AllScreens);
+                        }
+
+                        op.Complete(succeeded ? "Success" : "PartialFailure",
+                            $"mode=global, screens={Screen.AllScreens.Length}");
+                        return;
                     }
-                }
-                else
-                {
-                    if (Settings.GammaEnabled)
+
+                    var perScreenParams = new Dictionary<string, Infrastructure.GammaParameters>();
+                    var coveredDeviceNames = new HashSet<string>();
+
+                    foreach (var monitor in MonitorManager.Monitors)
                     {
-                        perScreenParams[screen.DeviceName] = new Infrastructure.GammaParameters(
-                            Settings.GammaRScale,
-                            Settings.GammaGScale,
-                            Settings.GammaBScale,
-                            Settings.GammaValue,
-                            Settings.MasterBrightness);
+                        var screen = monitor.Screen;
+                        if (screen == null) continue;
+
+                        coveredDeviceNames.Add(screen.DeviceName);
+
+                        if (Settings.GammaPerDisplay.TryGetValue(monitor.DeviceId, out var overrideGamma))
+                        {
+                            if (overrideGamma.Enabled)
+                            {
+                                perScreenParams[screen.DeviceName] = new Infrastructure.GammaParameters(
+                                    overrideGamma.RScale,
+                                    overrideGamma.GScale,
+                                    overrideGamma.BScale,
+                                    overrideGamma.GammaValue,
+                                    overrideGamma.MasterBrightness);
+                            }
+                        }
+                        else
+                        {
+                            if (Settings.GammaEnabled)
+                            {
+                                perScreenParams[screen.DeviceName] = new Infrastructure.GammaParameters(
+                                    Settings.GammaRScale,
+                                    Settings.GammaGScale,
+                                    Settings.GammaBScale,
+                                    Settings.GammaValue,
+                                    Settings.MasterBrightness);
+                            }
+                        }
                     }
-                }
-            }
 
-            foreach (Screen screen in Screen.AllScreens)
-            {
-                if (coveredDeviceNames.Contains(screen.DeviceName)) continue;
-                if (Settings.GammaEnabled)
+                    foreach (Screen screen in Screen.AllScreens)
+                    {
+                        if (coveredDeviceNames.Contains(screen.DeviceName)) continue;
+                        if (Settings.GammaEnabled)
+                        {
+                            perScreenParams[screen.DeviceName] = new Infrastructure.GammaParameters(
+                                Settings.GammaRScale,
+                                Settings.GammaGScale,
+                                Settings.GammaBScale,
+                                Settings.GammaValue,
+                                Settings.MasterBrightness);
+                        }
+                    }
+
+                    succeeded = GammaController.ApplyGammaPerScreen(perScreenParams);
+                    op.Complete(succeeded ? "Success" : "PartialFailure",
+                        $"mode=perDisplay, screens={Screen.AllScreens.Length}, applied={perScreenParams.Count}");
+                }
+                catch (Exception ex)
                 {
-                    perScreenParams[screen.DeviceName] = new Infrastructure.GammaParameters(
-                        Settings.GammaRScale,
-                        Settings.GammaGScale,
-                        Settings.GammaBScale,
-                        Settings.GammaValue,
-                        Settings.MasterBrightness);
+                    op.Fail(ex, parameters,
+                        () => $"screens={Screen.AllScreens.Length}, enabled={Settings.GammaEnabled}, overrides={Settings.GammaPerDisplay?.Count ?? 0}");
                 }
             }
+        }
 
-            GammaController.ApplyGammaPerScreen(perScreenParams);
+        /// <summary>把屏幕设备名映射为界面显示名称；显示器列表尚未创建时返回 null，由调用方回退设备名。</summary>
+        private string ResolveDisplayName(string deviceName)
+        {
+            try
+            {
+                var monitors = _monitorManager?.Monitors;
+                if (monitors == null) return null;
+
+                for (int i = 0; i < monitors.Count; i++)
+                {
+                    var screen = monitors[i].Screen;
+                    if (screen != null && string.Equals(screen.DeviceName, deviceName, StringComparison.OrdinalIgnoreCase))
+                        return monitors[i].DisplayName;
+                }
+            }
+            catch { }
+
+            return null;
         }
 
         #endregion
@@ -820,98 +864,115 @@ namespace LumiShift
         {
             if (!Settings.ScheduleEnabled) return;
 
-            try
+            using (var op = Log.BeginOperation("ScheduleTick",
+                $"last={_lastScheduleMode}, override={_scheduleManualOverride}, now={DateTime.Now:HH:mm:ss}", LogLevel.Debug))
             {
-                EnsureParsedSegments();
-                var target = _scheduleEvaluator?.FindCurrent(DateTime.Now.TimeOfDay);
-                if (target == null)
+                try
                 {
-                    // 当前不在任何时段内：仍要更新 lastScheduleMode 以便下次进入时段时正确切换
-                    _lastScheduleMode = "";
-                    return;
-                }
-
-                string targetMode = target.PresetName;
-                string targetScheduleKey = target.Key;
-                ScheduleSegment targetSegment = target.Segment;
-
-                if (_scheduleManualOverride)
-                {
-                    if (targetScheduleKey == _lastScheduleMode)
+                    EnsureParsedSegments();
+                    var target = _scheduleEvaluator?.FindCurrent(DateTime.Now.TimeOfDay);
+                    if (target == null)
+                    {
+                        // 当前不在任何时段内：仍要更新 lastScheduleMode 以便下次进入时段时正确切换
+                        _lastScheduleMode = "";
+                        op.Complete("NoChange", "当前无匹配时段");
                         return;
+                    }
 
-                    _scheduleManualOverride = false;
-                }
+                    string targetMode = target.PresetName;
+                    string targetScheduleKey = target.Key;
+                    ScheduleSegment targetSegment = target.Segment;
 
-                if (targetScheduleKey == _lastScheduleMode) return;
+                    if (_scheduleManualOverride)
+                    {
+                        if (targetScheduleKey == _lastScheduleMode)
+                        {
+                            op.Complete("NoChange", "手动覆盖保持");
+                            return;
+                        }
 
-                Log.Info("Schedule", $"定时切换：{(_lastScheduleMode.Length == 0 ? "(初始)" : _lastScheduleMode)} → {targetScheduleKey}（{targetMode}）");
+                        _scheduleManualOverride = false;
+                    }
 
-                var savedR = Settings.GammaRScale;
-                var savedG = Settings.GammaGScale;
-                var savedB = Settings.GammaBScale;
-                var savedV = Settings.GammaValue;
-                var savedE = Settings.GammaEnabled;
-                var savedM = Settings.MasterBrightness;
+                    if (targetScheduleKey == _lastScheduleMode)
+                    {
+                        op.Complete("NoChange", "时段未变化");
+                        return;
+                    }
 
-                bool applied = TryApplyPreset(targetMode);
+                    Log.Info("Schedule", $"定时切换：{(_lastScheduleMode.Length == 0 ? "(初始)" : _lastScheduleMode)} → {targetScheduleKey}（{targetMode}）");
 
-                if (!applied)
-                {
-                    Settings.GammaRScale = savedR;
-                    Settings.GammaGScale = savedG;
-                    Settings.GammaBScale = savedB;
-                    Settings.GammaValue = savedV;
-                    Settings.GammaEnabled = savedE;
-                    Settings.MasterBrightness = savedM;
+                    var savedR = Settings.GammaRScale;
+                    var savedG = Settings.GammaGScale;
+                    var savedB = Settings.GammaBScale;
+                    var savedV = Settings.GammaValue;
+                    var savedE = Settings.GammaEnabled;
+                    var savedM = Settings.MasterBrightness;
+
+                    bool applied = TryApplyPreset(targetMode);
+
+                    if (!applied)
+                    {
+                        Settings.GammaRScale = savedR;
+                        Settings.GammaGScale = savedG;
+                        Settings.GammaBScale = savedB;
+                        Settings.GammaValue = savedV;
+                        Settings.GammaEnabled = savedE;
+                        Settings.MasterBrightness = savedM;
+                        _lastScheduleMode = targetScheduleKey;
+                        op.Complete("Failed", $"方案 {targetMode} 无法解析，已回滚参数");
+                        return;
+                    }
+
+                    bool changed = Math.Abs(Settings.GammaRScale - savedR) > 0.001 ||
+                                   Math.Abs(Settings.GammaGScale - savedG) > 0.001 ||
+                                   Math.Abs(Settings.GammaBScale - savedB) > 0.001 ||
+                                   Math.Abs(Settings.GammaValue - savedV) > 0.001 ||
+                                   Settings.GammaEnabled != savedE ||
+                                   Settings.MasterBrightness != savedM;
+
+                    if (!changed)
+                    {
+                        Settings.GammaRScale = savedR;
+                        Settings.GammaGScale = savedG;
+                        Settings.GammaBScale = savedB;
+                        Settings.GammaValue = savedV;
+                        Settings.GammaEnabled = savedE;
+                        Settings.MasterBrightness = savedM;
+                        _lastScheduleMode = targetScheduleKey;
+                        ApplyScheduleMonitorPresets(targetSegment);
+                        op.Complete("NoChange", "参数与当前一致");
+                        return;
+                    }
+
+                    if (_lightweightMode)
+                    {
+                        _lastScheduleMode = targetScheduleKey;
+                        _scheduleChangedInLightweight = true;
+                        ApplyScheduleMonitorPresets(targetSegment);
+                        op.Complete("Deferred", "轻量模式下延后应用");
+                        return;
+                    }
+
+                    SettingsStore.SaveSettings(Settings);
+                    UpdateTrayMenu();
                     _lastScheduleMode = targetScheduleKey;
-                    return;
-                }
 
-                bool changed = Math.Abs(Settings.GammaRScale - savedR) > 0.001 ||
-                               Math.Abs(Settings.GammaGScale - savedG) > 0.001 ||
-                               Math.Abs(Settings.GammaBScale - savedB) > 0.001 ||
-                               Math.Abs(Settings.GammaValue - savedV) > 0.001 ||
-                               Settings.GammaEnabled != savedE ||
-                               Settings.MasterBrightness != savedM;
-
-                if (!changed)
-                {
-                    Settings.GammaRScale = savedR;
-                    Settings.GammaGScale = savedG;
-                    Settings.GammaBScale = savedB;
-                    Settings.GammaValue = savedV;
-                    Settings.GammaEnabled = savedE;
-                    Settings.MasterBrightness = savedM;
-                    _lastScheduleMode = targetScheduleKey;
                     ApplyScheduleMonitorPresets(targetSegment);
-                    return;
-                }
 
-                if (_lightweightMode)
+                    NotifyScheduleSwitch(targetMode, targetSegment);
+                    ScheduleStateChanged?.Invoke();
+                    op.Complete("Switched", $"preset={targetMode}, key={targetScheduleKey}");
+                }
+                catch (Exception ex)
                 {
-                    _lastScheduleMode = targetScheduleKey;
-                    _scheduleChangedInLightweight = true;
-                    ApplyScheduleMonitorPresets(targetSegment);
-                    return;
+                    op.Fail(ex, $"last={_lastScheduleMode}, override={_scheduleManualOverride}",
+                        () => $"scheduleEnabled={Settings.ScheduleEnabled}, lightweight={_lightweightMode}");
                 }
-
-                SettingsStore.SaveSettings(Settings);
-                UpdateTrayMenu();
-                _lastScheduleMode = targetScheduleKey;
-
-                ApplyScheduleMonitorPresets(targetSegment);
-
-                NotifyScheduleSwitch(targetMode, targetSegment);
-                ScheduleStateChanged?.Invoke();
-            }
-            catch (Exception ex)
-            {
-                Log.Error("ScheduleTimer", ex);
-            }
-            finally
-            {
-                ScheduleNextWakeUp();
+                finally
+                {
+                    ScheduleNextWakeUp();
+                }
             }
         }
 
@@ -1183,11 +1244,15 @@ namespace LumiShift
                     else action();
                     return;
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Log.Error("InvokeOnUIThread", ex, $"phase=formInvoke, action={action.Method.Name}",
+                        () => $"formDisposed={form.IsDisposed}, invokeRequired={form.InvokeRequired}");
+                }
             }
             // 无主窗体或调用失败：直接执行（事件回调可能在任意线程，但 ScheduleTimer_Tick 内部逻辑线程安全）
             try { action(); }
-            catch (Exception ex) { Log.Error("InvokeOnUIThread", ex); }
+            catch (Exception ex) { Log.Error("InvokeOnUIThread", ex, $"phase=directInvoke, action={action.Method.Name}"); }
         }
 
         private void ApplyScheduleMonitorPresets(ScheduleSegment segment)
@@ -1332,41 +1397,56 @@ namespace LumiShift
         /// </summary>
         internal bool ResetToDefaults()
         {
-            bool deleted = SettingsStore.DeleteAllConfig();
-            if (deleted)
-                Log.Info("Reset", "配置目录已删除，开始恢复默认设置");
-            else
-                Log.Warn("Reset", "配置目录删除失败（文件可能被占用），仍恢复默认设置");
-
-            var defaults = SettingsStore.CreateDefaultSettings();
-            foreach (var prop in typeof(UserSettings).GetProperties())
+            using (var op = Log.BeginOperation("ResetDefaults",
+                $"scheduleEnabled={Settings.ScheduleEnabled}, gammaEnabled={Settings.GammaEnabled}", LogLevel.Info))
             {
-                // 过滤索引器：带索引参数的属性不能这样复制，否则 SetValue 抛 TargetParameterCountException
-                if (prop.CanRead && prop.CanWrite && prop.GetIndexParameters().Length == 0)
-                    prop.SetValue(Settings, prop.GetValue(defaults, null), null);
+                try
+                {
+                    bool deleted = SettingsStore.DeleteAllConfig();
+                    if (deleted)
+                        Log.Info("Reset", "配置目录已删除，开始恢复默认设置");
+                    else
+                        Log.Warn("Reset", "配置目录删除失败（文件可能被占用），仍恢复默认设置");
+
+                    var defaults = SettingsStore.CreateDefaultSettings();
+                    foreach (var prop in typeof(UserSettings).GetProperties())
+                    {
+                        // 过滤索引器：带索引参数的属性不能这样复制，否则 SetValue 抛 TargetParameterCountException
+                        if (prop.CanRead && prop.CanWrite && prop.GetIndexParameters().Length == 0)
+                            prop.SetValue(Settings, prop.GetValue(defaults, null), null);
+                    }
+
+                    // 重置后回到默认值（日志/内存维护关闭），此处切换动作本身会留痕
+                    Log.SetEnabled(Settings.DiagnosticsLoggingEnabled);
+                    SetMemoryMaintenance(Settings.MemoryMaintenanceEnabled);
+
+                    _lastScheduleMode = "";
+                    _scheduleManualOverride = false;
+                    _scheduleEvaluator = null;
+                    _parsedSegmentsHash = 0;
+                    if (_scheduleTimer != null)
+                        _scheduleTimer.Enabled = Settings.ScheduleEnabled;
+
+                    if (!Settings.EyeProtectionEnabled)
+                        EyeProtectionService.RestoreDefault();
+
+                    ApplyGammaToSystem();
+                    UpdateStartupRegistry();
+                    SettingsStore.SaveSettings(Settings);
+                    UpdateTrayMenu();
+                    UpdateTrayText();
+                    ScheduleStateChanged?.Invoke();
+
+                    op.Complete("Success", $"configDeleted={deleted}");
+                    return deleted;
+                }
+                catch (Exception ex)
+                {
+                    op.Fail(ex, "action=ResetToDefaults",
+                        () => $"logEnabled={Log.Enabled}, eyeProtection={Settings.EyeProtectionEnabled}");
+                    throw;
+                }
             }
-
-            // 重置后回到默认值（日志/内存维护关闭），此处切换动作本身会留痕
-            Log.SetEnabled(Settings.DiagnosticsLoggingEnabled);
-            SetMemoryMaintenance(Settings.MemoryMaintenanceEnabled);
-
-            _lastScheduleMode = "";
-            _scheduleManualOverride = false;
-            _scheduleEvaluator = null;
-            _parsedSegmentsHash = 0;
-            if (_scheduleTimer != null)
-                _scheduleTimer.Enabled = Settings.ScheduleEnabled;
-
-            if (!Settings.EyeProtectionEnabled)
-                EyeProtectionService.RestoreDefault();
-
-            ApplyGammaToSystem();
-            UpdateStartupRegistry();
-            SettingsStore.SaveSettings(Settings);
-            UpdateTrayMenu();
-            UpdateTrayText();
-            ScheduleStateChanged?.Invoke();
-            return deleted;
         }
 
         #region System Events
@@ -1419,48 +1499,65 @@ namespace LumiShift
         {
             if (_monitorManager == null) return;
 
-            if (_lightweightMode)
+            using (var op = Log.BeginOperation("DisplayChange",
+                $"monitors={_monitorManager.Monitors.Count}, lightweight={_lightweightMode}", LogLevel.Info))
             {
-                _displayChangedInLightweight = true;
-                _trayMenuNeedsRebuild = true;
-
-                // 显示器重新枚举（屏幕关闭/唤醒可能触发）会使缓存的设备名失效，
-                // 导致按显示器的 Gamma 无法重应用。必须立即刷新缓存并重应用，
-                // 不能等到用户打开主界面。DisplaySettingsChanged 在后台线程触发，
-                // 通过消息窗口投递到 UI 线程处理。
-                if (_messageWindow != null && _messageWindow.Handle != IntPtr.Zero)
+                try
                 {
-                    try
+                    if (_lightweightMode)
                     {
-                        NativeMethods.PostMessage(_messageWindow.Handle,
-                            NativeMethods.WM_APP_DISPLAY_REFRESH, IntPtr.Zero, IntPtr.Zero);
-                    }
-                    catch { }
-                }
-                return;
-            }
+                        _displayChangedInLightweight = true;
+                        _trayMenuNeedsRebuild = true;
 
-            var removedIds = _monitorManager.RefreshMonitors();
-            Log.Info("Display", $"显示器配置变更：当前 {_monitorManager.Monitors.Count} 台" +
-                (removedIds != null && removedIds.Count > 0 ? $"，失效 {removedIds.Count} 台（{string.Join(", ", removedIds)}）" : ""));
-            bool cleaned = CleanupStaleSettings(removedIds);
-            NotifyMonitorChange(_monitorManager.Monitors.Count, removedIds == null ? 0 : removedIds.Count);
-            if (!Form1IsOpen())
-            {
-                ApplyGammaToSystem();
-                if (_trayMenuOpen)
-                {
-                    _trayMenuNeedsRebuild = true;
+                        // 显示器重新枚举（屏幕关闭/唤醒可能触发）会使缓存的设备名失效，
+                        // 导致按显示器的 Gamma 无法重应用。必须立即刷新缓存并重应用，
+                        // 不能等到用户打开主界面。DisplaySettingsChanged 在后台线程触发，
+                        // 通过消息窗口投递到 UI 线程处理。
+                        if (_messageWindow != null && _messageWindow.Handle != IntPtr.Zero)
+                        {
+                            try
+                            {
+                                NativeMethods.PostMessage(_messageWindow.Handle,
+                                    NativeMethods.WM_APP_DISPLAY_REFRESH, IntPtr.Zero, IntPtr.Zero);
+                            }
+                            catch { }
+                        }
+
+                        op.Complete("Deferred", "轻量模式，已投递刷新消息");
+                        return;
+                    }
+
+                    var removedIds = _monitorManager.RefreshMonitors();
+                    Log.Info("Display", $"显示器配置变更：当前 {_monitorManager.Monitors.Count} 台" +
+                        (removedIds != null && removedIds.Count > 0 ? $"，失效 {removedIds.Count} 台（{string.Join(", ", removedIds)}）" : ""));
+                    bool cleaned = CleanupStaleSettings(removedIds);
+                    NotifyMonitorChange(_monitorManager.Monitors.Count, removedIds == null ? 0 : removedIds.Count);
+                    if (!Form1IsOpen())
+                    {
+                        ApplyGammaToSystem();
+                        if (_trayMenuOpen)
+                        {
+                            _trayMenuNeedsRebuild = true;
+                        }
+                        else
+                        {
+                            ClearDynamicTraySection();
+                            BuildDynamicTraySection();
+                        }
+                    }
+                    else if (cleaned)
+                    {
+                        SettingsStore.SaveSettings(Settings);
+                    }
+
+                    op.Complete("Success",
+                        $"monitors={_monitorManager.Monitors.Count}, removed={removedIds?.Count ?? 0}, cleaned={cleaned}, formOpen={Form1IsOpen()}");
                 }
-                else
+                catch (Exception ex)
                 {
-                    ClearDynamicTraySection();
-                    BuildDynamicTraySection();
+                    op.Fail(ex, $"lightweight={_lightweightMode}",
+                        () => $"monitors={_monitorManager?.Monitors.Count ?? 0}, formOpen={Form1IsOpen()}");
                 }
-            }
-            else if (cleaned)
-            {
-                SettingsStore.SaveSettings(Settings);
             }
         }
 

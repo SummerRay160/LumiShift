@@ -677,8 +677,17 @@
   <data name="Gamma: 按显示器独立应用" xml:space="preserve">
     <value>Gamma: 按顯示器獨立套用</value>
   </data>
-  <data name="Gamma: 部分显示器应用失败" xml:space="preserve">
-    <value>Gamma: 部分顯示器套用失敗</value>
+  <data name="Gamma: 部分显示器应用失败（{0}）" xml:space="preserve">
+    <value>Gamma: 部分顯示器套用失敗（{0}）</value>
+  </data>
+  <data name="无法打开显示设备" xml:space="preserve">
+    <value>無法開啟顯示裝置</value>
+  </data>
+  <data name="系统拒绝写入 Gamma 表" xml:space="preserve">
+    <value>系統拒絕寫入 Gamma 表</value>
+  </data>
+  <data name="{0}：{1}" xml:space="preserve">
+    <value>{0}：{1}</value>
   </data>
   <data name="Gamma 出错: {0}" xml:space="preserve">
     <value>Gamma 發生錯誤: {0}</value>

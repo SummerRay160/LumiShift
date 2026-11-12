@@ -456,27 +456,25 @@ namespace LumiShift
 
         private void UpdateColorTempFromSliders()
         {
-            double r = _gammaRSlider.Value / 100.0;
-            double b = _gammaBSlider.Value / 100.0;
-            double colorTemp;
+            // 仅同步色温滑块位置，不能触发色温事件重新应用参数：
+            // 否则调亮度/RGB 时会用反推的色温覆盖刚设置好的 R/B/γ，表现为色温设置被悄悄改掉
+            bool wasUpdating = _isUpdatingGammaSliders;
+            _isUpdatingGammaSliders = true;
+            try
+            {
+                // 与 BuildColorTempConfig 保持互逆：B 0.70→1.00→1.06 对应 100→50→0
+                double b = _gammaBSlider.Value / 100.0;
+                double colorTemp = b >= 1.0
+                    ? (1.06 - b) / 0.06 * 50.0
+                    : 50.0 + (1.0 - b) / 0.30 * 50.0;
 
-            if (r <= 1.0 && b >= 1.0)
-            {
-                double t = r <= 0.98 ? 0 : (1.0 - r) / 0.02;
-                colorTemp = Math.Max(0, (1.0 - t) * 50);
+                _gammaColorTempSlider.Value = (int)Math.Round(Math.Max(0, Math.Min(100, colorTemp)));
+                UpdateColorTempLabel();
             }
-            else if (r >= 1.0 && b <= 1.0)
+            finally
             {
-                double t = b >= 0.70 ? (1.0 - b) / 0.30 : 1.0;
-                colorTemp = Math.Min(100, 50 + t * 50);
+                _isUpdatingGammaSliders = wasUpdating;
             }
-            else
-            {
-                colorTemp = 50;
-            }
-
-            _gammaColorTempSlider.Value = (int)Math.Round(Math.Max(0, Math.Min(100, colorTemp)));
-            UpdateColorTempLabel();
         }
 
         private void UpdateColorTempLabel()
@@ -1055,9 +1053,10 @@ namespace LumiShift
             SettingsStore.SaveSettings(Settings);
 
             // 仅在系统颜色配置确实生效后才提示，避免修改失败时误触发通知
+            string colorCode = $"#{r:X2}{g:X2}{b:X2}";
+            Log.Info("EyeProtection", $"应用护眼颜色 color={colorCode}, rgb=({r},{g},{b}), applied={applied}");
             if (applied)
             {
-                string colorCode = $"#{r:X2}{g:X2}{b:X2}";
                 _bgService.NotifyStatusSwitch(Lang.Get("LumiShift 状态切换"), Lang.F("设置护眼色为 {0} 成功", colorCode));
             }
         }
@@ -1471,43 +1470,47 @@ namespace LumiShift
                 _bgService.SetScheduleManualOverride(true);
 
             _isUpdatingGammaSliders = true;
-
-            var colorConfig = BuildColorTempConfig(_gammaColorTempSlider.Value, _gammaBrightSlider.Value);
-
-            if (IsGlobalMonitorSelected())
+            try
             {
-                _bgService.SetGlobalGammaParameters(colorConfig, clearDisplayOverrides: true);
-                PopulateMonitorSelector();
-            }
-            else
-            {
-                string deviceId = GetSelectedMonitorDeviceId();
-                if (deviceId != null)
+                var colorConfig = BuildColorTempConfig(_gammaColorTempSlider.Value, _gammaBrightSlider.Value);
+
+                if (IsGlobalMonitorSelected())
                 {
-                    _bgService.SetDisplayGammaParameters(deviceId, colorConfig);
+                    _bgService.SetGlobalGammaParameters(colorConfig, clearDisplayOverrides: true);
                     PopulateMonitorSelector();
-                    _resetDisplayGammaButton.Enabled = true;
                 }
+                else
+                {
+                    string deviceId = GetSelectedMonitorDeviceId();
+                    if (deviceId != null)
+                    {
+                        _bgService.SetDisplayGammaParameters(deviceId, colorConfig);
+                        PopulateMonitorSelector();
+                        _resetDisplayGammaButton.Enabled = true;
+                    }
+                }
+
+                _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(Settings.GammaRScale * 100.0));
+                _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(Settings.GammaGScale * 100.0));
+                _gammaBSlider.Value = ClampSlider(_gammaBSlider, (int)Math.Round(Settings.GammaBScale * 100.0));
+                _gammaValueSlider.Value = ClampSlider(_gammaValueSlider, (int)Math.Round(Settings.GammaValue * 100.0));
+
+                UpdateGammaLabels();
+                UpdateColorTempLabel();
+                SyncSlidersToSelectedMonitor();
+
+                string current = GetCurrentPresetName();
+                _currentPresetName = current;
+                if (current != null)
+                    _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
+
+                _bgService.ApplyGammaToSystem();
+                SettingsStore.SaveSettings(Settings);
             }
-
-            _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(Settings.GammaRScale * 100.0));
-            _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(Settings.GammaGScale * 100.0));
-            _gammaBSlider.Value = ClampSlider(_gammaBSlider, (int)Math.Round(Settings.GammaBScale * 100.0));
-            _gammaValueSlider.Value = ClampSlider(_gammaValueSlider, (int)Math.Round(Settings.GammaValue * 100.0));
-
-            UpdateGammaLabels();
-            UpdateColorTempLabel();
-            SyncSlidersToSelectedMonitor();
-
-            string current = GetCurrentPresetName();
-            _currentPresetName = current;
-            if (current != null)
-                _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
-
-            _bgService.ApplyGammaToSystem();
-            SettingsStore.SaveSettings(Settings);
-
-            _isUpdatingGammaSliders = false;
+            finally
+            {
+                _isUpdatingGammaSliders = false;
+            }
         }
 
         private void GammaModeComboBox_SelectedIndexChanged(object sender, EventArgs e)
