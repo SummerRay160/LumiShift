@@ -228,6 +228,9 @@
   <data name="护眼模式已关闭" xml:space="preserve">
     <value>護眼模式已關閉</value>
   </data>
+  <data name="设置护眼色为 {0} 成功" xml:space="preserve">
+    <value>設定護眼色為 {0} 成功</value>
+  </data>
   <data name="未设置" xml:space="preserve">
     <value>未設定</value>
   </data>
