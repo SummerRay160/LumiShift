@@ -32,6 +32,15 @@ namespace LumiShift.Infrastructure
         private static readonly RAMP DefaultRamp;
         private readonly object _rampLock = new object();
 
+        // Windows 的 SetDeviceGammaRamp 带"防止屏幕不可读"启发式：每个通道 ramp[255] 需达到约 50%、
+        // ramp[128] 需达到约 12.5%，否则直接返回 FALSE 或静默丢弃。这里各留一点余量。
+        private const double RampMaxFloor = 0.52;
+        private const double RampMidFloor = 0.135;
+
+        // 单通道增益低于该值时，任何整体缩放都无法让该通道通过系统检查；
+        // 此时把增益抬到该下限，改用硬件背光来补足剩余亮度。
+        private const double RampMinChannelScale = 0.52;
+
         public event EventHandler<string> StatusChanged;
 
         /// <summary>把屏幕设备名（如 \\.\DISPLAY2）转换为界面上显示的显示器名称；返回空时回退设备名。</summary>
@@ -114,18 +123,54 @@ namespace LumiShift.Infrastructure
             }
         }
 
+        /// <summary>
+        /// 把滑块亮度换算成 Windows 实际允许写入的 Gamma 缩放值。
+        /// 系统会拒绝过暗的 Gamma 表，缺口部分由 <paramref name="hardwareDimFactor"/>（≤1）交给硬件背光补足。
+        /// </summary>
+        public static double GetWritableMaster(GammaParameters parameters, out double hardwareDimFactor)
+        {
+            double desired = 0.15 + parameters.MasterBrightness / 100.0 * 0.85;
+
+            double minScale = Math.Min(ClampChannelScale(parameters.RScale),
+                Math.Min(ClampChannelScale(parameters.GScale), ClampChannelScale(parameters.BScale)));
+            minScale = Math.Min(1.0, minScale);
+
+            // 通道被压暗（如暖色温 B×0.70）或 gamma 曲线过陡时，整体缩放必须相应抬高
+            double midPower = Math.Pow(128.0 / 255.0, Math.Max(0.0, parameters.Gamma));
+            double writableFloor = Math.Max(RampMaxFloor / minScale, RampMidFloor / (minScale * midPower));
+            if (writableFloor > 1.0) writableFloor = 1.0;
+
+            double master = Math.Max(desired, writableFloor);
+            if (master > 1.0) master = 1.0;
+
+            hardwareDimFactor = master > 0 ? Math.Max(0.0, Math.Min(1.0, desired / master)) : 1.0;
+            return master;
+        }
+
+        /// <summary>仅取需要硬件背光补足的亮度系数（1.0 表示无需补足）。</summary>
+        public static double GetHardwareDimFactor(GammaParameters parameters)
+        {
+            GetWritableMaster(parameters, out double dim);
+            return dim;
+        }
+
+        /// <summary>向界面状态栏输出一条提示（用于非失败状态的告知，例如亮度已到系统下限）。</summary>
+        public void ReportStatus(string message)
+        {
+            if (!string.IsNullOrEmpty(message))
+                StatusChanged?.Invoke(this, message);
+        }
+
+        private static double ClampChannelScale(double scale)
+        {
+            return Math.Max(RampMinChannelScale, scale);
+        }
+
         public bool ApplyGamma(IEnumerable<Screen> screens, GammaParameters parameters)
         {
             try
             {
-                double master = 0.15 + parameters.MasterBrightness / 100.0 * 0.85;
-
-                RAMP ramp;
-                lock (_rampLock)
-                {
-                    ramp = BuildRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
-                }
-
+                double master = GetWritableMaster(parameters, out _);
                 bool allSucceeded = true;
                 var failures = new List<(string DeviceName, string Reason)>();
 
@@ -141,8 +186,7 @@ namespace LumiShift.Infrastructure
 
                     try
                     {
-                        bool result = SetDeviceGammaRamp(hdc, ref ramp);
-                        if (!result)
+                        if (!TryWriteRamp(hdc, parameters, master))
                         {
                             allSucceeded = false;
                             failures.Add((screen.DeviceName, Lang.Get("系统拒绝写入 Gamma 表")));
@@ -245,13 +289,8 @@ namespace LumiShift.Infrastructure
                     {
                         if (perScreenParams.TryGetValue(screen.DeviceName, out var parameters))
                         {
-                            double master = 0.15 + parameters.MasterBrightness / 100.0 * 0.85;
-                            RAMP ramp;
-                            lock (_rampLock)
-                            {
-                                ramp = BuildRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
-                            }
-                            if (!SetDeviceGammaRamp(hdc, ref ramp))
+                            double master = GetWritableMaster(parameters, out _);
+                            if (!TryWriteRamp(hdc, parameters, master))
                             {
                                 allSucceeded = false;
                                 failures.Add((screen.DeviceName, Lang.Get("系统拒绝写入 Gamma 表")));
@@ -294,6 +333,26 @@ namespace LumiShift.Infrastructure
             }
         }
 
+        /// <summary>写入 Gamma 表；被系统启发式拒绝时抬高整体缩放再试一次，避免误报失败。</summary>
+        private bool TryWriteRamp(IntPtr hdc, GammaParameters parameters, double master)
+        {
+            RAMP ramp;
+            lock (_rampLock)
+            {
+                ramp = BuildRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
+            }
+            if (SetDeviceGammaRamp(hdc, ref ramp)) return true;
+
+            if (master >= 0.999) return false;
+
+            lock (_rampLock)
+            {
+                ramp = BuildRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale,
+                    Math.Min(1.0, master * 1.15));
+            }
+            return SetDeviceGammaRamp(hdc, ref ramp);
+        }
+
         private static RAMP BuildRamp(double gamma, double rScale, double gScale, double bScale, double master)
         {
             var ramp = new RAMP
@@ -302,6 +361,10 @@ namespace LumiShift.Infrastructure
                 Green = new ushort[256],
                 Blue = new ushort[256]
             };
+
+            rScale = ClampChannelScale(rScale);
+            gScale = ClampChannelScale(gScale);
+            bScale = ClampChannelScale(bScale);
 
             for (int i = 0; i < 256; i++)
             {
