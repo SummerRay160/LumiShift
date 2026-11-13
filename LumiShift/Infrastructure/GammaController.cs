@@ -130,7 +130,25 @@ namespace LumiShift.Infrastructure
         public static double GetWritableMaster(GammaParameters parameters, out double hardwareDimFactor)
         {
             double desired = 0.15 + parameters.MasterBrightness / 100.0 * 0.85;
+            double master = Math.Max(desired, GetWritableFloor(parameters));
+            if (master > 1.0) master = 1.0;
 
+            hardwareDimFactor = master > 0 ? Math.Max(0.0, Math.Min(1.0, desired / master)) : 1.0;
+            return master;
+        }
+
+        /// <summary>
+        /// 当前参数下，仅靠 Gamma 能达到的最低滑块亮度百分比（0–100）。
+        /// 用于界面标出分界点：分界点随色温/RGB/γ 变化，不是固定的 45%。
+        /// </summary>
+        public static int GetGammaOnlyFloorPercent(GammaParameters parameters)
+        {
+            double percent = (GetWritableFloor(parameters) - 0.15) / 0.85 * 100.0;
+            return (int)Math.Max(0, Math.Min(100, Math.Round(percent)));
+        }
+
+        private static double GetWritableFloor(GammaParameters parameters)
+        {
             double minScale = Math.Min(ClampChannelScale(parameters.RScale),
                 Math.Min(ClampChannelScale(parameters.GScale), ClampChannelScale(parameters.BScale)));
             minScale = Math.Min(1.0, minScale);
@@ -139,12 +157,7 @@ namespace LumiShift.Infrastructure
             double midPower = Math.Pow(128.0 / 255.0, Math.Max(0.0, parameters.Gamma));
             double writableFloor = Math.Max(RampMaxFloor / minScale, RampMidFloor / (minScale * midPower));
             if (writableFloor > 1.0) writableFloor = 1.0;
-
-            double master = Math.Max(desired, writableFloor);
-            if (master > 1.0) master = 1.0;
-
-            hardwareDimFactor = master > 0 ? Math.Max(0.0, Math.Min(1.0, desired / master)) : 1.0;
-            return master;
+            return writableFloor;
         }
 
         /// <summary>仅取需要硬件背光补足的亮度系数（1.0 表示无需补足）。</summary>
