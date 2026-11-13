@@ -89,6 +89,12 @@ namespace LumiShift.Infrastructure
 
                 _allControllers.Add(controller);
 
+                // 记录实际选中的亮度通道：WMI(内置屏) 与 DDC(外接屏) 行为差异大，
+                // 排查"滑块能拖但屏幕不变"时必须先确认走的是哪条通道
+                Log.Info("Monitor",
+                    $"{displayName}: id={deviceId ?? screen.DeviceName}, builtIn={isBuiltIn}, " +
+                    $"ctrl={(controller.IsDDC ? "DDC" : "WMI")}, supported={controller.IsSupported}");
+
                 _monitors.Add(new MonitorInfo
                 {
                     DeviceId = deviceId ?? screen.DeviceName,

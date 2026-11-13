@@ -31,8 +31,11 @@ namespace LumiShift.Infrastructure
             if (_disposed) return _cachedBrightness >= 0 ? _cachedBrightness : -1;
             try
             {
+                // WQL 字符串里反斜杠是转义符，InstanceName 中的 "\" 必须写成 "\\"，
+                // 否则查询抛 Invalid query，亮度永远读不到，硬件背光联动也拿不到基准值
+                string escaped = EscapeWqlValue(_instanceName);
                 using (var searcher = new ManagementObjectSearcher("root/WMI",
-                    $"SELECT * FROM WmiMonitorBrightness WHERE InstanceName='{_instanceName.Replace("'", "''")}'"))
+                    $"SELECT * FROM WmiMonitorBrightness WHERE InstanceName='{escaped}'"))
                 {
                     using (var collection = searcher.Get())
                     {
@@ -48,10 +51,18 @@ namespace LumiShift.Infrastructure
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Warn("Brightness", $"WMI 亮度读取失败: {ex.Message} (instance={_instanceName})");
             }
-            return _cachedBrightness >= 0 ? _cachedBrightness : -1;
+            // 读失败不能拿缓存冒充硬件真值：联动会把它当基准，把屏幕压得更暗
+            return -1;
+        }
+
+        /// <summary>WQL 字符串字面量转义：反斜杠在前，单引号加倍。</summary>
+        private static string EscapeWqlValue(string value)
+        {
+            return value.Replace("\\", "\\\\").Replace("'", "''");
         }
 
         public void SetBrightness(int percent)
@@ -72,8 +83,9 @@ namespace LumiShift.Infrastructure
                     _cachedBrightness = percent;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Warn("Brightness", $"WMI 亮度写入失败: {ex.Message} (instance={_instanceName})");
             }
         }
 
