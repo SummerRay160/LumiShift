@@ -311,8 +311,34 @@ namespace LumiShift
             _gammaColorTempLabel = new Label { Text = Lang.Get("适中"), Location = new Point(322, gy + 2), AutoSize = true, Font = Typography.Caption };
             SetLabelTheme(_gammaColorTempLabel, 's');
 
+            // —— 亮度下限联动开关：默认关闭，只调 Gamma，不碰显示器硬件亮度 ——
+            gy += 30;
+
+            _gammaHardwareAssistToggle = new ToggleSwitch { Location = new Point(Spacing.LG, gy), Checked = false };
+            _gammaHardwareAssistToggle.CheckedChanged += GammaHardwareAssistToggle_CheckedChanged;
+
+            var assistLbl = new Label
+            {
+                Text = Lang.Get("低于系统下限时联动硬件背光"),
+                Location = new Point(Spacing.LG + 48, gy + 1),
+                AutoSize = true,
+                Font = Typography.Body
+            };
+            SetLabelTheme(assistLbl, 'p');
+
+            gy += 22;
+
+            _gammaAssistHintLabel = new Label
+            {
+                Text = "",
+                Location = new Point(Spacing.LG + 48, gy),
+                AutoSize = true,
+                Font = Typography.Caption
+            };
+            SetLabelTheme(_gammaAssistHintLabel, 's');
+
             // —— 进阶调参折叠区：显示方案 + R/G/B/γ（默认收起，展开状态见 ApplyGammaAdvancedLayout） ——
-            gy += 34;
+            gy += 26;
 
             var sep1 = CreateSeparator(gy, 360);
             gy += 12;
@@ -561,6 +587,7 @@ namespace LumiShift
                 titleLabel, _gammaCheckBox, gammaLabel,
                 brightLbl, _gammaBrightSlider, _gammaBrightLabel,
                 tempLbl, _gammaColorTempSlider, _gammaColorTempLabel,
+                _gammaHardwareAssistToggle, assistLbl, _gammaAssistHintLabel,
                 sep1, _advToggleLabel,
                 _gammaAdvancedPanel, _gammaSep2,
                 _monitorLabel, _monitorSelectorComboBox, _resetDisplayGammaButton,
