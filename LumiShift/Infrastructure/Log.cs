@@ -54,6 +54,20 @@ namespace LumiShift.Infrastructure
         /// <summary>日志文件所在目录（%LocalAppData%\LumiShift）。</summary>
         public static string FolderPath => Path.GetDirectoryName(FilePath);
 
+        /// <summary>主日志文件完整路径，供界面校验日志是否真的写入成功。</summary>
+        public static string LogFilePath => FilePath;
+
+        /// <summary>
+        /// 主路径写入失败时的兜底日志路径（程序所在目录）。
+        /// 部分环境的 AppData 目录不允许创建新文件，但允许修改已有文件；
+        /// 此时若没有兜底，日志会完全丢失，问题无法排查。
+        /// </summary>
+        public static string FallbackLogPath => Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory ?? ".", "log.fallback.txt");
+
+        /// <summary>最近一次日志写入失败的原因；写入成功时为空。界面据此给出可读提示。</summary>
+        public static string LastWriteError { get; private set; }
+
         /// <summary>诊断日志开关；关闭后仅 ERROR/FATAL 仍然记录。</summary>
         public static bool Enabled => _enabled;
 
@@ -221,10 +235,21 @@ namespace LumiShift.Infrastructure
                     if (level >= LogLevel.Error)
                         Append(ErrorFilePath, line, MaxErrorBytes);
                 }
+                LastWriteError = null;
             }
-            catch
+            catch (Exception ex)
             {
-                // 日志写入失败不影响主流程
+                // 日志写入失败不影响主流程，但必须留下原因供界面提示
+                LastWriteError = $"{ex.GetType().Name}: {ex.Message}";
+                try
+                {
+                    lock (Gate)
+                        Append(FallbackLogPath, BuildLine(level, context, message), MaxLogBytes);
+                }
+                catch
+                {
+                    // 兜底路径也失败时只能放弃，LastWriteError 已记录主路径原因
+                }
             }
         }
 
