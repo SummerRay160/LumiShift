@@ -692,6 +692,9 @@
   <data name="Gamma 出错: {0}" xml:space="preserve">
     <value>Gamma 發生錯誤: {0}</value>
   </data>
+  <data name="Gamma: {0} 不支持亮度调节，已到系统下限" xml:space="preserve">
+    <value>Gamma: {0} 不支援亮度調節，已到系統下限</value>
+  </data>
   <!-- MonitorManager：显示器名称 -->
   <data name="内置显示器" xml:space="preserve">
     <value>內建顯示器</value>
