@@ -566,7 +566,8 @@ namespace LumiShift
                         if (hardware >= 0)
                         {
                             currentBrightness = hardware;
-                            Settings.BrightnessPerDisplay[deviceId] = currentBrightness;
+                            if (!_bgService.IsHardwareDimActive(deviceId))
+                                Settings.BrightnessPerDisplay[deviceId] = currentBrightness;
                         }
                     }
                     catch { }
@@ -649,6 +650,8 @@ namespace LumiShift
                         valLabel.Text = $"{tb.Value}%";
                         Settings.BrightnessPerDisplay[deviceId] = tb.Value;
                         monitor.Controller?.SetBrightness(tb.Value);
+                        // 若 Gamma 亮度正接管背光，用户设的新亮度作为新的补偿基准
+                        _bgService.RebaseHardwareDim(deviceId, tb.Value);
                         SettingsStore.SaveSettings(Settings);
                     };
                     tb.ValueChanged += handler;
@@ -794,7 +797,9 @@ namespace LumiShift
                 {
                     // 外部（Fn 键/系统设置等）修改了亮度：同步滑块与设置
                     changed = true;
-                    Settings.BrightnessPerDisplay[kvp.Key] = kvp.Value;
+                    // 亮度补偿期间的数值是本程序为调暗写下去的，不能覆盖用户的基准亮度
+                    if (!_bgService.IsHardwareDimActive(kvp.Key))
+                        Settings.BrightnessPerDisplay[kvp.Key] = kvp.Value;
                 }
             }
 

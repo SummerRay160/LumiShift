@@ -96,6 +96,12 @@ namespace LumiShift.Infrastructure
         private int _cachedBrightness = -1;
         private readonly object _ddcLock = new object();
 
+        // DDC 每次读写都是若干次 I²C 事务（外接屏常见 40–300 ms），
+        // 亮度范围只查一次并缓存，避免每次写入都多花一次往返
+        private uint _minBrightness;
+        private uint _maxBrightness;
+        private bool _rangeKnown;
+
         public string DeviceId => _deviceId;
         public string DisplayName => _displayName;
         public bool IsDDC => true;
@@ -209,6 +215,12 @@ namespace LumiShift.Infrastructure
                 {
                     System.Diagnostics.Debug.WriteLine($"[DdcBrightness] 不支持 DDC/CI 亮度控制 (screen={screen.DeviceName})");
                 }
+                else if (NativeMethods.GetMonitorBrightness(_physicalMonitor,
+                    out uint min, out uint _, out uint max))
+                {
+                    // 初始化时缓存亮度范围，之后的写入不再需要额外读取
+                    CacheRange(min, max);
+                }
 
                 return supportsBrightness;
             }
@@ -233,6 +245,7 @@ namespace LumiShift.Infrastructure
                     if (NativeMethods.GetMonitorBrightness(_physicalMonitor,
                         out uint min, out uint current, out uint max))
                     {
+                        CacheRange(min, max);
                         if (max > min)
                         {
                             int brightness = (int)Math.Round((double)(current - min) / (max - min) * 100);
@@ -255,24 +268,37 @@ namespace LumiShift.Infrastructure
             if (_physicalMonitor == IntPtr.Zero || !IsSupported)
                 return;
 
+            percent = Math.Max(0, Math.Min(100, percent));
             if (_cachedBrightness == percent) return;
 
             try
             {
                 lock (_ddcLock)
                 {
-                    if (NativeMethods.GetMonitorBrightness(_physicalMonitor,
-                        out uint min, out uint _, out uint max))
+                    if (!_rangeKnown)
                     {
-                        uint newValue = min + (uint)Math.Round((double)percent / 100.0 * (max - min));
-                        NativeMethods.SetMonitorBrightness(_physicalMonitor, newValue);
-                        _cachedBrightness = percent;
+                        if (!NativeMethods.GetMonitorBrightness(_physicalMonitor,
+                            out uint min, out uint _, out uint max))
+                            return;
+                        CacheRange(min, max);
                     }
+
+                    uint span = _maxBrightness > _minBrightness ? _maxBrightness - _minBrightness : 0;
+                    uint newValue = _minBrightness + (uint)Math.Round((double)percent / 100.0 * span);
+                    NativeMethods.SetMonitorBrightness(_physicalMonitor, newValue);
+                    _cachedBrightness = percent;
                 }
             }
             catch
             {
             }
+        }
+
+        private void CacheRange(uint min, uint max)
+        {
+            _minBrightness = min;
+            _maxBrightness = max;
+            _rangeKnown = true;
         }
 
         public void Dispose()
