@@ -352,22 +352,29 @@ namespace LumiShift.Infrastructure
         {
             if (_disposed) return;
 
-            if (_allPhysicalMonitors != null && _physicalMonitorCount > 0)
+            // 与 GetBrightness/SetBrightness 同锁：后台刷新线程可能正在用句柄
+            // 读亮度，不持锁销毁会让它拿到已销毁的句柄，读写结果不可预期
+            lock (_ddcLock)
             {
-                // 使用 DestroyPhysicalMonitors 销毁所有物理显示器句柄
-                NativeMethods.DestroyPhysicalMonitors(_physicalMonitorCount, _allPhysicalMonitors);
-                _allPhysicalMonitors = null;
-                _physicalMonitor = IntPtr.Zero;
-                _physicalMonitorCount = 0;
-            }
-            else if (_physicalMonitor != IntPtr.Zero)
-            {
-                // 回退：如果没有完整数组就销毁单个句柄
-                NativeMethods.DestroyPhysicalMonitor(_physicalMonitor);
-                _physicalMonitor = IntPtr.Zero;
-            }
+                if (_disposed) return;
 
-            _disposed = true;
+                if (_allPhysicalMonitors != null && _physicalMonitorCount > 0)
+                {
+                    // 使用 DestroyPhysicalMonitors 销毁所有物理显示器句柄
+                    NativeMethods.DestroyPhysicalMonitors(_physicalMonitorCount, _allPhysicalMonitors);
+                    _allPhysicalMonitors = null;
+                    _physicalMonitor = IntPtr.Zero;
+                    _physicalMonitorCount = 0;
+                }
+                else if (_physicalMonitor != IntPtr.Zero)
+                {
+                    // 回退：如果没有完整数组就销毁单个句柄
+                    NativeMethods.DestroyPhysicalMonitor(_physicalMonitor);
+                    _physicalMonitor = IntPtr.Zero;
+                }
+
+                _disposed = true;
+            }
         }
     }
 }
