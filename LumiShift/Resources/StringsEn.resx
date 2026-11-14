@@ -695,6 +695,21 @@
   <data name="Gamma: {0} 不支持亮度调节，已到系统下限" xml:space="preserve">
     <value>Gamma: {0} has no brightness control; already at system minimum</value>
   </data>
+  <data name="低于系统下限时联动硬件背光" xml:space="preserve">
+    <value>Use hardware backlight below the system limit</value>
+  </data>
+  <data name="低于 {0}% 时由硬件背光继续调暗" xml:space="preserve">
+    <value>Below {0}%: hardware backlight takes over</value>
+  </data>
+  <data name="低于 {0}% 为 Windows 限制，不会改动硬件亮度" xml:space="preserve">
+    <value>Below {0}% is a Windows limit; hardware brightness stays untouched</value>
+  </data>
+  <data name="已解除硬件联动，亮度回到 Gamma 可调下限" xml:space="preserve">
+    <value>Hardware link released; brightness returned to the Gamma limit</value>
+  </data>
+  <data name="（Gamma 接管中 · 当前 {0}%）" xml:space="preserve">
+    <value>(Gamma controlling · currently {0}%)</value>
+  </data>
   <!-- MonitorManager：显示器名称 -->
   <data name="内置显示器" xml:space="preserve">
     <value>Built-in Display</value>

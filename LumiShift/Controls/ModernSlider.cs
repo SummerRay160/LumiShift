@@ -16,8 +16,35 @@ namespace LumiShift.Controls
         private bool _dragging;
         private bool _hovered;
         private bool _hoveredThumb;
+        private int _segmentBoundary = -1;
+        private Color _segmentColor = Color.Empty;
 
         public event EventHandler ValueChanged;
+
+        /// <summary>分段边界（滑块值）。-1 表示不分段；边界以下用 <see cref="SegmentColor"/> 标示。</summary>
+        [DefaultValue(-1)]
+        public int SegmentBoundary
+        {
+            get => _segmentBoundary;
+            set
+            {
+                if (_segmentBoundary == value) return;
+                _segmentBoundary = value;
+                Invalidate();
+            }
+        }
+
+        /// <summary>边界以下区间的颜色。联动开启时用强调色，关闭时用灰色表示不可达。</summary>
+        public Color SegmentColor
+        {
+            get => _segmentColor;
+            set
+            {
+                if (_segmentColor == value) return;
+                _segmentColor = value;
+                Invalidate();
+            }
+        }
 
         [DefaultValue(0)]
         public int Minimum
@@ -108,15 +135,52 @@ namespace LumiShift.Controls
             Color thumbColor = isActive
                 ? (_hoveredThumb ? Colors.BrandGlow : Colors.Brand)
                 : Colors.TextDisabled;
+            Color segmentColor = _segmentColor.IsEmpty ? Colors.TextDisabled : _segmentColor;
+
+            // 分段边界：随当前 Gamma 参数动态变化，不能用固定百分比
+            float boundaryX = -1f;
+            if (isActive && _segmentBoundary > _minimum && _segmentBoundary <= _maximum)
+            {
+                float ratio = (_segmentBoundary - _minimum) / (float)(_maximum - _minimum);
+                boundaryX = margin + ratio * (Width - margin * 2);
+            }
 
             using (var trackPath = CreateRoundRect(margin, trackY, Width - margin * 2, trackH, trackH / 2f))
                 g.FillPath(GdiCache.GetBrush(inactiveTrack), trackPath);
 
+            if (boundaryX > margin)
+            {
+                float segmentW = Math.Max(trackH, boundaryX - margin);
+                using (var segmentPath = CreateRoundRect(margin, trackY, segmentW, trackH, trackH / 2f))
+                    g.FillPath(GdiCache.GetBrush(Color.FromArgb(70, segmentColor)), segmentPath);
+            }
+
             float filledW = thumbCenter - margin;
             if (filledW > 0 && isActive)
             {
-                using (var fillPath = CreateRoundRect(margin, trackY, filledW, trackH, trackH / 2f))
-                    g.FillPath(GdiCache.GetBrush(activeTrack), fillPath);
+                if (boundaryX > margin && boundaryX < thumbCenter)
+                {
+                    float lowerW = Math.Max(trackH, boundaryX - margin);
+                    using (var lowerPath = CreateRoundRect(margin, trackY, lowerW, trackH, trackH / 2f))
+                        g.FillPath(GdiCache.GetBrush(segmentColor), lowerPath);
+
+                    float upperW = Math.Max(trackH, thumbCenter - boundaryX);
+                    using (var upperPath = CreateRoundRect(boundaryX, trackY, upperW, trackH, trackH / 2f))
+                        g.FillPath(GdiCache.GetBrush(activeTrack), upperPath);
+                }
+                else
+                {
+                    Color fill = boundaryX > margin && thumbCenter <= boundaryX ? segmentColor : activeTrack;
+                    using (var fillPath = CreateRoundRect(margin, trackY, filledW, trackH, trackH / 2f))
+                        g.FillPath(GdiCache.GetBrush(fill), fillPath);
+                }
+            }
+
+            if (boundaryX > margin)
+            {
+                float lineW = Math.Max(1f, DpiScale.S(1));
+                g.FillRectangle(GdiCache.GetBrush(Colors.TextPrimary),
+                    boundaryX - lineW / 2f, trackY - DpiScale.S(2), lineW, trackH + DpiScale.S(4));
             }
 
             float thumbX = thumbCenter - thumbSize / 2f;

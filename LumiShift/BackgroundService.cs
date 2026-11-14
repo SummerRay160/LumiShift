@@ -73,9 +73,20 @@ namespace LumiShift
         // 外接屏的 DDC 写入很慢（每次 40–300 ms），拖动滑块时按固定间隔合并写入，避免卡住界面
         private readonly Dictionary<string, int> _hardwareDimLastWrite = new Dictionary<string, int>();
         private readonly Dictionary<string, int> _hardwareDimPending = new Dictionary<string, int>();
+        private readonly Dictionary<string, int> _hardwareDimCurrent = new Dictionary<string, int>();
         private readonly HashSet<string> _hardwareDimUnsupportedNotified = new HashSet<string>();
         private Timer _hardwareDimFlushTimer;
         private const int HardwareDimMinIntervalMs = 150;
+
+        // 托盘图标可能在 explorer 就绪前注册失败；启动后重挂几次，并在任务栏重建时重挂
+        private Timer _trayRetryTimer;
+        private int _trayRetryCount;
+        private bool _trayIconFailed;
+        private const int TrayRetryIntervalMs = 2500;
+        private const int TrayRetryMaxCount = 3;
+
+        /// <summary>托盘图标创建失败时为真：此时不能按"最小化启动"隐藏主窗口。</summary>
+        internal bool TrayIconUnavailable => _trayIconFailed || _trayIcon == null;
 
         internal bool IsExiting => _exiting;
         internal bool ScheduleManualOverride => _scheduleManualOverride;
@@ -258,20 +269,75 @@ namespace LumiShift
 
         private void CreateTrayIcon()
         {
-            _components = new System.ComponentModel.Container();
-            _trayIcon = new NotifyIcon(_components)
+            try
             {
-                Text = "LumiShift",
-                Icon = Program.AppIcon,
-                Visible = true
+                _components = new System.ComponentModel.Container();
+                _trayIcon = new NotifyIcon(_components)
+                {
+                    Text = "LumiShift",
+                    Icon = Program.AppIcon,
+                    Visible = true
+                };
+                _trayMenu = new ContextMenuStrip(_components);
+                _trayMenu.Opening += OnTrayMenuOpening;
+                _trayMenu.Closed += OnTrayMenuClosed;
+                _trayIcon.ContextMenuStrip = _trayMenu;
+                // 用 MouseDoubleClick 过滤鼠标按键：NotifyIcon 的 DoubleClick 对右键双击同样触发，
+                // 快速右键托盘图标会被识别为右键双击而反复弹出主窗口
+                _trayIcon.MouseDoubleClick += OnTrayIconMouseDoubleClick;
+                _trayIconFailed = false;
+            }
+            catch (Exception ex)
+            {
+                _trayIconFailed = true;
+                Log.Error("Tray", ex, "CreateTrayIcon failed");
+            }
+
+            ScheduleTrayIconRetry();
+        }
+
+        /// <summary>explorer 托盘未就绪时 NIM_ADD 会失败或被忽略；启动阶段重挂几次。</summary>
+        private void ScheduleTrayIconRetry()
+        {
+            _trayRetryCount = 0;
+            _trayRetryTimer = new Timer { Interval = TrayRetryIntervalMs };
+            _trayRetryTimer.Tick += (s, e) =>
+            {
+                _trayRetryCount++;
+                ReapplyTrayIcon();
+                if (_trayRetryCount < TrayRetryMaxCount) return;
+
+                try { _trayRetryTimer?.Stop(); _trayRetryTimer?.Dispose(); } catch { }
+                _trayRetryTimer = null;
+                OnTraySettled();
             };
-            _trayMenu = new ContextMenuStrip(_components);
-            _trayMenu.Opening += OnTrayMenuOpening;
-            _trayMenu.Closed += OnTrayMenuClosed;
-            _trayIcon.ContextMenuStrip = _trayMenu;
-            // 用 MouseDoubleClick 过滤鼠标按键：NotifyIcon 的 DoubleClick 对右键双击同样触发，
-            // 快速右键托盘图标会被识别为右键双击而反复弹出主窗口
-            _trayIcon.MouseDoubleClick += OnTrayIconMouseDoubleClick;
+            _trayRetryTimer.Start();
+        }
+
+        /// <summary>重新执行 NIM_DELETE + NIM_ADD，让托盘图标重新注册。</summary>
+        private void ReapplyTrayIcon()
+        {
+            if (_exiting || _disposed || _trayIcon == null) return;
+            try
+            {
+                _trayIcon.Visible = false;
+                _trayIcon.Visible = true;
+                _trayIconFailed = false;
+            }
+            catch (Exception ex)
+            {
+                _trayIconFailed = true;
+                Log.Warn("Tray", "重挂托盘图标失败: " + ex.Message);
+            }
+        }
+
+        /// <summary>重挂尝试结束仍未恢复且配置为最小化启动时，显示主窗口兜底。</summary>
+        private void OnTraySettled()
+        {
+            if (_exiting || _disposed || !_trayIconFailed) return;
+            if (!Settings.StartMinimized || Form1IsOpen()) return;
+            Log.Warn("Tray", "托盘图标不可用，自动显示主窗口");
+            ShowMainWindow();
         }
 
         private void OnTrayMenuOpening(object sender, System.ComponentModel.CancelEventArgs e)
@@ -774,7 +840,7 @@ namespace LumiShift
                                 Settings.GammaValue,
                                 Settings.MasterBrightness);
                             succeeded = GammaController.ApplyGamma(Screen.AllScreens, applyParams);
-                            ApplyHardwareDimAll(GammaController.GetHardwareDimFactor(applyParams));
+                            ApplyHardwareDimAll(GetAssistDimFactor(applyParams));
                         }
                         else
                         {
@@ -809,7 +875,7 @@ namespace LumiShift
                                     overrideGamma.GammaValue,
                                     overrideGamma.MasterBrightness);
                                 perScreenParams[screen.DeviceName] = applyParams;
-                                hardwareDims[monitor.DeviceId] = GammaController.GetHardwareDimFactor(applyParams);
+                                hardwareDims[monitor.DeviceId] = GetAssistDimFactor(applyParams);
                             }
                         }
                         else
@@ -823,7 +889,7 @@ namespace LumiShift
                                     Settings.GammaValue,
                                     Settings.MasterBrightness);
                                 perScreenParams[screen.DeviceName] = applyParams;
-                                hardwareDims[monitor.DeviceId] = GammaController.GetHardwareDimFactor(applyParams);
+                                hardwareDims[monitor.DeviceId] = GetAssistDimFactor(applyParams);
                             }
                         }
                     }
@@ -853,6 +919,61 @@ namespace LumiShift
                         () => $"screens={Screen.AllScreens.Length}, enabled={Settings.GammaEnabled}, overrides={Settings.GammaPerDisplay?.Count ?? 0}");
                 }
             }
+        }
+
+        /// <summary>
+        /// 只有用户显式开启"联动硬件背光"才补足 Gamma 下限以下的亮度。
+        /// 默认返回 1.0：Gamma 到下限就停住，绝不改动显示器硬件亮度。
+        /// </summary>
+        private double GetAssistDimFactor(Infrastructure.GammaParameters parameters)
+        {
+            return Settings.GammaHardwareAssistEnabled
+                ? GammaController.GetHardwareDimFactor(parameters)
+                : 1.0;
+        }
+
+        /// <summary>当前参数下纯 Gamma 能达到的最低滑块亮度，用于界面分段着色与回弹。</summary>
+        internal int GetGammaAssistFloorPercent(GammaConfig config)
+        {
+            var parameters = new Infrastructure.GammaParameters(
+                config.RScale, config.GScale, config.BScale, config.GammaValue, config.MasterBrightness);
+            return GammaController.GetGammaOnlyFloorPercent(parameters);
+        }
+
+        /// <summary>联动期间返回该屏的基准亮度与当前被压暗后的亮度，供亮度页如实展示。</summary>
+        internal bool TryGetHardwareDimState(string deviceId, out int baseline, out int current)
+        {
+            baseline = 0;
+            current = 0;
+            if (string.IsNullOrEmpty(deviceId)) return false;
+            if (!_hardwareDimBase.TryGetValue(deviceId, out baseline)) return false;
+            current = _hardwareDimCurrent.TryGetValue(deviceId, out int c) ? c : baseline;
+            return true;
+        }
+
+        /// <summary>
+        /// 用户在"显示器亮度调节"页手动改亮度时调用：自动解除联动。
+        /// 硬件值留给用户，Gamma 亮度回弹到可调下限，避免看门狗再把刚设的值压回去。
+        /// 返回是否真的解除了联动。
+        /// </summary>
+        internal bool ReleaseHardwareAssist()
+        {
+            bool wasAssisting = Settings.GammaHardwareAssistEnabled || _hardwareDimBase.Count > 0;
+            if (!wasAssisting) return false;
+
+            Settings.GammaHardwareAssistEnabled = false;
+
+            var parameters = new Infrastructure.GammaParameters(
+                Settings.GammaRScale, Settings.GammaGScale, Settings.GammaBScale,
+                Settings.GammaValue, Settings.MasterBrightness);
+            int floor = GammaController.GetGammaOnlyFloorPercent(parameters);
+            if (Settings.MasterBrightness < floor)
+                Settings.MasterBrightness = floor;
+
+            RestoreHardwareBrightness();
+            ApplyGammaToSystem();
+            GammaController.ReportStatus(Lang.Get("已解除硬件联动，亮度回到 Gamma 可调下限"));
+            return true;
         }
 
         /// <summary>所有显示器使用同一亮度补偿系数。</summary>
@@ -889,6 +1010,7 @@ namespace LumiShift
             {
                 _hardwareDimPending.Remove(deviceId);
                 _hardwareDimLastWrite.Remove(deviceId);
+                _hardwareDimCurrent.Remove(deviceId);
                 _hardwareDimUnsupportedNotified.Remove(deviceId);
 
                 if (_hardwareDimBase.TryGetValue(deviceId, out int baseline))
@@ -933,12 +1055,17 @@ namespace LumiShift
             {
                 if (_hardwareDimPending.TryGetValue(deviceId, out int queued) && queued == target) return;
                 _hardwareDimPending[deviceId] = target;
+                _hardwareDimCurrent[deviceId] = target;
                 ScheduleHardwareDimFlush();
                 return;
             }
 
             _hardwareDimPending.Remove(deviceId);
             _hardwareDimLastWrite[deviceId] = Environment.TickCount;
+            _hardwareDimCurrent[deviceId] = target;
+            Log.Info("Brightness",
+                $"联动压暗：{monitor.DisplayName} 基准={baseBrightness}, 系数={factor:F3}, 目标={target}, " +
+                $"ctrl={(controller.IsDDC ? "DDC" : "WMI")}");
             SetHardwareBrightness(controller, target);
         }
 
@@ -994,19 +1121,13 @@ namespace LumiShift
             return !string.IsNullOrEmpty(deviceId) && _hardwareDimBase.ContainsKey(deviceId);
         }
 
-        /// <summary>用户在亮度页重新设定硬件亮度后，更新补偿基准，避免被旧基准覆盖。</summary>
-        internal void RebaseHardwareDim(string deviceId, int brightness)
-        {
-            if (string.IsNullOrEmpty(deviceId) || !_hardwareDimBase.ContainsKey(deviceId)) return;
-            _hardwareDimBase[deviceId] = Math.Max(1, Math.Min(100, brightness));
-        }
-
         /// <summary>退出前把被补偿压暗的显示器恢复到用户原先的亮度。</summary>
         private void RestoreHardwareBrightness()
         {
             try { _hardwareDimFlushTimer?.Stop(); } catch { }
             _hardwareDimPending.Clear();
             _hardwareDimLastWrite.Clear();
+            _hardwareDimCurrent.Clear();
             _hardwareDimUnsupportedNotified.Clear();
 
             if (_hardwareDimBase.Count == 0) return;
@@ -2131,6 +2252,7 @@ namespace LumiShift
             DisposeTimer(ref _gammaWatchdogTimer);
             DisposeTimer(ref _displayChangeDebounceTimer);
             DisposeTimer(ref _hardwareDimFlushTimer);
+            DisposeTimer(ref _trayRetryTimer);
 
             StopBrightnessEventWatcher();
 
@@ -2231,6 +2353,7 @@ namespace LumiShift
             DisposeTimer(ref _gammaWatchdogTimer);
             DisposeTimer(ref _displayChangeDebounceTimer);
             DisposeTimer(ref _hardwareDimFlushTimer);
+            DisposeTimer(ref _trayRetryTimer);
             StopBrightnessEventWatcher();
 
             if (GammaController != null)
@@ -2322,10 +2445,18 @@ namespace LumiShift
 
             protected override void WndProc(ref Message m)
             {
-                if (m.Msg == NativeMethods.WM_SHOW_LUMISHIFT)
+                if ((uint)m.Msg == NativeMethods.WM_SHOW_LUMISHIFT)
                 {
                     if (_serviceRef.TryGetTarget(out var service) && !service._exiting)
                         service.ShowMainWindow();
+                    return;
+                }
+
+                // explorer 重建任务栏后所有托盘图标都会失效，必须重新注册
+                if ((uint)m.Msg == NativeMethods.WM_TASKBARCREATED)
+                {
+                    if (_serviceRef.TryGetTarget(out var trayService) && !trayService._exiting)
+                        trayService.ReapplyTrayIcon();
                     return;
                 }
 

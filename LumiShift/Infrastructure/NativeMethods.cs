@@ -9,9 +9,25 @@ namespace LumiShift.Infrastructure
         public const uint SC_MONITORPOWER = 0xF170;
         public static readonly IntPtr HWND_BROADCAST = new IntPtr(0xFFFF);
 
-        public const uint WM_SHOW_LUMISHIFT = 0x8FFF;
+        // 跨进程广播必须用 RegisterWindowMessage 注册的系统级消息号：
+        // WM_APP 范围的硬编码私有消息经 HWND_BROADCAST 投递时不会送达其他进程的窗口，
+        // 表现为"再次双击 exe 没有反应"。
+        public static readonly uint WM_SHOW_LUMISHIFT = RegisterBroadcastMessage("LumiShift_ShowMainWindow");
 
-        // 显示器变更需要刷新缓存（投递到 UI 线程处理）
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern uint RegisterWindowMessage(string lpString);
+
+        private static uint RegisterBroadcastMessage(string name)
+        {
+            uint msg = RegisterWindowMessage(name);
+            // 注册失败返回 0；退回私有消息号，至少保证本进程内仍可工作
+            return msg != 0 ? msg : 0x8FFF;
+        }
+
+        // explorer 重建任务栏时广播此消息；托盘图标需重新 NIM_ADD，否则会永久消失
+        public static readonly uint WM_TASKBARCREATED = RegisterWindowMessage("TaskbarCreated");
+
+        // 显示器变更需要刷新缓存（定向投递到本进程 UI 线程，不走广播）
         public const uint WM_APP_DISPLAY_REFRESH = 0x8FFE;
 
         // 电源广播：显示器电源状态通知（电源计划关闭/开启屏幕）

@@ -47,16 +47,17 @@ namespace LumiShift
             // 多语言初始化必须在任何 UI 创建之前
             Lang.Init(SettingsStore.LoadSettings().Language);
 
-            // 命令行 --minimized 只影响本次启动，不回写配置
+            // 命令行 --minimized / --show 只影响本次启动，不回写配置
             // （持久化的"最小化启动"由设置界面控制，注册表启动项自身已带 --minimized）
+            // --show 用于托盘图标注册失败时强制显示主窗口，避免程序只剩一个后台进程
             bool startMinimized = false;
+            bool forceShowWindow = false;
             foreach (var arg in args)
             {
                 if (arg.Equals("--minimized", StringComparison.OrdinalIgnoreCase))
-                {
                     startMinimized = true;
-                    break;
-                }
+                else if (arg.Equals("--show", StringComparison.OrdinalIgnoreCase))
+                    forceShowWindow = true;
             }
 
             // 未捕获异常：FATAL 级日志不受诊断日志开关限制，始终落盘并附带完整环境快照
@@ -72,7 +73,10 @@ namespace LumiShift
             var context = new ApplicationContext();
             var bgService = new BackgroundService();
 
-            if (startMinimized || bgService.Settings.StartMinimized)
+            // 托盘创建失败时不能按"最小化启动"隐藏主窗口，否则用户只能看到任务管理器里的进程
+            if (forceShowWindow || bgService.TrayIconUnavailable)
+                bgService.ShowMainWindow();
+            else if (startMinimized || bgService.Settings.StartMinimized)
                 bgService.ScheduleLightweightModeEntry();
             else
                 bgService.ShowMainWindow();

@@ -149,6 +149,7 @@ namespace LumiShift.Services
                 GammaPerDisplay = new Dictionary<string, PerDisplayGamma>(),
                 GammaEnabled = true,
                 MasterBrightness = 100,
+                GammaHardwareAssistEnabled = false,
                 GammaValue = 1.0,
                 GammaRScale = 1.0,
                 GammaGScale = 1.0,

@@ -61,6 +61,12 @@ namespace LumiShift.Models
         public double GammaValue { get; set; } = 1.0;
         public int MasterBrightness { get; set; } = 100;
 
+        /// <summary>
+        /// Gamma 亮度低于 Windows 允许的下限时，是否联动硬件背光继续调暗。
+        /// 默认关闭：只调 Gamma，绝不改动显示器硬件亮度，避免与"显示器亮度调节"页互相覆盖。
+        /// </summary>
+        public bool GammaHardwareAssistEnabled { get; set; }
+
         public bool UseBackgroundImage { get; set; }
         public string BackgroundImageFile { get; set; } = "";
         public int BackgroundImageOpacity { get; set; } = 30;

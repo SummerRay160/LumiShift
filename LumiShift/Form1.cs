@@ -44,6 +44,9 @@ namespace LumiShift
         private Label _gammaValueLabel;
         private ModernSlider _gammaBrightSlider;
         private Label _gammaBrightLabel;
+        private ToggleSwitch _gammaHardwareAssistToggle;
+        private Label _gammaAssistHintLabel;
+        private int _gammaAssistFloor = -1;
         private Label _gammaStatusLabel;
         private ComboBox _monitorSelectorComboBox;
         private Button _resetDisplayGammaButton;
@@ -221,30 +224,35 @@ namespace LumiShift
         private void UpdateGammaUI()
         {
             _isUpdatingGammaSliders = true;
-
-            bool supported = GammaCtrl.IsSupported;
-            _gammaCheckBox.Enabled = supported;
-
-            PopulateMonitorSelector();
-
-            if (supported)
+            try
             {
-                _gammaCheckBox.Checked = Settings.GammaEnabled;
+                bool supported = GammaCtrl.IsSupported;
+                _gammaCheckBox.Enabled = supported;
 
-                SyncSlidersToSelectedMonitor();
+                PopulateMonitorSelector();
 
-                string current = GetCurrentPresetName();
-                _currentPresetName = current;
-                if (current != null && !_isPopulatingComboBox)
-                    _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
+                if (supported)
+                {
+                    _gammaCheckBox.Checked = Settings.GammaEnabled;
 
-                UpdateGammaLabels();
-                UpdateColorTempFromSliders();
-                RefreshSliderVisibility();
-                RefreshCustomPresetButtons();
+                    SyncSlidersToSelectedMonitor();
+
+                    string current = GetCurrentPresetName();
+                    _currentPresetName = current;
+                    if (current != null && !_isPopulatingComboBox)
+                        _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
+
+                    UpdateGammaLabels();
+                    UpdateColorTempFromSliders();
+                    RefreshSliderVisibility();
+                    RefreshCustomPresetButtons();
+                }
             }
-
-            _isUpdatingGammaSliders = false;
+            finally
+            {
+                // 任何一步抛异常都不能把标志留在 true：否则所有 Gamma 控件的事件都会被永久屏蔽
+                _isUpdatingGammaSliders = false;
+            }
         }
 
         private void PopulateMonitorSelector()
@@ -415,13 +423,78 @@ namespace LumiShift
             ApplyGammaAdvancedLayout();
         }
 
+        /// <summary>
+        /// 刷新亮度滑块的分段色带与联动开关。分界点由当前 R/G/B/γ 决定，
+        /// 切换色温或方案后必须重算，不能画固定分界线。
+        /// </summary>
+        private void RefreshGammaAssistUI()
+        {
+            if (_gammaHardwareAssistToggle == null || _gammaAssistHintLabel == null ||
+                _gammaBrightSlider == null || _gammaRSlider == null ||
+                _gammaGSlider == null || _gammaBSlider == null || _gammaValueSlider == null)
+                return;
+
+            bool wasUpdating = _isUpdatingGammaSliders;
+            _isUpdatingGammaSliders = true;
+            try
+            {
+                _gammaHardwareAssistToggle.Checked = Settings.GammaHardwareAssistEnabled;
+            }
+            finally
+            {
+                _isUpdatingGammaSliders = wasUpdating;
+            }
+
+            var config = new GammaConfig
+            {
+                RScale = _gammaRSlider.Value / 100.0,
+                GScale = _gammaGSlider.Value / 100.0,
+                BScale = _gammaBSlider.Value / 100.0,
+                GammaValue = _gammaValueSlider.Value / 100.0,
+                MasterBrightness = _gammaBrightSlider.Value
+            };
+            int floor = _bgService.GetGammaAssistFloorPercent(config);
+            _gammaAssistFloor = floor;
+
+            _gammaBrightSlider.SegmentBoundary = floor;
+            _gammaBrightSlider.SegmentColor = Settings.GammaHardwareAssistEnabled
+                ? Colors.Green
+                : Colors.TextDisabled;
+            _gammaAssistHintLabel.Text = Settings.GammaHardwareAssistEnabled
+                ? Lang.F("低于 {0}% 时由硬件背光继续调暗", floor)
+                : Lang.F("低于 {0}% 为 Windows 限制，不会改动硬件亮度", floor);
+        }
+
+        private void GammaHardwareAssistToggle_CheckedChanged(object sender, EventArgs e)
+        {
+            if (_isUpdatingGammaSliders) return;
+            Settings.GammaHardwareAssistEnabled = _gammaHardwareAssistToggle.Checked;
+            Log.Info("Brightness", $"硬件背光联动={(_gammaHardwareAssistToggle.Checked ? "开" : "关")}, 当前亮度={_gammaBrightSlider.Value}%");
+            RefreshGammaAssistUI();
+            UpdateGammaLabels();
+
+            DebounceAction(() =>
+            {
+                // 关闭时 ApplyGammaToSystem 会把已压暗的硬件亮度恢复基准
+                _bgService.ApplyGammaToSystem();
+                SettingsStore.SaveSettings(Settings);
+                UpdateBrightnessUI();
+            });
+        }
+
         private void UpdateGammaLabels()
         {
+            RefreshGammaAssistUI();
+
             _gammaRLabel.Text = $"{_gammaRSlider.Value / 100.0:F2}";
             _gammaGLabel.Text = $"{_gammaGSlider.Value / 100.0:F2}";
             _gammaBLabel.Text = $"{_gammaBSlider.Value / 100.0:F2}";
             _gammaValueLabel.Text = $"{_gammaValueSlider.Value / 100.0:F2}";
-            _gammaBrightLabel.Text = $"{_gammaBrightSlider.Value}%";
+            // 不联动时低于下限不会再变暗，标签显示实际生效值，避免"数字在动屏幕不动"
+            int shown = Settings.GammaHardwareAssistEnabled
+                ? _gammaBrightSlider.Value
+                : Math.Max(_gammaBrightSlider.Value, Math.Max(0, _gammaAssistFloor));
+            _gammaBrightLabel.Text = $"{shown}%";
         }
 
         private void UpdateScheduleOverrideStatus()
@@ -548,13 +621,22 @@ namespace LumiShift
             _isUpdatingBrightness = true;
             var activeDeviceIds = new HashSet<string>();
 
+            try
+            {
             foreach (var monitor in MonitorMgr.Monitors)
             {
                 string deviceId = monitor.DeviceId;
                 activeDeviceIds.Add(deviceId);
 
                 int currentBrightness = 50;
-                if (Settings.BrightnessPerDisplay.ContainsKey(deviceId))
+                string nameSuffix = "";
+                if (_bgService.TryGetHardwareDimState(deviceId, out int baseline, out int dimmed))
+                {
+                    // 联动期间显示用户基准亮度，另标注当前被 Gamma 压暗到的实际值
+                    currentBrightness = baseline;
+                    nameSuffix = Lang.F("（Gamma 接管中 · 当前 {0}%）", dimmed);
+                }
+                else if (Settings.BrightnessPerDisplay.ContainsKey(deviceId))
                 {
                     currentBrightness = Settings.BrightnessPerDisplay[deviceId];
                 }
@@ -579,9 +661,9 @@ namespace LumiShift
                     var valLabel = (Label)row.Controls[2];
                     var nameLabel = (Label)row.Controls[0];
 
-                    nameLabel.Text = monitor.DisplayName;
+                    nameLabel.Text = monitor.DisplayName + nameSuffix;
                     if (!(monitor.Controller?.IsSupported ?? true))
-                        nameLabel.Text = monitor.DisplayName + Lang.Get(" (不支持硬件亮度调节)");
+                        nameLabel.Text = monitor.DisplayName + nameSuffix + Lang.Get(" (不支持硬件亮度调节)");
                     row.Width = _brightnessPanel.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - DpiScale.S(2);
                     nameLabel.Width = row.Width - row.Padding.Horizontal;
                     slider.Maximum = 100;
@@ -608,7 +690,7 @@ namespace LumiShift
 
                     var nameLabel = new Label
                     {
-                        Text = monitor.DisplayName,
+                        Text = monitor.DisplayName + nameSuffix,
                         AutoSize = false,
                         Width = row.Width - row.Padding.Horizontal,
                         Height = DpiScale.S(20),
@@ -616,7 +698,7 @@ namespace LumiShift
                         ForeColor = Colors.TextSecondary
                     };
                     if (!(monitor.Controller?.IsSupported ?? true))
-                        nameLabel.Text = monitor.DisplayName + Lang.Get(" (不支持硬件亮度调节)");
+                        nameLabel.Text = monitor.DisplayName + nameSuffix + Lang.Get(" (不支持硬件亮度调节)");
                     nameLabel.Location = new Point(row.Padding.Left, row.Padding.Top);
 
                     int sliderWidth = Math.Max(DpiScale.S(210), row.Width - row.Padding.Horizontal - DpiScale.S(66));
@@ -648,10 +730,33 @@ namespace LumiShift
                         if (_isUpdatingBrightness) return;
                         _lastBrightnessUserChange = DateTime.Now;
                         valLabel.Text = $"{tb.Value}%";
+
+                        // 手动改硬件亮度优先：先解除 Gamma 联动（会恢复基准并回弹 Gamma 亮度），
+                        // 再写入用户的新值，否则联动的恢复动作会把刚设的亮度覆盖掉
+                        if (_bgService.ReleaseHardwareAssist())
+                            SyncSlidersToSettings();
+
                         Settings.BrightnessPerDisplay[deviceId] = tb.Value;
-                        monitor.Controller?.SetBrightness(tb.Value);
-                        // 若 Gamma 亮度正接管背光，用户设的新亮度作为新的补偿基准
-                        _bgService.RebaseHardwareDim(deviceId, tb.Value);
+                        // 显示器重新枚举后旧 MonitorInfo 上的控制器已被释放，按 DeviceId 取当前控制器
+                        var controller = MonitorMgr.Monitors.FirstOrDefault(m =>
+                            string.Equals(m.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase))?.Controller;
+                        if (controller == null || !controller.IsSupported)
+                        {
+                            Log.Warn("Brightness",
+                                $"亮度页写入跳过：{deviceId} 无可用控制器 (controller={(controller == null ? "null" : (controller.IsDDC ? "DDC" : "WMI"))})");
+                        }
+                        else if (Log.Enabled)
+                        {
+                            // DDC 每次读写都是数百毫秒的 I²C 事务，回读只用于诊断，关闭日志时不做
+                            int before = controller.GetBrightness();
+                            controller.SetBrightness(tb.Value);
+                            Log.Info("Brightness",
+                                $"亮度页写入：{deviceId} 目标={tb.Value}, ctrl={(controller.IsDDC ? "DDC" : "WMI")}, 写前={before}, 写后={controller.GetBrightness()}");
+                        }
+                        else
+                        {
+                            controller.SetBrightness(tb.Value);
+                        }
                         SettingsStore.SaveSettings(Settings);
                     };
                     tb.ValueChanged += handler;
@@ -662,8 +767,12 @@ namespace LumiShift
                     _brightnessPanel.Controls.Add(row);
                 }
             }
-
-            _isUpdatingBrightness = false;
+            }
+            finally
+            {
+                // 任何一步抛异常都不能把标志留在 true：否则亮度页所有滑块事件都会被永久屏蔽
+                _isUpdatingBrightness = false;
+            }
 
             var removedIds = new List<string>();
             foreach (var kvp in _brightnessRows)
@@ -792,14 +901,14 @@ namespace LumiShift
             {
                 // 读取失败（返回 -1）的显示器不更新，避免假值刷掉真实状态
                 if (kvp.Value < 0) continue;
+                // 联动期间硬件读到的是压暗后的值，滑块应继续显示用户基准，由 UpdateBrightnessUI 刷新
+                if (_bgService.IsHardwareDimActive(kvp.Key)) continue;
 
                 if (TrySetBrightnessSlider(kvp.Key, kvp.Value, out var rowChanged) && rowChanged)
                 {
                     // 外部（Fn 键/系统设置等）修改了亮度：同步滑块与设置
                     changed = true;
-                    // 亮度补偿期间的数值是本程序为调暗写下去的，不能覆盖用户的基准亮度
-                    if (!_bgService.IsHardwareDimActive(kvp.Key))
-                        Settings.BrightnessPerDisplay[kvp.Key] = kvp.Value;
+                    Settings.BrightnessPerDisplay[kvp.Key] = kvp.Value;
                 }
             }
 
@@ -895,7 +1004,19 @@ namespace LumiShift
             // 即时生效，无需重启；开启动作与会话头会立刻落盘
             Log.SetEnabled(enabled);
             if (enabled)
+            {
                 Log.WriteSessionHeader("手动开启");
+                // 日志写入失败会被静默吞掉，开启时现场校验一次，否则用户以为日志开着却什么也没有
+                if (!File.Exists(Log.LogFilePath) && !File.Exists(Log.FallbackLogPath))
+                {
+                    MessageBox.Show(this,
+                        Lang.F("诊断日志写入失败：{0}\n主路径：{1}\n兜底路径：{2}",
+                            Log.LastWriteError ?? Lang.Get("未知原因"), Log.LogFilePath, Log.FallbackLogPath),
+                        Lang.Get("诊断日志"),
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+            }
 
             DebounceAction(() => SettingsStore.SaveSettings(Settings));
 
@@ -921,7 +1042,14 @@ namespace LumiShift
                 // 主动枚举一次，目录无访问权限时在此抛出，便于给出准确提示
                 Directory.GetFileSystemEntries(folder);
 
-                System.Diagnostics.Process.Start("explorer.exe", $"\"{folder}\"");
+                // 用 ShellExecute 交给系统外壳打开目录。
+                // 直接 Process.Start("explorer.exe") 会在部分环境下拉起新进程并失败（0xc0000142）
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folder,
+                    UseShellExecute = true
+                };
+                System.Diagnostics.Process.Start(psi);
             }
             catch (UnauthorizedAccessException)
             {
@@ -1409,22 +1537,28 @@ namespace LumiShift
         private void SyncSlidersToSettings()
         {
             _isUpdatingGammaSliders = true;
-            SyncSlidersToSelectedMonitor();
-            UpdateGammaLabels();
-            UpdateColorTempFromSliders();
-            if (_currentPresetName != null && _gammaModeComboBox.Items.Contains(_currentPresetName))
-                _gammaModeComboBox.SelectedItem = _currentPresetName;
-            else if (_currentPresetName != null && _gammaModeComboBox.Items.Contains(_schemeService.GetDisplayName(_currentPresetName)))
-                _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(_currentPresetName);
-            else
+            try
             {
-                string current = GetCurrentPresetName();
-                if (current != null)
-                    _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
+                SyncSlidersToSelectedMonitor();
+                UpdateGammaLabels();
+                UpdateColorTempFromSliders();
+                if (_currentPresetName != null && _gammaModeComboBox.Items.Contains(_currentPresetName))
+                    _gammaModeComboBox.SelectedItem = _currentPresetName;
+                else if (_currentPresetName != null && _gammaModeComboBox.Items.Contains(_schemeService.GetDisplayName(_currentPresetName)))
+                    _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(_currentPresetName);
+                else
+                {
+                    string current = GetCurrentPresetName();
+                    if (current != null)
+                        _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
+                }
+                RefreshSliderVisibility();
+                RefreshCustomPresetButtons();
             }
-            RefreshSliderVisibility();
-            RefreshCustomPresetButtons();
-            _isUpdatingGammaSliders = false;
+            finally
+            {
+                _isUpdatingGammaSliders = false;
+            }
         }
 
         #endregion
