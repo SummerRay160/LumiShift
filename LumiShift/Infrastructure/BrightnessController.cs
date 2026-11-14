@@ -31,8 +31,11 @@ namespace LumiShift.Infrastructure
             if (_disposed) return _cachedBrightness >= 0 ? _cachedBrightness : -1;
             try
             {
+                // WQL 字符串里反斜杠是转义符，InstanceName 中的 "\" 必须写成 "\\"，
+                // 否则查询抛 Invalid query，亮度永远读不到，硬件背光联动也拿不到基准值
+                string escaped = EscapeWqlValue(_instanceName);
                 using (var searcher = new ManagementObjectSearcher("root/WMI",
-                    $"SELECT * FROM WmiMonitorBrightness WHERE InstanceName='{_instanceName.Replace("'", "''")}'"))
+                    $"SELECT * FROM WmiMonitorBrightness WHERE InstanceName='{escaped}'"))
                 {
                     using (var collection = searcher.Get())
                     {
@@ -48,10 +51,28 @@ namespace LumiShift.Infrastructure
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Warn("Brightness", $"WMI 亮度读取失败: {ex.Message} (instance={_instanceName})");
             }
-            return _cachedBrightness >= 0 ? _cachedBrightness : -1;
+            // 读失败不能拿缓存冒充硬件真值：联动会把它当基准，把屏幕压得更暗
+            return -1;
+        }
+
+        /// <summary>WQL 查询字符串字面量转义：反斜杠在前，单引号加倍。</summary>
+        private static string EscapeWqlValue(string value)
+        {
+            return value.Replace("\\", "\\\\").Replace("'", "''");
+        }
+
+        /// <summary>
+        /// 对象路径（非 WQL）字面量转义：ManagementObject 的类路径单引号内
+        /// 按字面解析，反斜杠不能翻倍（翻倍后 WMI 找不到实例，写入必然失败），
+        /// 只有单引号需要加倍。
+        /// </summary>
+        private static string EscapeObjectPathValue(string value)
+        {
+            return value.Replace("'", "''");
         }
 
         public void SetBrightness(int percent)
@@ -62,8 +83,11 @@ namespace LumiShift.Infrastructure
 
             try
             {
+                // 对象路径与 WQL 是两种语法：WQL 字符串里 "\" 是转义符必须翻倍，
+                // 对象路径单引号内是字面值、反斜杠原样保留。两者混用会让写入
+                // 抛 NotFound（已实测验证），这里用对象路径专用转义
                 using (var methodClass = new ManagementObject("root/WMI",
-                    $"WmiMonitorBrightnessMethods.InstanceName='{_instanceName.Replace("'", "''")}'", null))
+                    $"WmiMonitorBrightnessMethods.InstanceName='{EscapeObjectPathValue(_instanceName)}'", null))
                 {
                     var inParams = methodClass.GetMethodParameters("WmiSetBrightness");
                     inParams["Brightness"] = (byte)percent;
@@ -72,8 +96,9 @@ namespace LumiShift.Infrastructure
                     _cachedBrightness = percent;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Warn("Brightness", $"WMI 亮度写入失败: {ex.Message} (instance={_instanceName})");
             }
         }
 
