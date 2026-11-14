@@ -397,6 +397,15 @@
   <data name="将运行记录写入本地日志文件，用于问题排查" xml:space="preserve">
     <value>Writes operation records to a local log file for troubleshooting</value>
   </data>
+  <data name="日志目录不存在，无法打开。" xml:space="preserve">
+    <value>The log folder does not exist and cannot be opened.</value>
+  </data>
+  <data name="没有权限访问日志目录，无法打开。" xml:space="preserve">
+    <value>Access to the log folder was denied and it cannot be opened.</value>
+  </data>
+  <data name="打开日志目录失败：{0}" xml:space="preserve">
+    <value>Failed to open the log folder: {0}</value>
+  </data>
   <data name="内存维护" xml:space="preserve">
     <value>Memory maintenance</value>
   </data>
@@ -668,8 +677,17 @@
   <data name="Gamma: 按显示器独立应用" xml:space="preserve">
     <value>Gamma: applied per monitor</value>
   </data>
-  <data name="Gamma: 部分显示器应用失败" xml:space="preserve">
-    <value>Gamma: failed on some monitors</value>
+  <data name="Gamma: 部分显示器应用失败（{0}）" xml:space="preserve">
+    <value>Gamma: apply failed ({0})</value>
+  </data>
+  <data name="无法打开显示设备" xml:space="preserve">
+    <value>cannot open display</value>
+  </data>
+  <data name="系统拒绝写入 Gamma 表" xml:space="preserve">
+    <value>gamma ramp rejected</value>
+  </data>
+  <data name="{0}：{1}" xml:space="preserve">
+    <value>{0}: {1}</value>
   </data>
   <data name="Gamma 出错: {0}" xml:space="preserve">
     <value>Gamma error: {0}</value>

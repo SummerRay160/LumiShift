@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using LumiShift.Services;
@@ -32,6 +33,9 @@ namespace LumiShift.Infrastructure
         private readonly object _rampLock = new object();
 
         public event EventHandler<string> StatusChanged;
+
+        /// <summary>把屏幕设备名（如 \\.\DISPLAY2）转换为界面上显示的显示器名称；返回空时回退设备名。</summary>
+        public Func<string, string> DisplayNameResolver { get; set; }
 
         static GammaController()
         {
@@ -123,6 +127,7 @@ namespace LumiShift.Infrastructure
                 }
 
                 bool allSucceeded = true;
+                var failures = new List<(string DeviceName, string Reason)>();
 
                 foreach (var screen in screens)
                 {
@@ -130,6 +135,7 @@ namespace LumiShift.Infrastructure
                     if (hdc == IntPtr.Zero)
                     {
                         allSucceeded = false;
+                        failures.Add((screen.DeviceName, Lang.Get("无法打开显示设备")));
                         continue;
                     }
 
@@ -139,11 +145,13 @@ namespace LumiShift.Infrastructure
                         if (!result)
                         {
                             allSucceeded = false;
+                            failures.Add((screen.DeviceName, Lang.Get("系统拒绝写入 Gamma 表")));
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         allSucceeded = false;
+                        failures.Add((screen.DeviceName, $"{ex.GetType().Name}: {ex.Message}"));
                     }
                     finally
                     {
@@ -159,13 +167,16 @@ namespace LumiShift.Infrastructure
                 }
                 else
                 {
-                    StatusChanged?.Invoke(this, Lang.Get("Gamma: 部分显示器应用失败"));
+                    ReportFailures(failures);
                 }
 
                 return allSucceeded;
             }
             catch (Exception ex)
             {
+                Log.Error("Gamma", ex,
+                    $"mode=global, gamma={parameters.Gamma:F2}, r={parameters.RScale:F2}, g={parameters.GScale:F2}, b={parameters.BScale:F2}, brightness={parameters.MasterBrightness}",
+                    () => $"screens={string.Join(",", Screen.AllScreens.Select(s => s.DeviceName))}");
                 StatusChanged?.Invoke(this, Lang.F("Gamma 出错: {0}", ex.Message));
                 return false;
             }
@@ -218,6 +229,7 @@ namespace LumiShift.Infrastructure
             {
                 bool allSucceeded = true;
                 var defaultRamp = DefaultRamp;
+                var failures = new List<(string DeviceName, string Reason)>();
 
                 foreach (var screen in Screen.AllScreens)
                 {
@@ -225,6 +237,7 @@ namespace LumiShift.Infrastructure
                     if (hdc == IntPtr.Zero)
                     {
                         allSucceeded = false;
+                        failures.Add((screen.DeviceName, Lang.Get("无法打开显示设备")));
                         continue;
                     }
 
@@ -239,17 +252,24 @@ namespace LumiShift.Infrastructure
                                 ramp = BuildRamp(parameters.Gamma, parameters.RScale, parameters.GScale, parameters.BScale, master);
                             }
                             if (!SetDeviceGammaRamp(hdc, ref ramp))
+                            {
                                 allSucceeded = false;
+                                failures.Add((screen.DeviceName, Lang.Get("系统拒绝写入 Gamma 表")));
+                            }
                         }
                         else
                         {
                             if (!SetDeviceGammaRamp(hdc, ref defaultRamp))
+                            {
                                 allSucceeded = false;
+                                failures.Add((screen.DeviceName, Lang.Get("系统拒绝写入 Gamma 表")));
+                            }
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         allSucceeded = false;
+                        failures.Add((screen.DeviceName, $"{ex.GetType().Name}: {ex.Message}"));
                     }
                     finally
                     {
@@ -260,12 +280,15 @@ namespace LumiShift.Infrastructure
                 if (allSucceeded)
                     StatusChanged?.Invoke(this, Lang.Get("Gamma: 按显示器独立应用"));
                 else
-                    StatusChanged?.Invoke(this, Lang.Get("Gamma: 部分显示器应用失败"));
+                    ReportFailures(failures);
 
                 return allSucceeded;
             }
             catch (Exception ex)
             {
+                Log.Error("Gamma", ex,
+                    $"mode=perDisplay, displays={perScreenParams?.Count ?? 0}",
+                    () => $"screens={string.Join(",", Screen.AllScreens.Select(s => s.DeviceName))}");
                 StatusChanged?.Invoke(this, Lang.F("Gamma 出错: {0}", ex.Message));
                 return false;
             }
@@ -295,6 +318,41 @@ namespace LumiShift.Infrastructure
             }
 
             return ramp;
+        }
+
+        private void ReportFailures(List<(string DeviceName, string Reason)> failures)
+        {
+            var details = new List<string>(failures.Count);
+            foreach (var failure in failures)
+            {
+                string device = DescribeDevice(failure.DeviceName);
+                details.Add(Lang.F("{0}：{1}", device, failure.Reason));
+            }
+
+            // 状态栏空间有限，完整明细同时写入诊断日志，便于逐台排查
+            foreach (string detail in details)
+                Log.Warn("Gamma", detail);
+
+            StatusChanged?.Invoke(this, Lang.F("Gamma: 部分显示器应用失败（{0}）", string.Join(" / ", details)));
+        }
+
+        private string DescribeDevice(string deviceName)
+        {
+            try
+            {
+                string resolved = DisplayNameResolver?.Invoke(deviceName);
+                if (!string.IsNullOrEmpty(resolved))
+                    return resolved;
+            }
+            catch
+            {
+                // 名称解析失败时回退设备名，不影响错误提示
+            }
+
+            const string prefix = @"\\.\";
+            return !string.IsNullOrEmpty(deviceName) && deviceName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                ? deviceName.Substring(prefix.Length)
+                : deviceName;
         }
 
         public void Dispose()

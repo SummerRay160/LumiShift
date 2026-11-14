@@ -59,6 +59,16 @@ namespace LumiShift
                 }
             }
 
+            // 未捕获异常：FATAL 级日志不受诊断日志开关限制，始终落盘并附带完整环境快照
+            Application.ThreadException += (s, e) =>
+                Log.Fatal("UIThreadUnhandled", e.Exception, "未捕获的界面线程异常");
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                var ex = e.ExceptionObject as Exception
+                         ?? new Exception("非 Exception 的未处理异常: " + e.ExceptionObject);
+                Log.Fatal("UnhandledException", ex, $"isTerminating={e.IsTerminating}");
+            };
+
             var context = new ApplicationContext();
             var bgService = new BackgroundService();
 

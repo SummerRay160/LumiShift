@@ -104,6 +104,7 @@ namespace LumiShift
         private bool _isPopulatingComboBox;
         private bool _isUpdatingSchedule;
         private bool _isUpdatingLanguage;
+        private bool _isUpdatingStartupUI;
         private bool _isApplyingEyeProtectionColor;
         private string _currentPresetName;
         private int _previousMonitorSelectedIndex;
@@ -455,27 +456,25 @@ namespace LumiShift
 
         private void UpdateColorTempFromSliders()
         {
-            double r = _gammaRSlider.Value / 100.0;
-            double b = _gammaBSlider.Value / 100.0;
-            double colorTemp;
+            // 仅同步色温滑块位置，不能触发色温事件重新应用参数：
+            // 否则调亮度/RGB 时会用反推的色温覆盖刚设置好的 R/B/γ，表现为色温设置被悄悄改掉
+            bool wasUpdating = _isUpdatingGammaSliders;
+            _isUpdatingGammaSliders = true;
+            try
+            {
+                // 与 BuildColorTempConfig 保持互逆：B 0.70→1.00→1.06 对应 100→50→0
+                double b = _gammaBSlider.Value / 100.0;
+                double colorTemp = b >= 1.0
+                    ? (1.06 - b) / 0.06 * 50.0
+                    : 50.0 + (1.0 - b) / 0.30 * 50.0;
 
-            if (r <= 1.0 && b >= 1.0)
-            {
-                double t = r <= 0.98 ? 0 : (1.0 - r) / 0.02;
-                colorTemp = Math.Max(0, (1.0 - t) * 50);
+                _gammaColorTempSlider.Value = (int)Math.Round(Math.Max(0, Math.Min(100, colorTemp)));
+                UpdateColorTempLabel();
             }
-            else if (r >= 1.0 && b <= 1.0)
+            finally
             {
-                double t = b >= 0.70 ? (1.0 - b) / 0.30 : 1.0;
-                colorTemp = Math.Min(100, 50 + t * 50);
+                _isUpdatingGammaSliders = wasUpdating;
             }
-            else
-            {
-                colorTemp = 50;
-            }
-
-            _gammaColorTempSlider.Value = (int)Math.Round(Math.Max(0, Math.Min(100, colorTemp)));
-            UpdateColorTempLabel();
         }
 
         private void UpdateColorTempLabel()
@@ -817,21 +816,29 @@ namespace LumiShift
 
         private void UpdateStartupUI()
         {
-            _startWithWindowsCheckBox.Checked = Settings.StartWithWindows;
-            _startMinimizedCheckBox.Checked = Settings.StartMinimized;
-            _autoCheckUpdatesToggle.Checked = Settings.AutoCheckUpdates;
-            _restoreGammaToggle.Checked = Settings.RestoreGammaOnExit;
-            _diagnosticsLoggingToggle.Checked = Settings.DiagnosticsLoggingEnabled;
-            _memoryMaintenanceToggle.Checked = Settings.MemoryMaintenanceEnabled;
+            _isUpdatingStartupUI = true;
+            try
+            {
+                _startWithWindowsCheckBox.Checked = Settings.StartWithWindows;
+                _startMinimizedCheckBox.Checked = Settings.StartMinimized;
+                _autoCheckUpdatesToggle.Checked = Settings.AutoCheckUpdates;
+                _restoreGammaToggle.Checked = Settings.RestoreGammaOnExit;
+                _diagnosticsLoggingToggle.Checked = Settings.DiagnosticsLoggingEnabled;
+                _memoryMaintenanceToggle.Checked = Settings.MemoryMaintenanceEnabled;
 
-            _isUpdatingLanguage = true;
-            _languageComboBox.SelectedIndex =
-                string.Equals(Settings.Language, "zh", StringComparison.OrdinalIgnoreCase) ? 1 :
-                string.Equals(Settings.Language, "zh-Hant", StringComparison.OrdinalIgnoreCase) ? 2 :
-                string.Equals(Settings.Language, "en", StringComparison.OrdinalIgnoreCase) ? 3 : 0;
-            _isUpdatingLanguage = false;
+                _isUpdatingLanguage = true;
+                _languageComboBox.SelectedIndex =
+                    string.Equals(Settings.Language, "zh", StringComparison.OrdinalIgnoreCase) ? 1 :
+                    string.Equals(Settings.Language, "zh-Hant", StringComparison.OrdinalIgnoreCase) ? 2 :
+                    string.Equals(Settings.Language, "en", StringComparison.OrdinalIgnoreCase) ? 3 : 0;
+                _isUpdatingLanguage = false;
 
-            UpdateNotificationUI();
+                UpdateNotificationUI();
+            }
+            finally
+            {
+                _isUpdatingStartupUI = false;
+            }
         }
 
         private void LanguageComboBox_SelectedIndexChanged(object sender, EventArgs e)
@@ -877,14 +884,54 @@ namespace LumiShift
 
         private void DiagnosticsLoggingToggle_CheckedChanged(object sender, EventArgs e)
         {
-            Settings.DiagnosticsLoggingEnabled = _diagnosticsLoggingToggle.Checked;
+            bool enabled = _diagnosticsLoggingToggle.Checked;
+            Settings.DiagnosticsLoggingEnabled = enabled;
 
             // 即时生效，无需重启；开启动作与会话头会立刻落盘
-            Log.SetEnabled(Settings.DiagnosticsLoggingEnabled);
-            if (Settings.DiagnosticsLoggingEnabled)
+            Log.SetEnabled(enabled);
+            if (enabled)
                 Log.WriteSessionHeader("手动开启");
 
             DebounceAction(() => SettingsStore.SaveSettings(Settings));
+
+            // 仅用户手动开启时打开日志目录；初始化/重置配置时的程序化赋值不触发
+            if (enabled && !_isUpdatingStartupUI)
+                OpenDiagnosticsLogFolder();
+        }
+
+        private void OpenDiagnosticsLogFolder()
+        {
+            string folder = Log.FolderPath;
+            try
+            {
+                if (!Directory.Exists(folder))
+                {
+                    MessageBox.Show(this,
+                        Lang.Get("日志目录不存在，无法打开。"),
+                        Lang.Get("诊断日志"),
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // 主动枚举一次，目录无访问权限时在此抛出，便于给出准确提示
+                Directory.GetFileSystemEntries(folder);
+
+                System.Diagnostics.Process.Start("explorer.exe", $"\"{folder}\"");
+            }
+            catch (UnauthorizedAccessException)
+            {
+                MessageBox.Show(this,
+                    Lang.Get("没有权限访问日志目录，无法打开。"),
+                    Lang.Get("诊断日志"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this,
+                    Lang.F("打开日志目录失败：{0}", ex.Message),
+                    Lang.Get("诊断日志"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         private void MemoryMaintenanceToggle_CheckedChanged(object sender, EventArgs e)
@@ -1006,9 +1053,10 @@ namespace LumiShift
             SettingsStore.SaveSettings(Settings);
 
             // 仅在系统颜色配置确实生效后才提示，避免修改失败时误触发通知
+            string colorCode = $"#{r:X2}{g:X2}{b:X2}";
+            Log.Info("EyeProtection", $"应用护眼颜色 color={colorCode}, rgb=({r},{g},{b}), applied={applied}");
             if (applied)
             {
-                string colorCode = $"#{r:X2}{g:X2}{b:X2}";
                 _bgService.NotifyStatusSwitch(Lang.Get("LumiShift 状态切换"), Lang.F("设置护眼色为 {0} 成功", colorCode));
             }
         }
@@ -1422,43 +1470,47 @@ namespace LumiShift
                 _bgService.SetScheduleManualOverride(true);
 
             _isUpdatingGammaSliders = true;
-
-            var colorConfig = BuildColorTempConfig(_gammaColorTempSlider.Value, _gammaBrightSlider.Value);
-
-            if (IsGlobalMonitorSelected())
+            try
             {
-                _bgService.SetGlobalGammaParameters(colorConfig, clearDisplayOverrides: true);
-                PopulateMonitorSelector();
-            }
-            else
-            {
-                string deviceId = GetSelectedMonitorDeviceId();
-                if (deviceId != null)
+                var colorConfig = BuildColorTempConfig(_gammaColorTempSlider.Value, _gammaBrightSlider.Value);
+
+                if (IsGlobalMonitorSelected())
                 {
-                    _bgService.SetDisplayGammaParameters(deviceId, colorConfig);
+                    _bgService.SetGlobalGammaParameters(colorConfig, clearDisplayOverrides: true);
                     PopulateMonitorSelector();
-                    _resetDisplayGammaButton.Enabled = true;
                 }
+                else
+                {
+                    string deviceId = GetSelectedMonitorDeviceId();
+                    if (deviceId != null)
+                    {
+                        _bgService.SetDisplayGammaParameters(deviceId, colorConfig);
+                        PopulateMonitorSelector();
+                        _resetDisplayGammaButton.Enabled = true;
+                    }
+                }
+
+                _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(Settings.GammaRScale * 100.0));
+                _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(Settings.GammaGScale * 100.0));
+                _gammaBSlider.Value = ClampSlider(_gammaBSlider, (int)Math.Round(Settings.GammaBScale * 100.0));
+                _gammaValueSlider.Value = ClampSlider(_gammaValueSlider, (int)Math.Round(Settings.GammaValue * 100.0));
+
+                UpdateGammaLabels();
+                UpdateColorTempLabel();
+                SyncSlidersToSelectedMonitor();
+
+                string current = GetCurrentPresetName();
+                _currentPresetName = current;
+                if (current != null)
+                    _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
+
+                _bgService.ApplyGammaToSystem();
+                SettingsStore.SaveSettings(Settings);
             }
-
-            _gammaRSlider.Value = ClampSlider(_gammaRSlider, (int)Math.Round(Settings.GammaRScale * 100.0));
-            _gammaGSlider.Value = ClampSlider(_gammaGSlider, (int)Math.Round(Settings.GammaGScale * 100.0));
-            _gammaBSlider.Value = ClampSlider(_gammaBSlider, (int)Math.Round(Settings.GammaBScale * 100.0));
-            _gammaValueSlider.Value = ClampSlider(_gammaValueSlider, (int)Math.Round(Settings.GammaValue * 100.0));
-
-            UpdateGammaLabels();
-            UpdateColorTempLabel();
-            SyncSlidersToSelectedMonitor();
-
-            string current = GetCurrentPresetName();
-            _currentPresetName = current;
-            if (current != null)
-                _gammaModeComboBox.SelectedItem = _schemeService.GetDisplayName(current);
-
-            _bgService.ApplyGammaToSystem();
-            SettingsStore.SaveSettings(Settings);
-
-            _isUpdatingGammaSliders = false;
+            finally
+            {
+                _isUpdatingGammaSliders = false;
+            }
         }
 
         private void GammaModeComboBox_SelectedIndexChanged(object sender, EventArgs e)
