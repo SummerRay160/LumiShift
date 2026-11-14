@@ -280,12 +280,17 @@ namespace LumiShift.Infrastructure
                         _cachedBrightness = (int)current;
                         return (int)current;
                     }
+                    // 读取失败与 WMI 通道同一策略：返回 -1 让调用方跳过，
+                    // 不拿上次的缓存冒充硬件真值（联动会把它当基准压暗屏幕）
+                    Log.Warn("Brightness", $"DDC 亮度读取失败 (monitor={_displayName})");
+                    return -1;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Warn("Brightness", $"DDC 亮度读取异常: {ex.Message} (monitor={_displayName})");
+                return -1;
             }
-            return _cachedBrightness >= 0 ? _cachedBrightness : -1;
         }
 
         public void SetBrightness(int percent)
@@ -304,18 +309,24 @@ namespace LumiShift.Infrastructure
                     {
                         if (!NativeMethods.GetMonitorBrightness(_physicalMonitor,
                             out uint min, out uint _, out uint max))
+                        {
+                            Log.Warn("Brightness", $"DDC 亮度范围查询失败，写入跳过 (monitor={_displayName})");
                             return;
+                        }
                         CacheRange(min, max);
                     }
 
                     uint span = _maxBrightness > _minBrightness ? _maxBrightness - _minBrightness : 0;
                     uint newValue = _minBrightness + (uint)Math.Round((double)percent / 100.0 * span);
-                    NativeMethods.SetMonitorBrightness(_physicalMonitor, newValue);
-                    _cachedBrightness = percent;
+                    if (!NativeMethods.SetMonitorBrightness(_physicalMonitor, newValue))
+                        Log.Warn("Brightness", $"DDC 亮度写入失败 (monitor={_displayName}, target={percent}%)");
+                    else
+                        _cachedBrightness = percent;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Warn("Brightness", $"DDC 亮度写入异常: {ex.Message} (monitor={_displayName}, target={percent}%)");
             }
         }
 
