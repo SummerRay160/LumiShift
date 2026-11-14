@@ -121,6 +121,13 @@ namespace LumiShift
             }
         }
 
+        // Form1 构造中的 WMI 调用（STA COM）会让 UI 线程泵消息，此时二次启动的
+        // WM_SHOW_LUMISHIFT 广播可能重入 ShowMainWindow；没有此标志会创建出
+        // 第二个不受 MainForm 管理的主窗口（孤儿）
+        private bool _creatingMainWindow;
+        // 重入期间的显示请求：创建完成后补执行激活，请求不丢失
+        private bool _pendingShowActivation;
+
         private const int ScheduleTimerIntervalNormal = 30000;
         private const int ScheduleTimerIntervalLightweight = 120000;
 
@@ -1939,8 +1946,38 @@ namespace LumiShift
             return MainForm != null;
         }
 
+        /// <summary>
+        /// 清扫 Application.OpenForms 里游离于 MainForm 之外的多余 Form1（历史遗留的孤儿窗口），
+        /// 走完整关闭分支销毁，避免触发"关闭到托盘"的隐藏逻辑。
+        /// </summary>
+        private void CleanupOrphanMainForms()
+        {
+            var main = MainForm;
+            Form1[] openForms = null;
+            try { openForms = Application.OpenForms.OfType<Form1>().ToArray(); }
+            catch { return; }
+
+            foreach (var form in openForms)
+            {
+                if (form == null || form.IsDisposed || form == main) continue;
+                Log.Warn("Form", "发现游离的主窗口，已回收");
+                form.ForceCloseAsOrphan();
+            }
+        }
+
         public void ShowMainWindow()
         {
+            // 重入保护：Form1 构造期间的 WMI 调用会泵消息，广播消息可能在此期间
+            // 递归进入本方法。此时 MainForm 尚未赋值，既不能再建窗口，转发激活
+            // 也无处可去——把请求记为待激活，由创建流程在 Show() 之后补执行，
+            // 保证用户的显示请求不丢失。
+            if (_creatingMainWindow)
+            {
+                Log.Warn("Form", "ShowMainWindow 重入（窗口创建中被再次请求），创建完成后补激活");
+                _pendingShowActivation = true;
+                return;
+            }
+
             if (Form1IsOpen())
             {
                 var form = MainForm;
@@ -1951,44 +1988,63 @@ namespace LumiShift
                 return;
             }
 
-            _lightweightEntryTimer?.Stop();
-            _lightweightEntryTimer?.Dispose();
-            _lightweightEntryTimer = null;
-
-            if (_lightweightMode)
+            _pendingShowActivation = false;
+            _creatingMainWindow = true;
+            try
             {
-                _lightweightMode = false;
-                var displayChanged = _displayChangedInLightweight;
-                _displayChangedInLightweight = false;
-                if (_monitorManager != null)
+                CleanupOrphanMainForms();
+
+                _lightweightEntryTimer?.Stop();
+                _lightweightEntryTimer?.Dispose();
+                _lightweightEntryTimer = null;
+
+                if (_lightweightMode)
                 {
-                    if (displayChanged)
+                    _lightweightMode = false;
+                    var displayChanged = _displayChangedInLightweight;
+                    _displayChangedInLightweight = false;
+                    if (_monitorManager != null)
                     {
-                        var removedIds = _monitorManager.RefreshMonitors();
-                        CleanupStaleSettings(removedIds);
-                        ApplyGammaToSystem();
-                        _trayMenuNeedsRebuild = true;
+                        if (displayChanged)
+                        {
+                            var removedIds = _monitorManager.RefreshMonitors();
+                            CleanupStaleSettings(removedIds);
+                            ApplyGammaToSystem();
+                            _trayMenuNeedsRebuild = true;
+                        }
+                        else
+                        {
+                            _monitorManager.ExitLightweightMode();
+                        }
                     }
-                    else
+                    if (_scheduleTimer != null)
+                        _scheduleTimer.Interval = ScheduleTimerIntervalNormal;
+                    if (_messageWindow == null)
+                        _messageWindow = new MessageWindow(this);
+                    GcHelper.CollectFull();
+                    DisposeTimer(ref _lightweightGcTimer);
+                    if (_scheduleChangedInLightweight)
                     {
-                        _monitorManager.ExitLightweightMode();
+                        _scheduleChangedInLightweight = false;
+                        ScheduleStateChanged?.Invoke();
                     }
                 }
-                if (_scheduleTimer != null)
-                    _scheduleTimer.Interval = ScheduleTimerIntervalNormal;
-                if (_messageWindow == null)
-                    _messageWindow = new MessageWindow(this);
-                GcHelper.CollectFull();
-                DisposeTimer(ref _lightweightGcTimer);
-                if (_scheduleChangedInLightweight)
+
+                MainForm = new Form1(this);
+                MainForm.Show();
+            }
+            finally
+            {
+                _creatingMainWindow = false;
+                // 创建期间若有重入的显示请求，窗口已就绪，现在补激活。
+                // MainForm 已赋值且不在 UI 线程重入范围内，直接走激活逻辑
+                if (_pendingShowActivation)
                 {
-                    _scheduleChangedInLightweight = false;
-                    ScheduleStateChanged?.Invoke();
+                    _pendingShowActivation = false;
+                    try { ActivateExistingForm(); }
+                    catch (Exception ex) { Log.Warn("Form", $"补执行激活失败: {ex.Message}"); }
                 }
             }
-
-            MainForm = new Form1(this);
-            MainForm.Show();
         }
 
         internal void OnFormClosing(Form1 form)

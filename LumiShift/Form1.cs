@@ -98,6 +98,7 @@ namespace LumiShift
         private bool _formDisposed;
 
         private Timer _resizeDebounceTimer;
+        private bool _forceCloseAsOrphan;
         private Timer _brightnessRefreshTimer;
         private int _brightnessRefreshBusy;
         private DateTime _lastBrightnessUserChange = DateTime.MinValue;
@@ -998,6 +999,11 @@ namespace LumiShift
 
         private void DiagnosticsLoggingToggle_CheckedChanged(object sender, EventArgs e)
         {
+            // UpdateStartupUI/重置配置的程序化赋值不触发生效逻辑：
+            // Log 开关已由 SettingsStore 加载或 ResetToDefaults 同步过，
+            // 否则每次打开主窗口都会往日志里写一条假的"手动开启"会话头
+            if (_isUpdatingStartupUI) return;
+
             bool enabled = _diagnosticsLoggingToggle.Checked;
             Settings.DiagnosticsLoggingEnabled = enabled;
 
@@ -2002,8 +2008,33 @@ namespace LumiShift
             PopulateMonitorSelector();
         }
 
+        /// <summary>
+        /// 孤儿窗口回收入口（由 BackgroundService.CleanupOrphanMainForms 调用）：
+        /// 编程式 Close 会被 WinForms 归类为 UserClosing，用此标志让 OnFormClosing
+        /// 走完整销毁分支，避免被隐藏到托盘或触发轻量模式切换。
+        /// </summary>
+        internal void ForceCloseAsOrphan()
+        {
+            _forceCloseAsOrphan = true;
+            try { Close(); } catch { try { Dispose(); } catch { } }
+        }
+
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            if (_forceCloseAsOrphan)
+            {
+                _forceCloseAsOrphan = false;
+                _formDisposed = true;
+                _resizeDebounceTimer?.Stop();
+                _initTimer?.Stop();
+                _debounceTimer?.Stop();
+                StopBrightnessRefreshTimer();
+                UnsubscribeEvents();
+                _bgService.OnFormClosing(this);
+                base.OnFormClosing(e);
+                return;
+            }
+
             if (e.CloseReason == CloseReason.UserClosing && !_bgService.IsExiting)
             {
                 _formDisposed = true;
