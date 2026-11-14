@@ -258,43 +258,60 @@ namespace LumiShift
 
         private void PopulateMonitorSelector()
         {
-            // 按 DeviceId 恢复选中：显示器重枚举后顺序可能变化，按序号恢复会静默选中另一台
-            string prevDeviceId = _monitorSelectorComboBox.SelectedIndex > 0
-                ? GetSelectedMonitorDeviceId()
-                : null;
-            _monitorSelectorComboBox.Items.Clear();
-            _monitorSelectorComboBox.Items.Add(Lang.Get("所有显示器"));
-            foreach (var monitor in MonitorMgr.Monitors)
+            // 程序性重建下拉项：Items.Clear() 会把 SelectedIndex 静默清为 -1（不触发
+            // 事件），随后的 SelectedIndex=restore（-1→N）会触发 SelectedIndexChanged。
+            // 若不抑制，滑条/色温等事件处理器内刷新标签时会重入选择切换逻辑，在
+            // restore==0 的场景把刚写入的单屏覆盖当成"切回全局"清空（用户视角：
+            // 调了单屏却存不了多屏方案）。此处只刷新列表与标签，必须屏蔽事件副作用。
+            _isRebuildingMonitorSelector = true;
+            try
             {
-                string label = monitor.DisplayName;
-                if (_bgService.HasDisplayGammaOverride(monitor.DeviceId))
-                {
-                    string sourceTag = _bgService.GetDisplayGammaSource(monitor.DeviceId) == GammaSourceNames.Schedule ? Lang.Get("定时") : Lang.Get("手动");
-                    label += Lang.F(" · 单独设置/{0}", sourceTag);
-                }
-                else
-                {
-                    label += Lang.Get(" · 跟随全部");
-                }
-                _monitorSelectorComboBox.Items.Add(label);
-            }
-            int restore = 0;
-            if (prevDeviceId != null)
-            {
-                int i = 1;
+                // 按 DeviceId 恢复选中：显示器重枚举后顺序可能变化，按序号恢复会静默选中另一台
+                string prevDeviceId = _monitorSelectorComboBox.SelectedIndex > 0
+                    ? GetSelectedMonitorDeviceId()
+                    : null;
+                _monitorSelectorComboBox.Items.Clear();
+                _monitorSelectorComboBox.Items.Add(Lang.Get("所有显示器"));
                 foreach (var monitor in MonitorMgr.Monitors)
                 {
-                    if (monitor.DeviceId == prevDeviceId)
+                    string label = monitor.DisplayName;
+                    if (_bgService.HasDisplayGammaOverride(monitor.DeviceId))
                     {
-                        restore = i;
-                        break;
+                        string sourceTag = _bgService.GetDisplayGammaSource(monitor.DeviceId) == GammaSourceNames.Schedule ? Lang.Get("定时") : Lang.Get("手动");
+                        label += Lang.F(" · 单独设置/{0}", sourceTag);
                     }
-                    i++;
+                    else
+                    {
+                        label += Lang.Get(" · 跟随全部");
+                    }
+                    _monitorSelectorComboBox.Items.Add(label);
                 }
+                int restore = 0;
+                if (prevDeviceId != null)
+                {
+                    int i = 1;
+                    foreach (var monitor in MonitorMgr.Monitors)
+                    {
+                        if (monitor.DeviceId == prevDeviceId)
+                        {
+                            restore = i;
+                            break;
+                        }
+                        i++;
+                    }
+                }
+                _monitorSelectorComboBox.SelectedIndex = restore;
+                UpdateGammaTargetHint();
             }
-            _monitorSelectorComboBox.SelectedIndex = restore;
-            UpdateGammaTargetHint();
+            finally
+            {
+                _isRebuildingMonitorSelector = false;
+            }
         }
+
+        // PopulateMonitorSelector 重建下拉项期间为 true：Items.Clear() 后 SelectedIndex
+        // 静默归 -1，再赋 restore 时会触发 SelectedIndexChanged，须抑制其切换副作用
+        private bool _isRebuildingMonitorSelector;
 
         /// <summary>动态提示当前调的是哪块屏幕，避免"改了 A 却以为在改 B"。</summary>
         private void UpdateGammaTargetHint()
@@ -1835,7 +1852,7 @@ namespace LumiShift
 
         private void MonitorSelectorComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (_isUpdatingGammaSliders) return;
+            if (_isUpdatingGammaSliders || _isRebuildingMonitorSelector) return;
 
             int prevIndex = _previousMonitorSelectedIndex;
             _previousMonitorSelectedIndex = _monitorSelectorComboBox.SelectedIndex;
