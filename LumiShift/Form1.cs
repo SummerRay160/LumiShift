@@ -650,9 +650,9 @@ namespace LumiShift
                 string nameSuffix = "";
                 if (_bgService.TryGetHardwareDimState(deviceId, out int baseline, out int dimmed))
                 {
-                    // 联动期间显示用户基准亮度，另标注当前被 Gamma 压暗到的实际值
-                    currentBrightness = baseline;
-                    nameSuffix = Lang.F("（Gamma 接管中 · 当前 {0}%）", dimmed);
+                    // 联动期间滑块如实显示硬件压暗后的实际值，基准亮度放在名称后缀
+                    currentBrightness = dimmed;
+                    nameSuffix = Lang.F("（Gamma 接管中 · 基准 {0}%）", baseline);
                 }
                 else if (Settings.BrightnessPerDisplay.ContainsKey(deviceId))
                 {
@@ -842,6 +842,8 @@ namespace LumiShift
         private void OnBrightnessChanged(string deviceId, int brightness)
         {
             if (!TrySetBrightnessSlider(deviceId, brightness, out _)) return;
+            // 联动压暗写入的值不能落盘：滑块显示实际值即可，基准仍在 _hardwareDimBase
+            if (_bgService.IsHardwareDimActive(deviceId)) return;
             // 外部快速连续调节（如按住 Fn 键）时避免频繁写盘
             DebounceAction(() => SettingsStore.SaveSettings(Settings));
         }
@@ -919,10 +921,16 @@ namespace LumiShift
             {
                 // 读取失败（返回 -1）的显示器不更新，避免假值刷掉真实状态
                 if (kvp.Value < 0) continue;
-                // 联动期间硬件读到的是压暗后的值，滑块应继续显示用户基准，由 UpdateBrightnessUI 刷新
-                if (_bgService.IsHardwareDimActive(kvp.Key)) continue;
 
-                if (TrySetBrightnessSlider(kvp.Key, kvp.Value, out var rowChanged) && rowChanged)
+                if (!TrySetBrightnessSlider(kvp.Key, kvp.Value, out var rowChanged)) continue;
+
+                if (_bgService.IsHardwareDimActive(kvp.Key))
+                {
+                    // 联动期间硬件读到的是程序压暗后的值：滑块如实显示，但不写入基准设置
+                    continue;
+                }
+
+                if (rowChanged)
                 {
                     // 外部（Fn 键/系统设置等）修改了亮度：同步滑块与设置
                     changed = true;

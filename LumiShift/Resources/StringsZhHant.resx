@@ -707,8 +707,8 @@
   <data name="已解除硬件联动，亮度回到 Gamma 可调下限" xml:space="preserve">
     <value>已解除硬體連動，亮度回到 Gamma 可調下限</value>
   </data>
-  <data name="（Gamma 接管中 · 当前 {0}%）" xml:space="preserve">
-    <value>（Gamma 接管中 · 目前 {0}%）</value>
+  <data name="（Gamma 接管中 · 基准 {0}%）" xml:space="preserve">
+    <value>（Gamma 接管中 · 基準 {0}%）</value>
   </data>
   <!-- MonitorManager：显示器名称 -->
   <data name="内置显示器" xml:space="preserve">

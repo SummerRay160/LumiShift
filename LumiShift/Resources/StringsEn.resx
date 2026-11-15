@@ -707,8 +707,8 @@
   <data name="已解除硬件联动，亮度回到 Gamma 可调下限" xml:space="preserve">
     <value>Hardware link released; brightness returned to the Gamma limit</value>
   </data>
-  <data name="（Gamma 接管中 · 当前 {0}%）" xml:space="preserve">
-    <value>(Gamma controlling · currently {0}%)</value>
+  <data name="（Gamma 接管中 · 基准 {0}%）" xml:space="preserve">
+    <value>(Gamma controlling · baseline {0}%)</value>
   </data>
   <!-- MonitorManager：显示器名称 -->
   <data name="内置显示器" xml:space="preserve">
