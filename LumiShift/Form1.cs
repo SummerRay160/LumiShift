@@ -2002,7 +2002,10 @@ namespace LumiShift
             if (_formDisposed || IsDisposed) return;
             if (InvokeRequired)
             {
-                try { Invoke(new Action(() => { if (!_formDisposed && !IsDisposed) _gammaStatusLabel.Text = status; })); }
+                // 用 BeginInvoke 异步投递：StatusChanged 可能来自后台线程（联动压暗、
+                // 显示器变更等），若同步 Invoke，而后台线程正持有联动锁、UI 线程又在
+                // 等同一把锁，双方互相等待会死锁。状态栏文本按序异步到达即可
+                try { BeginInvoke(new Action(() => { if (!_formDisposed && !IsDisposed) _gammaStatusLabel.Text = status; })); }
                 catch { }
             }
             else

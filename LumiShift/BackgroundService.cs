@@ -78,6 +78,12 @@ namespace LumiShift
         private Timer _hardwareDimFlushTimer;
         private const int HardwareDimMinIntervalMs = 150;
 
+        // 上述联动状态会被 UI 线程（Gamma 看门狗、界面查询）与后台线程（显示器变更、
+        // 电源广播、WMI 亮度事件在无主窗体时直接执行）同时访问，
+        // Dictionary/HashSet 并发写是未定义行为，所有访问必须持锁；
+        // 锁序固定为 _hardwareDimLock → 控制器内部 _ddcLock，无反向路径，不会死锁
+        private readonly object _hardwareDimLock = new object();
+
         // 托盘图标可能在 explorer 就绪前注册失败；启动后重挂几次，并在任务栏重建时重挂
         private Timer _trayRetryTimer;
         private int _trayRetryCount;
@@ -953,9 +959,12 @@ namespace LumiShift
             baseline = 0;
             current = 0;
             if (string.IsNullOrEmpty(deviceId)) return false;
-            if (!_hardwareDimBase.TryGetValue(deviceId, out baseline)) return false;
-            current = _hardwareDimCurrent.TryGetValue(deviceId, out int c) ? c : baseline;
-            return true;
+            lock (_hardwareDimLock)
+            {
+                if (!_hardwareDimBase.TryGetValue(deviceId, out baseline)) return false;
+                current = _hardwareDimCurrent.TryGetValue(deviceId, out int c) ? c : baseline;
+                return true;
+            }
         }
 
         /// <summary>
@@ -965,7 +974,11 @@ namespace LumiShift
         /// </summary>
         internal bool ReleaseHardwareAssist()
         {
-            bool wasAssisting = Settings.GammaHardwareAssistEnabled || _hardwareDimBase.Count > 0;
+            bool wasAssisting;
+            lock (_hardwareDimLock)
+            {
+                wasAssisting = Settings.GammaHardwareAssistEnabled || _hardwareDimBase.Count > 0;
+            }
             if (!wasAssisting) return false;
 
             Settings.GammaHardwareAssistEnabled = false;
@@ -1013,67 +1026,73 @@ namespace LumiShift
             string deviceId = monitor.DeviceId;
             factor = Math.Max(0.0, Math.Min(1.0, factor));
 
-            if (factor >= 0.999)
+            lock (_hardwareDimLock)
             {
-                _hardwareDimPending.Remove(deviceId);
-                _hardwareDimLastWrite.Remove(deviceId);
-                _hardwareDimCurrent.Remove(deviceId);
+                if (factor >= 0.999)
+                {
+                    _hardwareDimPending.Remove(deviceId);
+                    _hardwareDimLastWrite.Remove(deviceId);
+                    _hardwareDimCurrent.Remove(deviceId);
+                    _hardwareDimUnsupportedNotified.Remove(deviceId);
+
+                    if (_hardwareDimBase.TryGetValue(deviceId, out int baseline))
+                    {
+                        var restoreController = monitor.Controller;
+                        if (restoreController != null && restoreController.IsSupported)
+                            SetHardwareBrightness(restoreController, baseline);
+                        _hardwareDimBase.Remove(deviceId);
+                    }
+                    return;
+                }
+
+                var controller = monitor.Controller;
+                if (controller == null || !controller.IsSupported)
+                {
+                    // Gamma 已到系统下限，这块屏又没有硬件亮度可调：只提示一次，避免刷屏。
+                    // ReportStatus → StatusChanged 为异步投递（BeginInvoke），可安全持锁调用
+                    if (_hardwareDimUnsupportedNotified.Add(deviceId))
+                    {
+                        Log.Warn("Brightness", $"{monitor.DisplayName} 不支持硬件亮度调节，Gamma 亮度已到系统下限");
+                        GammaController.ReportStatus(
+                            Lang.F("Gamma: {0} 不支持亮度调节，已到系统下限", monitor.DisplayName));
+                    }
+                    return;
+                }
+
                 _hardwareDimUnsupportedNotified.Remove(deviceId);
 
-                if (_hardwareDimBase.TryGetValue(deviceId, out int baseline))
+                if (!_hardwareDimBase.TryGetValue(deviceId, out int baseBrightness))
                 {
-                    var restoreController = monitor.Controller;
-                    if (restoreController != null && restoreController.IsSupported)
-                        SetHardwareBrightness(restoreController, baseline);
-                    _hardwareDimBase.Remove(deviceId);
+                    // 读不到当前亮度就放弃补偿：用猜测的基准反而可能把屏幕调亮。
+                    // 基准读取与首写必须在锁内原子完成，否则并发进入的两路会把
+                    // 已压暗的硬件值当成用户基准存下来
+                    baseBrightness = controller.GetBrightness();
+                    if (baseBrightness < 0) return;
+                    if (baseBrightness <= 0) baseBrightness = 100;
+                    _hardwareDimBase[deviceId] = baseBrightness;
                 }
-                return;
-            }
 
-            var controller = monitor.Controller;
-            if (controller == null || !controller.IsSupported)
-            {
-                // Gamma 已到系统下限，这块屏又没有硬件亮度可调：只提示一次，避免刷屏
-                if (_hardwareDimUnsupportedNotified.Add(deviceId))
+                // 不压到 0：全黑后用户很难看清鼠标和界面
+                int target = Math.Max(1, (int)Math.Round(baseBrightness * factor));
+
+                if (_hardwareDimLastWrite.TryGetValue(deviceId, out int lastWrite) &&
+                    unchecked(Environment.TickCount - lastWrite) < HardwareDimMinIntervalMs)
                 {
-                    Log.Warn("Brightness", $"{monitor.DisplayName} 不支持硬件亮度调节，Gamma 亮度已到系统下限");
-                    GammaController.ReportStatus(
-                        Lang.F("Gamma: {0} 不支持亮度调节，已到系统下限", monitor.DisplayName));
+                    if (_hardwareDimPending.TryGetValue(deviceId, out int queued) && queued == target) return;
+                    _hardwareDimPending[deviceId] = target;
+                    _hardwareDimCurrent[deviceId] = target;
+                    ScheduleHardwareDimFlush();
+                    return;
                 }
-                return;
-            }
 
-            _hardwareDimUnsupportedNotified.Remove(deviceId);
-
-            if (!_hardwareDimBase.TryGetValue(deviceId, out int baseBrightness))
-            {
-                // 读不到当前亮度就放弃补偿：用猜测的基准反而可能把屏幕调亮
-                baseBrightness = controller.GetBrightness();
-                if (baseBrightness < 0) return;
-                if (baseBrightness <= 0) baseBrightness = 100;
-                _hardwareDimBase[deviceId] = baseBrightness;
-            }
-
-            // 不压到 0：全黑后用户很难看清鼠标和界面
-            int target = Math.Max(1, (int)Math.Round(baseBrightness * factor));
-
-            if (_hardwareDimLastWrite.TryGetValue(deviceId, out int lastWrite) &&
-                unchecked(Environment.TickCount - lastWrite) < HardwareDimMinIntervalMs)
-            {
-                if (_hardwareDimPending.TryGetValue(deviceId, out int queued) && queued == target) return;
-                _hardwareDimPending[deviceId] = target;
+                _hardwareDimPending.Remove(deviceId);
+                _hardwareDimLastWrite[deviceId] = Environment.TickCount;
                 _hardwareDimCurrent[deviceId] = target;
-                ScheduleHardwareDimFlush();
-                return;
+                Log.Info("Brightness",
+                    $"联动压暗：{monitor.DisplayName} 基准={baseBrightness}, 系数={factor:F3}, 目标={target}, " +
+                    $"ctrl={(controller.IsDDC ? "DDC" : "WMI")}");
+                SetHardwareBrightness(controller, target);
             }
-
-            _hardwareDimPending.Remove(deviceId);
-            _hardwareDimLastWrite[deviceId] = Environment.TickCount;
-            _hardwareDimCurrent[deviceId] = target;
-            Log.Info("Brightness",
-                $"联动压暗：{monitor.DisplayName} 基准={baseBrightness}, 系数={factor:F3}, 目标={target}, " +
-                $"ctrl={(controller.IsDDC ? "DDC" : "WMI")}");
-            SetHardwareBrightness(controller, target);
         }
 
         /// <summary>把节流期间暂存的亮度写入合并到一次尾部刷新。</summary>
@@ -1093,17 +1112,20 @@ namespace LumiShift
             try { _hardwareDimFlushTimer?.Stop(); } catch { }
             if (_exiting || _disposed) return;
 
-            if (_hardwareDimPending.Count == 0) return;
-
-            var pending = new List<KeyValuePair<string, int>>(_hardwareDimPending);
-            _hardwareDimPending.Clear();
-
-            foreach (var item in pending)
+            lock (_hardwareDimLock)
             {
-                var monitor = FindMonitor(item.Key);
-                if (monitor == null || monitor.Controller == null || !monitor.Controller.IsSupported) continue;
-                _hardwareDimLastWrite[item.Key] = Environment.TickCount;
-                SetHardwareBrightness(monitor.Controller, item.Value);
+                if (_hardwareDimPending.Count == 0) return;
+
+                var pending = new List<KeyValuePair<string, int>>(_hardwareDimPending);
+                _hardwareDimPending.Clear();
+
+                foreach (var item in pending)
+                {
+                    var monitor = FindMonitor(item.Key);
+                    if (monitor == null || monitor.Controller == null || !monitor.Controller.IsSupported) continue;
+                    _hardwareDimLastWrite[item.Key] = Environment.TickCount;
+                    SetHardwareBrightness(monitor.Controller, item.Value);
+                }
             }
         }
 
@@ -1125,33 +1147,41 @@ namespace LumiShift
         /// <summary>该显示器的硬件亮度是否正被 Gamma 亮度补偿接管（此时读到的不是用户基准值）。</summary>
         internal bool IsHardwareDimActive(string deviceId)
         {
-            return !string.IsNullOrEmpty(deviceId) && _hardwareDimBase.ContainsKey(deviceId);
+            if (string.IsNullOrEmpty(deviceId)) return false;
+            lock (_hardwareDimLock)
+            {
+                return _hardwareDimBase.ContainsKey(deviceId);
+            }
         }
 
         /// <summary>退出前把被补偿压暗的显示器恢复到用户原先的亮度。</summary>
         private void RestoreHardwareBrightness()
         {
             try { _hardwareDimFlushTimer?.Stop(); } catch { }
-            _hardwareDimPending.Clear();
-            _hardwareDimLastWrite.Clear();
-            _hardwareDimCurrent.Clear();
-            _hardwareDimUnsupportedNotified.Clear();
 
-            if (_hardwareDimBase.Count == 0) return;
-
-            var monitors = _monitorManager?.Monitors;
-            if (monitors != null)
+            lock (_hardwareDimLock)
             {
-                foreach (var monitor in monitors)
-                {
-                    if (monitor == null || string.IsNullOrEmpty(monitor.DeviceId)) continue;
-                    if (!_hardwareDimBase.TryGetValue(monitor.DeviceId, out int baseline)) continue;
-                    if (monitor.Controller == null || !monitor.Controller.IsSupported) continue;
-                    SetHardwareBrightness(monitor.Controller, baseline);
-                }
-            }
+                _hardwareDimPending.Clear();
+                _hardwareDimLastWrite.Clear();
+                _hardwareDimCurrent.Clear();
+                _hardwareDimUnsupportedNotified.Clear();
 
-            _hardwareDimBase.Clear();
+                if (_hardwareDimBase.Count == 0) return;
+
+                var monitors = _monitorManager?.Monitors;
+                if (monitors != null)
+                {
+                    foreach (var monitor in monitors)
+                    {
+                        if (monitor == null || string.IsNullOrEmpty(monitor.DeviceId)) continue;
+                        if (!_hardwareDimBase.TryGetValue(monitor.DeviceId, out int baseline)) continue;
+                        if (monitor.Controller == null || !monitor.Controller.IsSupported) continue;
+                        SetHardwareBrightness(monitor.Controller, baseline);
+                    }
+                }
+
+                _hardwareDimBase.Clear();
+            }
         }
 
         /// <summary>把屏幕设备名映射为界面显示名称；显示器列表尚未创建时返回 null，由调用方回退设备名。</summary>
@@ -1513,9 +1543,13 @@ namespace LumiShift
                     if (_exiting || _disposed) return;
                     string deviceId = ResolveMonitorDeviceId(instanceName);
                     if (deviceId == null) return;
-                    // 补偿期间读到的亮度是本程序为调暗写下去的，不能当成用户的基准亮度保存
-                    if (!_hardwareDimBase.ContainsKey(deviceId))
-                        Settings.BrightnessPerDisplay[deviceId] = brightness;
+                    // 补偿期间读到的亮度是本程序为调暗写下去的，不能当成用户的基准亮度保存；
+                    // 滑块显示照常推送（联动期间界面要如实展示硬件实际值）
+                    lock (_hardwareDimLock)
+                    {
+                        if (!_hardwareDimBase.ContainsKey(deviceId))
+                            Settings.BrightnessPerDisplay[deviceId] = brightness;
+                    }
                     BrightnessChanged?.Invoke(deviceId, brightness);
                 });
             }
